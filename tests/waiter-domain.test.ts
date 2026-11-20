@@ -12,11 +12,11 @@ import type { OrderRecord } from "@/types/order";
 
 describe("waiter-domain", () => {
   const sampleTables: TableItem[] = [
-    { id: "tbl-1", number: "Meja 1", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr" },
-    { id: "tbl-2", number: "Meja 2", cap: 4, status: "OCCUPIED", outletId: "outlet-sgr", customer: "Budi", total: "Rp 120.000" },
-    { id: "tbl-3", number: "Meja 3", cap: 4, status: "BILLING", outletId: "outlet-sgr", customer: "Siti", total: "Rp 85.000" },
-    { id: "tbl-4", number: "Meja 4", cap: 6, status: "CLEANING", outletId: "outlet-sgr" },
-    { id: "tbl-5", number: "Meja 5", cap: 2, status: "RESERVED", outletId: "outlet-sgr", customer: "Pak Made" },
+    { id: "tbl-1", number: "Meja 1", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
+    { id: "tbl-2", number: "Meja 2", cap: 4, status: "OCCUPIED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Budi", total: "Rp 120.000" },
+    { id: "tbl-3", number: "Meja 3", cap: 4, status: "BILLING", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Siti", total: "Rp 85.000" },
+    { id: "tbl-4", number: "Meja 4", cap: 6, status: "CLEANING", outletId: "outlet-sgr", outletName: "Singaraja" },
+    { id: "tbl-5", number: "Meja 5", cap: 2, status: "RESERVED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Pak Made" },
   ];
 
   it("returns humanized table status label and tone", () => {
@@ -98,26 +98,42 @@ describe("waiter-domain", () => {
     const orders: OrderRecord[] = [
       {
         id: "ord-1",
+        orderNumber: "ORD-1",
+        organizationId: "org-dago-hub",
         outletId: "outlet-sgr",
+        outletName: "Singaraja",
         tableNumber: "Meja 2",
+        customerName: "Budi",
+        orderType: "DINE_IN",
         status: "COOKING",
-        items: [{ productName: "Kopi Dago", quantity: 2, price: 25000, tenantId: "t-1", tenantName: "Dago" }],
+        items: [{ id: "it-1", productName: "Kopi Dago", quantity: 2, unitPrice: 25000, tenantId: "t-1" }],
+        subtotal: 50000,
+        tax: 0,
         total: 50000,
-        type: "DINE_IN",
         paymentStatus: "PAID",
         paymentMethod: "CASH",
+        targetServiceMinutes: 15,
+        statusHistory: [],
         createdAt: "2026-11-15T00:00:00Z",
       },
       {
         id: "ord-2",
+        orderNumber: "ORD-2",
+        organizationId: "org-dago-hub",
         outletId: "outlet-sgr",
+        outletName: "Singaraja",
         tableNumber: "Meja 1",
+        customerName: "Siti",
+        orderType: "DINE_IN",
         status: "COMPLETED",
         items: [],
+        subtotal: 0,
+        tax: 0,
         total: 0,
-        type: "DINE_IN",
         paymentStatus: "PAID",
         paymentMethod: "CASH",
+        targetServiceMinutes: 15,
+        statusHistory: [],
         createdAt: "2026-11-15T00:00:00Z",
       },
     ];

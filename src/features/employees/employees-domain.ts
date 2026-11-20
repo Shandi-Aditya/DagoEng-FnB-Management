@@ -8,6 +8,7 @@ import {
 } from "@/lib/tax-breakdown";
 import { calculateSettlement } from "@/lib/settlement";
 import { extractShiftStartTimeMs } from "@/lib/shift-management";
+import { OFFICIAL_CS_DISPLAY_PHONE, OFFICIAL_HUB_ADDRESS } from "@/lib/contact-config";
 
 export type EmployeeDepartment =
   | "Management"
@@ -457,10 +458,10 @@ export function buildClosingReportData(
   return {
     reportNumber: `RPT-CLS-${Date.now().toString().slice(-6)}`,
     outletName: outletName || "Singaraja",
-    outletAddress: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
-    outletPhone: "+62 812-3344-5566",
+    outletAddress: OFFICIAL_HUB_ADDRESS,
+    outletPhone: OFFICIAL_CS_DISPLAY_PHONE,
     cashierName: shift?.assignedCashierName || cashierName || "Kasir",
-    closingDateTime: new Date().toLocaleString("id-ID"),
+    closingDateTime: new Date().toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
     shiftName: shift?.shiftName || "Shift Pagi",
     initialCash,
     totalCashSales,

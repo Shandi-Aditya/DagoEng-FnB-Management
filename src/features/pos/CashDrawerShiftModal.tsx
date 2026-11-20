@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { extractShiftStartTimeMs } from "@/lib/shift-management";
+import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 import { aggregateShiftOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { OrderRecord } from "@/types/order";
@@ -152,6 +153,8 @@ export function CashDrawerShiftModal({
   storedServiceCharge,
   isTaxEnabled = true,
   taxRatePercent = 10,
+  tenantName,
+  tenantPhone = OFFICIAL_CS_WHATSAPP_NUMBER,
   onConfirmClose,
 }: CashDrawerShiftModalProps) {
   const router = useRouter();

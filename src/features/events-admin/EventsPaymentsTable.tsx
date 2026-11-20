@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CreditCard, Eye, Search, XCircle } from "lucide-react";
+import { CheckCircle2, CreditCard, Eye, Search, Trash2, XCircle } from "lucide-react";
 import { EmptyState } from "@/components/app/empty-state";
 import { DataPagination } from "@/components/app/data-pagination";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -39,6 +39,7 @@ export interface EventsPaymentsTableProps {
   onApprove: (booking: EventTicketOrder) => void;
   onReject: (booking: EventTicketOrder) => void;
   onPreviewProof: (booking: EventTicketOrder) => void;
+  onDeleteBooking?: (booking: EventTicketOrder) => void;
   isProcessing?: boolean;
 }
 
@@ -57,6 +58,7 @@ export function EventsPaymentsTable({
   onApprove,
   onReject,
   onPreviewProof,
+  onDeleteBooking,
   isProcessing,
 }: EventsPaymentsTableProps) {
   const startIndex = (currentPage - 1) * pageSize;
@@ -230,16 +232,40 @@ export function EventsPaymentsTable({
                               </Button>
                             </>
                           ) : (
-                            b.paymentProofUrl ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => onPreviewProof(b)}
-                              >
-                                <Eye />
-                                <span>Bukti</span>
-                              </Button>
-                            ) : null
+                            <>
+                              {b.paymentProofUrl ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => onPreviewProof(b)}
+                                >
+                                  <Eye />
+                                  <span>Bukti</span>
+                                </Button>
+                              ) : null}
+
+                              {onDeleteBooking &&
+                              b.paymentStatus !== "PAID" &&
+                              b.paymentStatus !== "REFUNDED" &&
+                              b.refundStatus !== "REQUESTED" &&
+                              !(isPending && b.paymentProofUrl && !b.paymentRejectionReason) &&
+                              b.checkInStatus !== "CHECKED_IN" &&
+                              b.checkInStatus !== "PARTIALLY_CHECKED_IN" &&
+                              !(b.checkedInSeats && b.checkedInSeats.length > 0) &&
+                              (b.checkedInQty || 0) === 0 ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => onDeleteBooking(b)}
+                                  disabled={isProcessing}
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  title="Hapus pesanan tiket"
+                                >
+                                  <Trash2 />
+                                  <span className="sr-only sm:not-sr-only sm:inline">Hapus</span>
+                                </Button>
+                              ) : null}
+                            </>
                           )}
                         </div>
                       </TableCell>

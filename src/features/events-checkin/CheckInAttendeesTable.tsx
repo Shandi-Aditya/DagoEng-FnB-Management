@@ -108,7 +108,10 @@ export function CheckInAttendeesTable({
 
                 const isFullyCheckedIn = ticket.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
                 const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
-                const isPaid = ticket.paymentStatus === "PAID";
+                const isPaid =
+                  ticket.paymentStatus === "PAID" &&
+                  ticket.refundStatus !== "REQUESTED" &&
+                  ticket.refundStatus !== "APPROVED";
                 const isProcessing = isProcessingId === ticket.id;
 
                 const checkInStatus = getCheckInStatusTone(ticket);
@@ -119,7 +122,7 @@ export function CheckInAttendeesTable({
                   <tr key={ticket.id} className="hover:bg-muted/30 transition-colors">
                     {/* Tiket Code */}
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-mono font-medium text-foreground">
                           {ticket.ticketCode}
                         </span>
@@ -133,7 +136,27 @@ export function CheckInAttendeesTable({
                         >
                           <QrCode />
                         </Button>
+                        {ticket.isInvitation && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                            Tiket undangan
+                          </span>
+                        )}
+                        {ticket.ticketTierName && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
+                            {ticket.ticketTierName}
+                          </span>
+                        )}
+                        {ticket.promoCode && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border">
+                            Promo: {ticket.promoCode}
+                          </span>
+                        )}
                       </div>
+                      {ticket.invitationNote && (
+                        <p className="text-xs text-muted-foreground italic truncate max-w-[220px]" title={ticket.invitationNote}>
+                          {ticket.invitationNote}
+                        </p>
+                      )}
                       {ticket.checkInTime && (
                         <p className="text-xs text-muted-foreground">
                           {formatCheckInTime(ticket.checkInTime)}

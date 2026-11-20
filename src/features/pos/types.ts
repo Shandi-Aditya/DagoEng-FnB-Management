@@ -119,3 +119,5 @@ export interface POSReceiptData {
     voucherTitle?: string;
   };
 }
+
+export type POSReceiptItem = POSReceiptData["items"][number];

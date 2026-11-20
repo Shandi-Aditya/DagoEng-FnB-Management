@@ -1,5 +1,11 @@
 import { DEFAULT_FNB_TENANTS, getTenantName, getAllStoredTenantSettings } from "./tenant";
 
+import {
+  OFFICIAL_CS_DISPLAY_PHONE,
+  OFFICIAL_HUB_ADDRESS,
+  OFFICIAL_HUB_OUTLET_NAME,
+} from "@/lib/contact-config";
+
 export interface OutletItem {
   id: string;
   name: string;
@@ -14,10 +20,10 @@ export interface OutletItem {
 export const DEMO_OUTLETS: OutletItem[] = [
   {
     id: "outlet-sgr",
-    name: "Singaraja (Pusat)",
+    name: OFFICIAL_HUB_OUTLET_NAME,
     code: "KS-SGR",
-    address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
-    phone: "+62 821-1550-1995",
+    address: OFFICIAL_HUB_ADDRESS,
+    phone: OFFICIAL_CS_DISPLAY_PHONE,
     status: "ACTIVE",
     badgeLabel: "● Beroperasi Aktif",
     isComingSoon: false,
@@ -27,7 +33,7 @@ export const DEMO_OUTLETS: OutletItem[] = [
     name: "Denpasar",
     code: "KS-DPS",
     address: "Jl. Teuku Umar No. 88, Denpasar",
-    phone: "(0361) 889900",
+    phone: OFFICIAL_CS_DISPLAY_PHONE,
     status: "COMING_SOON",
     badgeLabel: "Segera hadir (ekspansi)",
     isComingSoon: true,
@@ -37,7 +43,7 @@ export const DEMO_OUTLETS: OutletItem[] = [
     name: "Ubud",
     code: "KS-UBD",
     address: "Jl. Raya Ubud No. 12, Ubud",
-    phone: "(0361) 776655",
+    phone: OFFICIAL_CS_DISPLAY_PHONE,
     status: "COMING_SOON",
     badgeLabel: "Segera hadir (ekspansi)",
     isComingSoon: true,
@@ -56,8 +62,8 @@ export interface MasterOutletInfo {
 
 export const MASTER_HQ_OUTLET: MasterOutletInfo = {
   name: DEMO_OUTLETS[0].name,
-  address: DEMO_OUTLETS[0].address,
-  phone: DEMO_OUTLETS[0].phone || "+62 821-1550-1995",
+  address: OFFICIAL_HUB_ADDRESS,
+  phone: OFFICIAL_CS_DISPLAY_PHONE,
 };
 
 export interface ReceiptPublisherInfo {
@@ -215,7 +221,7 @@ export function resolveCoworkingReceiptPublisher(
  */
 export function resolvePosReceiptPublisher(
   items: { tenantId?: string; tenantName?: string }[] = [],
-  activeOutlet?: { name?: string; address?: string; phone?: string } | null,
+  activeOutlet?: { id?: string; name?: string; address?: string; phone?: string } | null,
   fallbackTenantId?: string
 ): ReceiptPublisherInfo {
   const branchName = activeOutlet?.name || MASTER_HQ_OUTLET.name;

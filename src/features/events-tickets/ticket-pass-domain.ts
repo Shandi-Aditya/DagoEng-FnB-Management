@@ -15,14 +15,26 @@ export interface TicketPassData {
   unitPrice: number;
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: "PENDING" | "PAID" | "CANCELLED";
+  paymentStatus: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED";
   paymentProofUrl?: string | null;
   paymentProofUploadedAt?: string | null;
   paymentProofNote?: string | null;
   checkInStatus: "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
   checkedInQty?: number;
   checkedInSeats?: number[];
+  seatCheckInTimes?: Record<string, string> | null;
   checkInTime?: string | null;
+  ticketTierId?: string | null;
+  ticketTierName?: string | null;
+  isInvitation?: boolean;
+  invitationNote?: string | null;
+  promoCode?: string | null;
+  discountAmount?: number;
+  subtotalPrice?: number;
+  refundStatus?: string | null;
+  refundRequest?: any;
+  refundPolicy?: any;
+  refundEligibility?: any;
   destinationBankSnapshot?: {
     bankId: string;
     label?: string;
@@ -218,6 +230,8 @@ export function getTicketPaymentStatusTone(status: string): {
       return { tone: "success", label: "Terkonfirmasi (Lunas)" };
     case "PENDING":
       return { tone: "warning", label: "Menunggu pembayaran" };
+    case "REFUNDED":
+      return { tone: "destructive", label: "Dikembalikan" };
     case "CANCELLED":
     case "EXPIRED":
       return { tone: "destructive", label: "Dibatalkan" };
@@ -260,6 +274,8 @@ export function formatPaymentMethodLabel(method: string): string {
       return "DOKU Payment Gateway";
     case "CASH":
       return "Tunai di Lokasi";
+    case "INVITATION":
+      return "Tiket undangan";
     default:
       return method || "Transfer Bank";
   }

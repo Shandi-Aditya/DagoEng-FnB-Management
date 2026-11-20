@@ -6,6 +6,7 @@ import {
   Laptop,
   Mail,
   MapPin,
+  MessageCircle,
   UtensilsCrossed,
 } from "lucide-react";
 
@@ -21,6 +22,8 @@ import {
   INSTAGRAM,
   KITCHENS,
   MAP_URL,
+  WHATSAPP_DISPLAY,
+  WHATSAPP_URL,
   WORK_FEATURES,
 } from "./home-content";
 import { AmbientUnitFrame, type UnitTheme } from "./AmbientCanvas";
@@ -254,6 +257,20 @@ function Visit() {
     },
     { icon: <Clock />, title: "Jam buka", body: HOURS },
     {
+      icon: <MessageCircle />,
+      title: "WhatsApp CS",
+      body: (
+        <a
+          href={WHATSAPP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          {WHATSAPP_DISPLAY}
+        </a>
+      ),
+    },
+    {
       icon: <Mail />,
       title: "Email",
       body: (
@@ -408,6 +425,17 @@ function Footer() {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="size-3.5 text-unit-coworking" />
               <span>{HOURS}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <MessageCircle className="size-3.5 text-primary" />
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground transition-colors"
+              >
+                CS: {WHATSAPP_DISPLAY}
+              </a>
             </div>
           </div>
 

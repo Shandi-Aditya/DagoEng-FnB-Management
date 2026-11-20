@@ -28,6 +28,7 @@ import { useCoworking } from "@/contexts/CoworkingContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 import { useTables } from "@/contexts/TableContext";
 import {
   INDONESIAN_NATIONAL_HOLIDAYS_2026,
@@ -210,7 +211,7 @@ export default function SettingsPage() {
   const [tenantBrandName, setTenantBrandName] = useState(user?.tenant?.name || "Kopi Senja");
   const [tenantTagline, setTenantTagline] = useState("Specialty Coffee & Beverages");
   const [tenantDesc, setTenantDesc] = useState("Single origin espresso blend Kintamani, olahan susu segar & gula aren organik Bali.");
-  const [tenantPhone, setTenantPhone] = useState("+62 812-3456-7890");
+  const [tenantPhone, setTenantPhone] = useState(OFFICIAL_CS_DISPLAY_PHONE);
   const [tenantReceiptHeader, setTenantReceiptHeader] = useState("Kopi Senja — Specialty Coffee & Beverages");
   const [tenantReceiptFooter, setTenantReceiptFooter] = useState("Terima kasih telah berkunjung ke Kopi Senja!");
   const [tenantLowStock, setTenantLowStock] = useState(35);

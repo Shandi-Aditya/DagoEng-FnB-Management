@@ -42,6 +42,7 @@ import {
   paymentStatusTone,
 } from "./events-portal-domain";
 import { checkedInGuests } from "./events-portal-groups";
+import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
 
 interface OrganizerAttendeesTabProps {
   bookings: EventTicketOrder[];
@@ -53,6 +54,7 @@ interface OrganizerAttendeesTabProps {
   dateRange: DateRange | null;
   onDateRangeChange: (range: DateRange | null) => void;
   onExportCSV: (rows: EventTicketOrder[]) => void;
+  onInvitationIssued?: () => void;
 }
 
 export function OrganizerAttendeesTab({
@@ -65,12 +67,20 @@ export function OrganizerAttendeesTab({
   dateRange,
   onDateRangeChange,
   onExportCSV,
+  onInvitationIssued,
 }: OrganizerAttendeesTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("ALL");
   const [checkInStatusFilter, setCheckInStatusFilter] = useState("ALL");
   const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
+  const [isIssueInviteOpen, setIsIssueInviteOpen] = useState(false);
+  const [inviteApprovedEventId, setInviteApprovedEventId] = useState<string>("");
+
+  const approvedEvents = useMemo(
+    () => events.filter((e) => e.status === "APPROVED"),
+    [events]
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -102,6 +112,15 @@ export function OrganizerAttendeesTab({
   }, [filteredAttendees, currentPage, pageSize]);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
+  const targetInviteEvent = useMemo(() => {
+    if (selectedEventId !== "ALL" && selectedEvent?.status === "APPROVED") {
+      return selectedEvent;
+    }
+    return (
+      approvedEvents.find((e) => e.id === (inviteApprovedEventId || approvedEvents[0]?.id)) ||
+      null
+    );
+  }, [selectedEventId, selectedEvent, approvedEvents, inviteApprovedEventId]);
   const paidSeats = bookings
     .filter((b) => b.eventId === selectedEventId && b.paymentStatus === "PAID")
     .reduce((sum, b) => sum + (b.ticketCount || 1), 0);
@@ -217,6 +236,29 @@ export function OrganizerAttendeesTab({
               <span>Reset</span>
             </Button>
           ) : null}
+          {selectedEventId === "ALL" && approvedEvents.length > 0 && (
+            <div className="w-full sm:w-48">
+              <NativeSelect
+                value={inviteApprovedEventId || approvedEvents[0]?.id || ""}
+                onChange={(e) => setInviteApprovedEventId(e.target.value)}
+                aria-label="Pilih event untuk undangan"
+              >
+                {approvedEvents.map((e) => (
+                  <NativeSelectOption key={e.id} value={e.id}>
+                    {e.title}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+          <Button
+            size="sm"
+            onClick={() => setIsIssueInviteOpen(true)}
+            disabled={!targetInviteEvent}
+          >
+            <Mail className="size-4" />
+            <span>Terbitkan tiket undangan</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={() => onExportCSV(filteredAttendees)} disabled={filteredAttendees.length === 0}>
             <Download />
             <span>Ekspor</span>
@@ -255,6 +297,7 @@ export function OrganizerAttendeesTab({
                   <TableHead>Kode tiket</TableHead>
                   <TableHead>Peserta & kontak</TableHead>
                   <TableHead className="hidden md:table-cell">Event</TableHead>
+                  <TableHead className="hidden lg:table-cell">Jenis tiket</TableHead>
                   <TableHead className="hidden sm:table-cell text-center">Jumlah</TableHead>
                   <TableHead className="text-center">Status bayar</TableHead>
                   <TableHead className="text-center">Kehadiran</TableHead>
@@ -337,6 +380,12 @@ export function OrganizerAttendeesTab({
                           {b.eventTitle || "—"}
                         </TableCell>
 
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-xs font-medium text-foreground">
+                            {b.ticketTierName || (b.isInvitation ? "Tiket undangan" : "Standar")}
+                          </span>
+                        </TableCell>
+
                         <TableCell className="hidden sm:table-cell text-center font-mono tabular-nums">
                           {b.ticketCount} orang
                         </TableCell>
@@ -370,7 +419,7 @@ export function OrganizerAttendeesTab({
                       {/* Expandable breakdown for multi-seat tickets */}
                       {isExpanded && (
                         <TableRow className="bg-muted/30">
-                          <TableCell colSpan={6} className="p-3 text-xs">
+                          <TableCell colSpan={7} className="p-3 text-xs">
                             <div className="rounded-md border bg-card p-3 space-y-2">
                               <div className="flex items-center justify-between font-medium">
                                 <span>Rincian Tiket Pesanan ({b.ticketCount} Tiket)</span>
@@ -424,6 +473,15 @@ export function OrganizerAttendeesTab({
           />
         </div>
       )}
+
+      <IssueInvitationDialog
+        open={isIssueInviteOpen}
+        onOpenChange={setIsIssueInviteOpen}
+        event={targetInviteEvent}
+        onInvitationIssued={() => {
+          onInvitationIssued?.();
+        }}
+      />
     </div>
   );
 }

@@ -278,11 +278,136 @@ describe("Task S-11: Laporan Produk & Margin — Menu Terjual Hanya Dari Pesanan
       const topProductCard = report.summaryCards.find((c) => c.label === "Paling laris");
       expect(topProductCard?.value).toBe("Croissant Butter (2 pcs)");
     });
+
+    it("reports '0 pcs' for 'Total terjual' when products list is empty even if paid orders exist", () => {
+      const paidOrdersWithItems: OrderRecord[] = [
+        {
+          id: "ord-paid-orphan",
+          orderNumber: "ORD-ORPHAN-1",
+          organizationId: "org-1",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "01",
+          customerName: "Budi",
+          orderType: "DINE_IN",
+          status: "COMPLETED",
+          paymentStatus: "PAID",
+          subtotal: 50000,
+          tax: 5000,
+          total: 55000,
+          items: [
+            {
+              id: "it-orphan",
+              productId: "prod-orphan",
+              productName: "Non Existing Menu",
+              quantity: 5,
+              unitPrice: 10000,
+            },
+          ],
+          targetServiceMinutes: 15,
+          createdAt: "2026-11-13T11:00:00Z",
+          statusHistory: [],
+        },
+      ];
+
+      const report = buildReportData({
+        type: "PRODUCTS",
+        scopeName: "Singaraja",
+        orders: paidOrdersWithItems,
+        products: [], // empty catalog
+        shifts: [],
+        ingredients: [],
+        logs: [],
+      });
+
+      const menuCountCard = report.summaryCards.find((c) => c.label === "Menu terdaftar");
+      expect(menuCountCard?.value).toBe("0 menu");
+      const totalSoldCard = report.summaryCards.find((c) => c.label === "Total terjual");
+      expect(totalSoldCard?.value).toBe("0 pcs");
+    });
+
+    it("cumulatively aggregates sales matching by productId and productName without dropping mixed sales", () => {
+      const mixedOrders: OrderRecord[] = [
+        {
+          id: "ord-mix-1",
+          orderNumber: "ORD-MIX-1",
+          organizationId: "org-1",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "01",
+          customerName: "Citra",
+          orderType: "DINE_IN",
+          status: "COMPLETED",
+          paymentStatus: "PAID",
+          subtotal: 48000,
+          tax: 4800,
+          total: 52800,
+          items: [
+            {
+              id: "it-1",
+              productId: "PROD-1", // uppercase id
+              productName: "Kopi Senja Aren",
+              quantity: 2,
+              unitPrice: 24000,
+            },
+          ],
+          targetServiceMinutes: 15,
+          createdAt: "2026-11-13T11:00:00Z",
+          statusHistory: [],
+        },
+        {
+          id: "ord-mix-2",
+          orderNumber: "ORD-MIX-2",
+          organizationId: "org-1",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "02",
+          customerName: "Doni",
+          orderType: "DINE_IN",
+          status: "COMPLETED",
+          paymentStatus: "PAID",
+          subtotal: 72000,
+          tax: 7200,
+          total: 79200,
+          items: [
+            {
+              id: "it-2",
+              productId: "", // empty id, matches by name
+              productName: "kopi senja aren ", // lowercase + whitespace
+              quantity: 3,
+              unitPrice: 24000,
+            },
+          ],
+          targetServiceMinutes: 15,
+          createdAt: "2026-11-13T12:00:00Z",
+          statusHistory: [],
+        },
+      ];
+
+      const report = buildReportData({
+        type: "PRODUCTS",
+        scopeName: "Singaraja",
+        orders: mixedOrders,
+        products: dummyProducts,
+        shifts: [],
+        ingredients: [],
+        logs: [],
+      });
+
+      const totalSoldCard = report.summaryCards.find((c) => c.label === "Total terjual");
+      expect(totalSoldCard?.value).toBe("5 pcs"); // 2 + 3
+
+      // Check row for prod-1
+      const prod1Row = report.tableRows.find((row) => row[0] === "prod-1")!;
+      expect(prod1Row).toBeDefined();
+      expect(prod1Row[7]).toBe("5 pcs"); // Terjual
+      expect(prod1Row[8]).toBe("Rp 120.000"); // 5 * 24000 = 120000
+    });
   });
 
   describe("3. Outlet-Scoped Products Filtering (ALL and Branch)", () => {
     it("retains products with outletId === 'ALL' and matching branch when scoped to a specific outlet", () => {
-      const activeOutletId = "outlet-sgr";
+      const activeOutletId: string = "outlet-sgr";
       const filtered = dummyProducts.filter(
         (p) =>
           activeOutletId === "ALL" ||

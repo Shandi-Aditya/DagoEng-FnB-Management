@@ -265,10 +265,10 @@ export interface BuildReportParams {
   type: ReportType;
   scopeName: string;
   orders: OrderRecord[];
-  products: MasterProduct[];
-  shifts: ShiftRecord[];
-  ingredients: IngredientItem[];
-  logs: ActivityLogEntry[];
+  products?: MasterProduct[];
+  shifts?: ShiftRecord[];
+  ingredients?: IngredientItem[];
+  logs?: ActivityLogEntry[];
   promos?: PromoReference[];
   eventBookings?: EventTicketOrder[];
   coworkingBookings?: CoworkingBooking[];
@@ -385,13 +385,45 @@ export function getReportCategories(params: {
 }
 
 /**
+ * Memeriksa apakah pesanan berstatus lunas dan tidak dibatalkan / refund / ditolak sync.
+ */
+export function isSettledPaidOrder(order: OrderRecord): boolean {
+  return (
+    order.paymentStatus === "PAID" &&
+    order.status !== "CANCELLED" &&
+    !order.refundedAt &&
+    order.syncStatus !== "REJECTED"
+  );
+}
+
+/**
  * Mencari produk terlaris berdasarkan kuantitas pesanan yang berstatus lunas (PAID).
  */
-export function findTopProduct(orders: OrderRecord[]): string {
+export function findTopProduct(
+  orders: OrderRecord[],
+  allowedProducts?: MasterProduct[]
+): string {
+  if (allowedProducts !== undefined && allowedProducts.length === 0) {
+    return "-";
+  }
+
+  const allowedProductNames = allowedProducts
+    ? new Set(allowedProducts.map((p) => p.name.trim().toLowerCase()))
+    : null;
+  const allowedProductIds = allowedProducts
+    ? new Set(allowedProducts.map((p) => p.id.trim().toLowerCase()))
+    : null;
+
   const quantities: Record<string, number> = {};
   for (const order of orders) {
-    if (order.status === "CANCELLED" || order.paymentStatus !== "PAID") continue;
+    if (!isSettledPaidOrder(order)) continue;
     for (const item of order.items) {
+      if (allowedProductNames || allowedProductIds) {
+        const matchesName = allowedProductNames?.has(item.productName.trim().toLowerCase());
+        const matchesId =
+          item.productId && allowedProductIds?.has(item.productId.trim().toLowerCase());
+        if (!matchesName && !matchesId) continue;
+      }
       quantities[item.productName] = (quantities[item.productName] || 0) + item.quantity;
     }
   }
@@ -416,10 +448,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     type,
     scopeName,
     orders: rawOrders,
-    products: rawProducts,
-    shifts,
-    ingredients,
-    logs,
+    products: rawProducts = [],
+    shifts = [],
+    ingredients = [],
+    logs = [],
     promos = [],
     eventBookings = [],
     coworkingBookings = [],
@@ -435,9 +467,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
   switch (type) {
     case "SALES": {
-      const paidOrders = orders.filter(
-        (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
-      );
+      const paidOrders = orders.filter(isSettledPaidOrder);
       const paidCoworking = effectiveCoworking.filter(
         (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
       );
@@ -644,11 +674,61 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "PRODUCTS": {
       let totalMarginPctSum = 0;
+      let totalSoldAll = 0;
+
+      // Index catalog products by normalized ID and normalized name
+      const productById = new Map<string, (typeof products)[number]>();
+      const productByName = new Map<string, (typeof products)[number]>();
+      const salesByProductId = new Map<string, { qty: number; revenue: number }>();
+
+      for (const p of products) {
+        if (p.id) {
+          productById.set(p.id.trim().toLowerCase(), p);
+        }
+        if (p.name) {
+          productByName.set(p.name.trim().toLowerCase(), p);
+        }
+        salesByProductId.set(p.id, { qty: 0, revenue: 0 });
+      }
+
+      // Pre-aggregate product sales from settled paid orders matching the catalog
+      for (const order of orders) {
+        if (!isSettledPaidOrder(order)) continue;
+        for (const item of order.items) {
+          const normItemId = item.productId ? item.productId.trim().toLowerCase() : "";
+          const normItemName = item.productName ? item.productName.trim().toLowerCase() : "";
+
+          const matchedProduct =
+            (normItemId ? productById.get(normItemId) : undefined) ||
+            (normItemName ? productByName.get(normItemName) : undefined);
+
+          if (!matchedProduct) continue;
+
+          const itemQty = item.quantity || 0;
+          const itemRev = (item.unitPrice || 0) * itemQty;
+          totalSoldAll += itemQty;
+
+          const current = salesByProductId.get(matchedProduct.id) || { qty: 0, revenue: 0 };
+          salesByProductId.set(matchedProduct.id, {
+            qty: current.qty + itemQty,
+            revenue: current.revenue + itemRev,
+          });
+        }
+      }
+
       const tableRows = products.map((p) => {
-        const hpp = p.cogsEstimate !== undefined && p.cogsEstimate > 0 ? p.cogsEstimate : Math.round(p.basePrice * 0.28);
+        const hpp =
+          p.cogsEstimate !== undefined && p.cogsEstimate > 0
+            ? p.cogsEstimate
+            : Math.round(p.basePrice * 0.28);
         const marginRp = p.basePrice - hpp;
         const marginPct = p.basePrice > 0 ? (marginRp / p.basePrice) * 100 : 0;
         totalMarginPctSum += marginPct;
+
+        const pSales = salesByProductId.get(p.id) || {
+          qty: 0,
+          revenue: 0,
+        };
 
         return [
           p.id,
@@ -658,11 +738,14 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           `Rp ${hpp.toLocaleString("id-ID")}`,
           `Rp ${marginRp.toLocaleString("id-ID")}`,
           `${marginPct.toFixed(1)}%`,
+          `${pSales.qty} pcs`,
+          `Rp ${pSales.revenue.toLocaleString("id-ID")}`,
         ];
       });
 
-      const avgMarginPct = products.length > 0 ? (totalMarginPctSum / products.length).toFixed(1) : "0.0";
-      const topProduct = findTopProduct(orders);
+      const avgMarginPct =
+        products.length > 0 ? (totalMarginPctSum / products.length).toFixed(1) : "0.0";
+      const topProduct = findTopProduct(orders, products);
 
       return {
         title: "Laporan produk dan margin",
@@ -671,6 +754,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           { label: "Menu terdaftar", value: `${products.length} menu` },
           { label: "Rata-rata margin kotor", value: `${avgMarginPct}%` },
           { label: "Paling laris", value: topProduct },
+          { label: "Total terjual", value: `${totalSoldAll} pcs` },
         ],
         tableHeaders: [
           "SKU",
@@ -680,6 +764,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Estimasi HPP",
           "Margin kotor (Rp)",
           "Margin (%)",
+          "Terjual",
+          "Omzet lunas",
         ],
         tableRows,
       };

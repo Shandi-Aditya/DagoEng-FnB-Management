@@ -1,30 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventBookings, checkRateLimit } from "@/lib/events";
 import { isEmailServiceConfigured, sendTicketRecoveryEmail } from "@/lib/email";
-import { isWhatsAppServiceConfigured, sendWhatsAppMessage } from "@/lib/whatsapp";
 import {
   formatTicketCodeInput,
   normalizePhoneNumber,
   isValidEmail,
   maskEmail,
-  maskPhone,
-  buildRecoveryWhatsAppMessage,
 } from "@/features/events-tickets-recovery/ticket-recovery-domain";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/events/bookings/recover
- * Secure ticket recovery endpoint with delivery channel options (Email or WhatsApp).
+ * Secure ticket recovery endpoint strictly dispatched via verified email (Task S-05).
  *
  * Security & Anti-Takeover Guardrails:
  * 1. Strictly DOES NOT return guestToken, ticketCode, or ticket URLs in the HTTP response.
- *    Returning sensitive tokens to an unauthenticated caller who queries an email/phone allows
- *    unauthorized ticket takeover / barcode hijacking.
+ *    Returning sensitive tokens to an unauthenticated caller allows unauthorized ticket takeover.
  * 2. Uniform non-enumerative response for forgot_code queries: returns the exact same message
- *    regardless of whether 0 or N tickets exist, preventing enumeration attacks.
- * 3. Validates contact ownership against booking records before dispatching.
- * 4. Dispatches private ticket access instructions strictly via verified channels (WhatsApp / Email).
+ *    and HTTP 200 status regardless of whether 0 or N tickets exist or if transport fails,
+ *    preventing email/phone enumeration or status oracles.
+ * 3. Enforces dual ownership validation: forgot_code mode strictly requires BOTH email AND phone.
+ * 4. Automated recovery is delivered strictly via email. WhatsApp automated delivery is rejected/disabled.
  * 5. Rate-limited per client IP to mitigate automated brute force attacks.
  */
 export async function POST(req: NextRequest) {
@@ -46,22 +43,43 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const channel: "whatsapp" | "email" = body.channel === "whatsapp" ? "whatsapp" : "email";
+
+    // S-05 requirement: automated dispatch is strictly email-only. Reject WhatsApp channel requests.
+    if (body.channel === "whatsapp") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Pemulihan tiket otomatis hanya tersedia melalui email resmi. Untuk bantuan via WhatsApp, silakan hubungi Customer Service kami.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (body.channel && body.channel !== "email") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Kanal pemulihan tiket tidak didukung. Pemulihan tiket otomatis hanya tersedia melalui email resmi.",
+        },
+        { status: 400 }
+      );
+    }
+
     const mode: "code" | "forgot_code" =
       body.mode === "code" || Boolean(body.ticketCode) ? "code" : "forgot_code";
 
     // Resolve base origin for generating private ticket access links
-    const origin =
-      req.headers.get("origin") ||
-      req.headers.get("x-forwarded-host") ||
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
       "https://dagoeng.com";
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const baseUrl = origin.startsWith("http") ? origin : `${protocol}://${origin}`;
 
     const allBookings = await getEventBookings();
 
     // =========================================================================
-    // MODE A: Cari dengan Kode Booking (Tab 1)
+    // MODE A: Cari dengan Kode Booking + Email (Tab 1)
     // =========================================================================
     if (mode === "code") {
       const ticketCode = formatTicketCodeInput(body.ticketCode || "");
@@ -75,66 +93,38 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (channel === "email") {
-        const email = (body.email || "").toLowerCase().trim();
-        if (!email || !isValidEmail(email)) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Alamat email tidak valid. Masukkan alamat email pemesan.",
-            },
-            { status: 400 }
-          );
-        }
-
-        const match = allBookings.find(
-          (b) =>
-            formatTicketCodeInput(b.ticketCode) === ticketCode &&
-            b.guestEmail.toLowerCase().trim() === email
+      const email = (body.email || "").toLowerCase().trim();
+      if (!email || !isValidEmail(email)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Alamat email tidak valid. Masukkan alamat email pemesan.",
+          },
+          { status: 400 }
         );
+      }
 
-        if (!match) {
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "Tiket dengan kombinasi kode booking dan email tersebut tidak ditemukan. Periksa kembali data Anda.",
-            },
-            { status: 404 }
-          );
-        }
+      const match = allBookings.find(
+        (b) =>
+          formatTicketCodeInput(b.ticketCode) === ticketCode &&
+          b.guestEmail.toLowerCase().trim() === email
+      );
 
-        const isEmailConfigured = isEmailServiceConfigured();
-        const masked = maskEmail(email);
+      if (!match) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Tiket dengan kombinasi kode booking dan email tersebut tidak ditemukan. Periksa kembali data Anda.",
+          },
+          { status: 404 }
+        );
+      }
 
-        if (isEmailConfigured) {
-          await sendTicketRecoveryEmail({
-            recipientEmail: email,
-            recipientName: match.guestName,
-            bookings: [
-              {
-                ticketCode: match.ticketCode,
-                eventTitle: match.eventTitle,
-                eventDate: match.eventDate,
-                eventLocation: match.eventLocation,
-                ticketCount: match.ticketCount || 1,
-                privateAccessUrl: `${baseUrl}/events/tickets/${match.guestToken}`,
-              },
-            ],
-          });
+      const isEmailConfigured = isEmailServiceConfigured();
+      const masked = maskEmail(email);
 
-          return NextResponse.json({
-            success: true,
-            channel: "email",
-            emailConfigured: true,
-            emailDispatched: true,
-            configured: true,
-            dispatched: true,
-            target: masked,
-            message: `Tautan akses privat e-tiket telah dikirimkan ke email ${masked}. Harap periksa folder Inbox atau Spam Anda.`,
-          });
-        }
-
+      if (!isEmailConfigured) {
         return NextResponse.json({
           success: true,
           channel: "email",
@@ -148,141 +138,51 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // channel === "whatsapp"
-      const normalizedPhone = normalizePhoneNumber(body.phone || "");
-      if (!normalizedPhone || normalizedPhone.length < 9) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Nomor WhatsApp tidak valid (minimal 9 digit angka).",
-          },
-          { status: 400 }
-        );
-      }
-
-      const match = allBookings.find(
-        (b) =>
-          formatTicketCodeInput(b.ticketCode) === ticketCode &&
-          normalizePhoneNumber(b.guestPhone) === normalizedPhone
-      );
-
-      if (!match) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Tiket dengan kombinasi kode booking dan nomor WhatsApp tersebut tidak ditemukan. Periksa kembali data Anda.",
-          },
-          { status: 404 }
-        );
-      }
-
-      const isWaConfigured = isWhatsAppServiceConfigured();
-      const masked = maskPhone(normalizedPhone);
-
-      if (isWaConfigured) {
-        const privateUrl = `${baseUrl}/events/tickets/${match.guestToken}`;
-        const waMsg = buildRecoveryWhatsAppMessage(match.guestName, [
+      const emailRes = await sendTicketRecoveryEmail({
+        recipientEmail: email,
+        recipientName: match.guestName,
+        bookings: [
           {
             ticketCode: match.ticketCode,
             eventTitle: match.eventTitle,
+            eventDate: match.eventDate,
+            eventLocation: match.eventLocation,
             ticketCount: match.ticketCount || 1,
-            privateAccessUrl: privateUrl,
+            privateAccessUrl: `${baseUrl}/events/tickets/${match.guestToken}`,
           },
-        ]);
-        await sendWhatsAppMessage(normalizedPhone, waMsg);
+        ],
+      });
 
-        return NextResponse.json({
-          success: true,
-          channel: "whatsapp",
-          configured: true,
-          dispatched: true,
-          target: masked,
-          message: `Tautan akses privat e-tiket telah dikirimkan ke nomor WhatsApp ${masked}. Harap periksa pesan masuk Anda.`,
-        });
+      if (!emailRes.sent) {
+        return NextResponse.json(
+          {
+            success: false,
+            configured: false,
+            dispatched: false,
+            emailConfigured: false,
+            emailDispatched: false,
+            error:
+              "Gagal mengirimkan email pemulihan tiket. Silakan coba beberapa saat lagi atau hubungi CS kami.",
+          },
+          { status: 503 }
+        );
       }
 
       return NextResponse.json({
         success: true,
-        channel: "whatsapp",
-        configured: false,
-        dispatched: false,
-        target: masked,
-        message:
-          "Layanan pengiriman WhatsApp otomatis belum dikonfigurasi pada server ini (FONNTE_API_TOKEN belum disetel). Silakan hubungi Customer Service resmi via WhatsApp untuk bantuan pemulihan tiket.",
-      });
-    }
-
-    // =========================================================================
-    // MODE B: Lupa Kode Booking (Tab 2)
-    // =========================================================================
-    if (channel === "whatsapp") {
-      const normalizedPhone = normalizePhoneNumber(body.phone || "");
-      if (!normalizedPhone || normalizedPhone.length < 9) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Nomor WhatsApp tidak valid. Masukkan nomor WhatsApp yang Anda gunakan saat pemesanan tiket.",
-          },
-          { status: 400 }
-        );
-      }
-
-      const rawEmail = (body.email || "").toLowerCase().trim();
-      if (rawEmail && !isValidEmail(rawEmail)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Format alamat email tidak valid.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // Filter matching bookings (by phone, and optionally verified email if provided)
-      const matchingBookings = allBookings.filter((b) => {
-        const phoneMatches = normalizePhoneNumber(b.guestPhone) === normalizedPhone;
-        if (!rawEmail) return phoneMatches;
-        return phoneMatches && b.guestEmail.toLowerCase().trim() === rawEmail;
-      });
-
-      const isWaConfigured = isWhatsAppServiceConfigured();
-      const masked = maskPhone(normalizedPhone);
-
-      if (!isWaConfigured) {
-        return NextResponse.json({
-          success: true,
-          channel: "whatsapp",
-          configured: false,
-          dispatched: false,
-          target: masked,
-          message:
-            "Layanan pengiriman WhatsApp otomatis belum dikonfigurasi pada server ini (FONNTE_API_TOKEN belum disetel). Silakan hubungi Customer Service resmi via WhatsApp untuk bantuan pemulihan tiket.",
-        });
-      }
-
-      if (matchingBookings.length > 0) {
-        const items = matchingBookings.map((b) => ({
-          ticketCode: b.ticketCode,
-          eventTitle: b.eventTitle,
-          ticketCount: b.ticketCount || 1,
-          privateAccessUrl: `${baseUrl}/events/tickets/${b.guestToken}`,
-        }));
-        const waMsg = buildRecoveryWhatsAppMessage(matchingBookings[0].guestName, items);
-        await sendWhatsAppMessage(normalizedPhone, waMsg);
-      }
-
-      return NextResponse.json({
-        success: true,
-        channel: "whatsapp",
+        channel: "email",
+        emailConfigured: true,
+        emailDispatched: true,
         configured: true,
-        dispatched: matchingBookings.length > 0,
+        dispatched: true,
         target: masked,
-        message: `Jika nomor WhatsApp Anda terdaftar pada sistem pemesanan kami, instruksi dan tautan akses e-tiket telah dikirimkan ke nomor WhatsApp ${masked}. Harap periksa pesan masuk Anda.`,
+        message: `Tautan akses privat e-tiket telah dikirimkan ke email ${masked}. Harap periksa folder Inbox atau Spam Anda.`,
       });
     }
 
-    // Default channel: email (also backward-compatible with legacy requests)
+    // =========================================================================
+    // MODE B: Lupa Kode Booking (Tab 2) - Wajib Email + Nomor Telepon
+    // =========================================================================
     const email = (body.email || "").toLowerCase().trim();
     if (!email || !isValidEmail(email)) {
       return NextResponse.json(
@@ -295,29 +195,25 @@ export async function POST(req: NextRequest) {
     }
 
     const rawPhone = body.phone ? normalizePhoneNumber(body.phone) : "";
+    if (!rawPhone || rawPhone.length < 9) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Nomor WhatsApp/telepon tidak valid (minimal 9 digit angka).",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Strictly match BOTH email and phone number
     const userBookings = allBookings.filter((b) => {
       const emailMatches = b.guestEmail.toLowerCase().trim() === email;
-      if (!rawPhone) return emailMatches;
-      return emailMatches && normalizePhoneNumber(b.guestPhone) === rawPhone;
+      const phoneMatches = normalizePhoneNumber(b.guestPhone) === rawPhone;
+      return emailMatches && phoneMatches;
     });
 
     const isEmailConfigured = isEmailServiceConfigured();
     const maskedEmail = maskEmail(email);
-
-    if (userBookings.length > 0 && isEmailConfigured) {
-      await sendTicketRecoveryEmail({
-        recipientEmail: email,
-        recipientName: userBookings[0].guestName,
-        bookings: userBookings.map((b) => ({
-          ticketCode: b.ticketCode,
-          eventTitle: b.eventTitle,
-          eventDate: b.eventDate,
-          eventLocation: b.eventLocation,
-          ticketCount: b.ticketCount || 1,
-          privateAccessUrl: `${baseUrl}/events/tickets/${b.guestToken}`,
-        })),
-      });
-    }
 
     if (!isEmailConfigured) {
       return NextResponse.json({
@@ -333,13 +229,38 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (userBookings.length > 0) {
+      try {
+        const emailRes = await sendTicketRecoveryEmail({
+          recipientEmail: email,
+          recipientName: userBookings[0].guestName,
+          bookings: userBookings.map((b) => ({
+            ticketCode: b.ticketCode,
+            eventTitle: b.eventTitle,
+            eventDate: b.eventDate,
+            eventLocation: b.eventLocation,
+            ticketCount: b.ticketCount || 1,
+            privateAccessUrl: `${baseUrl}/events/tickets/${b.guestToken}`,
+          })),
+        });
+
+        if (!emailRes.sent) {
+          console.warn("sendTicketRecoveryEmail failed in forgot_code mode:", emailRes.message);
+        }
+      } catch (sendErr) {
+        console.error("sendTicketRecoveryEmail exception in forgot_code mode:", sendErr);
+      }
+    }
+
+    // Uniform non-enumerative response: returns identical message and status whether matching or not,
+    // and whether transport succeeded or failed, preventing email/phone existence oracles.
     return NextResponse.json({
       success: true,
       channel: "email",
       emailConfigured: true,
-      emailDispatched: userBookings.length > 0,
+      emailDispatched: true,
       configured: true,
-      dispatched: userBookings.length > 0,
+      dispatched: true,
       target: maskedEmail,
       message:
         "Jika alamat email Anda terdaftar pada sistem pemesanan kami, instruksi dan tautan akses e-tiket telah dikirimkan ke kotak masuk email Anda. Harap periksa folder Inbox atau Spam Anda.",

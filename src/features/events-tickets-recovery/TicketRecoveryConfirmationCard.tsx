@@ -43,9 +43,9 @@ export function TicketRecoveryConfirmationCard({
             <h3 className="text-sm font-semibold text-foreground">
               {configured
                 ? isWhatsApp
-                  ? "Tautan E-Tiket Dikirim via WhatsApp"
-                  : "Tautan E-Tiket Dikirim via Email"
-                : "Layanan Pengiriman Belum Tersedia"}
+                  ? "Tautan e-tiket dikirim via WhatsApp"
+                  : "Tautan e-tiket dikirim via email"
+                : "Layanan pengiriman belum tersedia"}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {message}
@@ -94,7 +94,7 @@ export function TicketRecoveryConfirmationCard({
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
               >
                 <MessageCircle className="size-3.5" />
-                <span>Hubungi CS WhatsApp Resmi</span>
+                <span>Hubungi CS WhatsApp resmi</span>
               </a>
             </div>
           </Alert>
@@ -109,7 +109,7 @@ export function TicketRecoveryConfirmationCard({
           className="w-full gap-2"
         >
           <RefreshCw className="size-3.5" />
-          <span>Kirim Ulang atau Cari Tiket Lain</span>
+          <span>Kirim ulang atau cari tiket lain</span>
         </Button>
       </div>
     </div>

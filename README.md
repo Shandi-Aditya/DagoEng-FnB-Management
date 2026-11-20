@@ -47,7 +47,7 @@ Jalankan perintah pada kolom kanan dari akar repositori untuk menghitung ulang s
 | Komponen kode sumber | Jumlah terverifikasi | Perintah verifikasi ulang |
 | :--- | :--- | :--- |
 | Halaman App Router | `29` | `find src/app -name 'page.tsx' \| wc -l` |
-| Endpoint API App Router | `49` | `find src/app/api -name 'route.ts' \| wc -l` |
+| Endpoint API App Router | `51` | `find src/app/api -name 'route.ts' \| wc -l` |
 | Provider React Context | `16` | `ls -1 src/contexts/*.tsx \| wc -l` |
 | Modul fitur domain | `29` | `ls -1d src/features/* \| wc -l` |
 | Primitif UI shadcn | `38` | `ls -1 src/components/ui/*.tsx \| wc -l` |

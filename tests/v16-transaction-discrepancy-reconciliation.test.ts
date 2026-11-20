@@ -27,9 +27,6 @@ describe("Task V-16: Pelacakan Selisih Per Transaksi & Rekonsiliasi Tripartit", 
       status: "NEEDS_RECONCILIATION",
       startTime: "2026-11-17T08:00:00.000Z",
       endTime: "2026-11-17T16:00:00.000Z",
-      date: "2026-11-17",
-      createdAt: "2026-11-17T08:00:00.000Z",
-      updatedAt: "2026-11-17T16:00:00.000Z",
     },
     {
       id: "shf-002",
@@ -48,9 +45,6 @@ describe("Task V-16: Pelacakan Selisih Per Transaksi & Rekonsiliasi Tripartit", 
       status: "CLOSED",
       startTime: "2026-11-17T16:00:00.000Z",
       endTime: "2026-11-17T23:00:00.000Z",
-      date: "2026-11-17",
-      createdAt: "2026-11-17T16:00:00.000Z",
-      updatedAt: "2026-11-17T23:00:00.000Z",
     },
   ];
 
@@ -73,6 +67,8 @@ describe("Task V-16: Pelacakan Selisih Per Transaksi & Rekonsiliasi Tripartit", 
       tax: 5000,
       total: 55000,
       createdAt: "2026-11-17T09:00:00.000Z",
+      targetServiceMinutes: 15,
+      statusHistory: [],
       items: [
         {
           id: "it-1",
@@ -101,6 +97,8 @@ describe("Task V-16: Pelacakan Selisih Per Transaksi & Rekonsiliasi Tripartit", 
       tax: 8000,
       total: 88000,
       createdAt: "2026-11-17T10:15:00.000Z",
+      targetServiceMinutes: 15,
+      statusHistory: [],
       items: [
         {
           id: "it-2",
@@ -132,6 +130,8 @@ describe("Task V-16: Pelacakan Selisih Per Transaksi & Rekonsiliasi Tripartit", 
       refundApprovedBy: "Hendra Wijaya (Supervisor)",
       refundedAt: "2026-11-17T11:45:00.000Z",
       createdAt: "2026-11-17T11:00:00.000Z",
+      targetServiceMinutes: 15,
+      statusHistory: [],
       items: [
         {
           id: "it-3",
@@ -161,6 +161,8 @@ describe("Task V-16: Pelacakan Selisih Per Transaksi & Rekonsiliasi Tripartit", 
       tax: 8000,
       total: 88000,
       createdAt: "2026-11-17T13:00:00.000Z",
+      targetServiceMinutes: 15,
+      statusHistory: [],
       items: [
         {
           id: "it-4",

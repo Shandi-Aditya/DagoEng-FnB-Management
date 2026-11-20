@@ -70,6 +70,8 @@ export interface CoworkingBooking {
   outletId?: string;
   createdAt?: string;
   totalAmount: number;
+  paidAmount?: number;
+  remainingAmount?: number;
   paymentStatus: "PAID" | "PENDING";
   paymentMethod?: string;
   paymentRef?: string;

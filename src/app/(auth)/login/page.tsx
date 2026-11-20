@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { HERO_PHOTO } from "@/features/landing/home/home-content";
 import { BrandLink } from "@/features/landing/home/HomeNav";
 import { ModeToggle } from "@/features/layout/ModeToggle";
@@ -167,7 +166,6 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, loginCustomer } = useAuth();
-  const { getOrCreateMember } = useLoyalty();
 
   const fromParam = searchParams.get("from");
   const returnTo = sanitizeReturnTo(
@@ -293,18 +291,12 @@ function LoginContent() {
         return;
       }
 
-      // Initialize loyalty member
-      const member = getOrCreateMember({
+      // Akun & member loyalty sudah dibuat di server oleh POST /api/auth/register;
+      // jangan panggil getOrCreateMember agar CUSTOMER tidak memicu POST /api/loyalty/members (403).
+      await loginCustomer({
         name: data.user.name,
         phone: data.user.phone,
         email: data.user.email,
-        initialPoints: 50,
-      });
-
-      await loginCustomer({
-        name: member.name,
-        phone: member.phone,
-        email: member.email,
       });
 
       setIsLoading(false);

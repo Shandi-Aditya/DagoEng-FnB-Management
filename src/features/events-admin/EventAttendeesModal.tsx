@@ -5,7 +5,9 @@ import {
   Download,
   RotateCcw,
   Search,
+  Trash2,
   UserCheck,
+  Mail,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,8 @@ import {
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";
+import { isEventTodayWita } from "@/features/events-checkin/events-checkin-domain";
+import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
 
 export interface EventAttendeesModalProps {
   open: boolean;
@@ -36,6 +40,8 @@ export interface EventAttendeesModalProps {
   event: CommunityEvent | null;
   bookings: EventTicketOrder[];
   onToggleCheckIn: (booking: EventTicketOrder) => void;
+  onDeleteBooking?: (booking: EventTicketOrder) => void;
+  onInvitationIssued?: () => void;
   isUpdatingCheckInId: string | null;
 }
 
@@ -45,9 +51,12 @@ export function EventAttendeesModal({
   event,
   bookings,
   onToggleCheckIn,
+  onDeleteBooking,
+  onInvitationIssued,
   isUpdatingCheckInId,
 }: EventAttendeesModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isIssueInviteOpen, setIsIssueInviteOpen] = useState(false);
 
   useEffect(() => {
     setSearchQuery("");
@@ -57,7 +66,10 @@ export function EventAttendeesModal({
 
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
   const activeEventBookings = eventBookings.filter(
-    (b) => b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
+    (b) =>
+      b.paymentStatus !== "CANCELLED" &&
+      b.paymentStatus !== "EXPIRED" &&
+      b.paymentStatus !== "REFUNDED"
   );
 
   const needle = searchQuery.trim().toLowerCase();
@@ -144,10 +156,16 @@ export function EventAttendeesModal({
                 {event.title} · Penyelenggara: {event.organizerName}
               </DialogDescription>
             </div>
-            <Button variant="outline" size="lg" onClick={handleExportCSV}>
-              <Download />
-              <span>Ekspor CSV</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="lg" onClick={() => setIsIssueInviteOpen(true)}>
+                <Mail className="size-4 mr-1" />
+                <span>Terbitkan tiket undangan</span>
+              </Button>
+              <Button variant="outline" size="lg" onClick={handleExportCSV}>
+                <Download />
+                <span>Ekspor CSV</span>
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 
@@ -271,16 +289,24 @@ export function EventAttendeesModal({
                         <TableCell className="hidden md:table-cell">
                           <Badge
                             variant={
-                              b.isInvitation || b.paymentMethod === "INVITATION"
+                              b.paymentStatus === "REFUNDED" ||
+                              b.paymentStatus === "CANCELLED" ||
+                              b.paymentStatus === "EXPIRED"
+                                ? "destructive"
+                                : b.refundStatus === "REQUESTED"
+                                ? "secondary"
+                                : b.isInvitation || b.paymentMethod === "INVITATION"
                                 ? "outline"
                                 : b.paymentStatus === "PAID"
                                 ? "default"
-                                : isInvalidPayment
-                                ? "destructive"
                                 : "secondary"
                             }
                           >
-                            {b.isInvitation || b.paymentMethod === "INVITATION"
+                            {b.paymentStatus === "REFUNDED"
+                              ? "Dikembalikan"
+                              : b.refundStatus === "REQUESTED"
+                              ? "Pengajuan refund"
+                              : b.isInvitation || b.paymentMethod === "INVITATION"
                               ? "Undangan"
                               : b.paymentStatus === "PAID"
                               ? "Lunas"
@@ -303,24 +329,52 @@ export function EventAttendeesModal({
                         </TableCell>
 
                         <TableCell className="text-right">
-                          <Button
-                            variant={isCheckedIn ? "outline" : "default"}
-                            size="sm"
-                            onClick={() => onToggleCheckIn(b)}
-                            disabled={isUpdating || isInvalidPayment}
-                          >
-                            {isCheckedIn ? (
-                              <>
-                                <RotateCcw />
-                                <span className="hidden sm:inline">Batal hadir</span>
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck />
-                                <span className="hidden sm:inline">Tandai hadir</span>
-                              </>
-                            )}
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant={isCheckedIn ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => onToggleCheckIn(b)}
+                              disabled={
+                                isUpdating ||
+                                !isEventTodayWita(event) ||
+                                b.paymentStatus !== "PAID" ||
+                                b.refundStatus === "REQUESTED"
+                              }
+                            >
+                              {isCheckedIn ? (
+                                <>
+                                  <RotateCcw />
+                                  <span className="hidden sm:inline">Batal hadir</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserCheck />
+                                  <span className="hidden sm:inline">Tandai hadir</span>
+                                </>
+                              )}
+                            </Button>
+                            {onDeleteBooking &&
+                            b.paymentStatus !== "PAID" &&
+                            b.paymentStatus !== "REFUNDED" &&
+                            b.refundStatus !== "REQUESTED" &&
+                            !(b.paymentStatus === "PENDING" && b.paymentProofUrl && !b.paymentRejectionReason) &&
+                            b.checkInStatus !== "CHECKED_IN" &&
+                            b.checkInStatus !== "PARTIALLY_CHECKED_IN" &&
+                            !(b.checkedInSeats && b.checkedInSeats.length > 0) &&
+                            (b.checkedInQty || 0) === 0 ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onDeleteBooking(b)}
+                                disabled={isUpdating}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                title="Hapus pesanan"
+                              >
+                                <Trash2 />
+                                <span className="sr-only">Hapus</span>
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -341,6 +395,13 @@ export function EventAttendeesModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <IssueInvitationDialog
+        open={isIssueInviteOpen}
+        onOpenChange={setIsIssueInviteOpen}
+        event={event}
+        onInvitationIssued={() => onInvitationIssued?.()}
+      />
     </Dialog>
   );
 }

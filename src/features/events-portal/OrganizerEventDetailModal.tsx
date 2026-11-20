@@ -10,6 +10,7 @@ import {
   ExternalLink,
   AlertTriangle,
   ArrowRight,
+  Tag,
 } from "lucide-react";
 import {
   Dialog,
@@ -21,11 +22,24 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/app/status-badge";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
+import {
   calculateEventOccupancy,
+  calculateEventSalesSummary,
   eventCategoryLabel,
   eventStatusLabel,
   eventStatusTone,
@@ -41,6 +55,7 @@ export interface OrganizerEventDetailModalProps {
   bookings: EventTicketOrder[];
   onEditRevision: (event: CommunityEvent) => void;
   onReviewSplit: (event: CommunityEvent) => void;
+  onManagePromos?: (event: CommunityEvent) => void;
 }
 
 export function OrganizerEventDetailModal({
@@ -50,18 +65,17 @@ export function OrganizerEventDetailModal({
   bookings,
   onEditRevision,
   onReviewSplit,
+  onManagePromos,
 }: OrganizerEventDetailModalProps) {
   if (!event) return null;
 
   const effStatus = getEffectiveStatus(event);
   const occupancy = calculateEventOccupancy(event, bookings);
-  const isFree = !event.isPaid || event.price === 0;
+  const isPaid = isEventPaidEffective(event);
 
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
   const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
-  const grossSales = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
-  const sharePercent = organizerSharePercent(event);
-  const organizerShare = Math.round(grossSales * (sharePercent / 100));
+  const salesSummary = calculateEventSalesSummary(event, bookings);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,7 +142,7 @@ export function OrganizerEventDetailModal({
             <div className="rounded-md border p-2.5 bg-muted/20">
               <span className="text-muted-foreground block text-xs">Harga tiket</span>
               <span className="font-mono font-medium block mt-0.5 text-foreground">
-                {isFree ? "Gratis" : formatCurrencyIDR(event.price)}
+                {formatEventPriceSummary(event)}
               </span>
             </div>
             <div className="rounded-md border p-2.5 bg-muted/20">
@@ -146,10 +160,63 @@ export function OrganizerEventDetailModal({
             <div className="rounded-md border p-2.5 bg-muted/20">
               <span className="text-muted-foreground block text-xs">Hak bagi hasil</span>
               <span className="font-mono font-medium block mt-0.5 text-foreground">
-                {formatCurrencyIDR(organizerShare)}
+                {formatCurrencyIDR(salesSummary.organizerEarnings)}
               </span>
             </div>
           </div>
+
+          {/* Ticket Tier Breakdown */}
+          {salesSummary.tierBreakdown.length > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-foreground block">Penjualan per jenis tiket</span>
+                <span className="text-xs text-muted-foreground">
+                  Sisa total: {salesSummary.remainingCapacity} dari {salesSummary.totalCapacity} tiket
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table className="w-full text-xs">
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="border-b">
+                      <TableHead className="p-2 font-medium">Jenis tiket</TableHead>
+                      <TableHead className="p-2 font-medium">Harga</TableHead>
+                      <TableHead className="p-2 font-medium text-center">Terjual</TableHead>
+                      <TableHead className="p-2 font-medium text-center">Sisa kuota</TableHead>
+                      <TableHead className="p-2 font-medium text-right">Omzet</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {salesSummary.tierBreakdown.map((t) => (
+                      <TableRow key={t.tierId} className="hover:bg-muted/20">
+                        <TableCell className="p-2 font-medium text-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <span>{t.tierName}</span>
+                            {t.isSoldOut && (
+                              <Badge variant="secondary" className="px-1.5 py-0 text-xs">
+                                Habis
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="p-2 font-mono text-muted-foreground">
+                          {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
+                        </TableCell>
+                        <TableCell className="p-2 text-center font-mono tabular-nums text-foreground">
+                          {t.soldCount}
+                        </TableCell>
+                        <TableCell className="p-2 text-center font-mono tabular-nums text-muted-foreground">
+                          {t.remainingQuota}
+                        </TableCell>
+                        <TableCell className="p-2 text-right font-mono tabular-nums font-medium text-foreground">
+                          {formatCurrencyIDR(t.revenue)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
 
           {/* Schedule & Location */}
           <div className="space-y-2 border-t pt-3">
@@ -217,21 +284,36 @@ export function OrganizerEventDetailModal({
           )}
 
           {event.status === "APPROVED" && (
-            <Button
-              variant="outline"
-              size="sm"
-              render={
-                <Link
-                  href={`/events/${event.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              }
-              nativeButton={false}
-            >
-              <ExternalLink />
-              <span>Lihat di katalog publik</span>
-            </Button>
+            <>
+              {onManagePromos && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onManagePromos(event);
+                  }}
+                >
+                  <Tag className="size-3.5" />
+                  <span>Kelola promo</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                render={
+                  <Link
+                    href={`/events/${event.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+                nativeButton={false}
+              >
+                <ExternalLink />
+                <span>Lihat di katalog publik</span>
+              </Button>
+            </>
           )}
 
           <Button

@@ -7,7 +7,9 @@ import {
   adminApproveBookingPayment,
   adminRejectBookingPayment,
   deleteEventBooking,
+  getAdminEvents,
 } from "@/lib/events";
+import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
 import { assertEventAdmin, assertCheckInAuth } from "@/lib/server-auth";
 import { AttendeeCheckInStatus, TicketPaymentStatus } from "@/types/event";
 
@@ -138,6 +140,20 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           { status: 400 }
         );
       }
+      if (reset || checkInStatus === "REGISTERED") {
+        const events = await getAdminEvents();
+        const event = events.find((e) => e.id === existing.eventId);
+        if (event && getEventDateStatusWita(event) !== "TODAY") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Status kehadiran hanya dapat diatur ulang pada hari pelaksanaan event (WITA).",
+            },
+            { status: 400 }
+          );
+        }
+      }
+
       updated = await updateBookingCheckIn(id, checkInStatus as AttendeeCheckInStatus, {
         incrementQty,
         targetQty,

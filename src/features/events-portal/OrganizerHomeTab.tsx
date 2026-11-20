@@ -4,6 +4,15 @@ import React, { useMemo } from "react";
 import { ArrowRight, CalendarDays, MapPin, ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { StatCard } from "@/components/app/stat-card";
@@ -14,10 +23,12 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
   calculateEventOccupancy,
+  calculateEventSalesSummary,
   formatDateSafe,
   paymentStatusLabel,
   paymentStatusTone,
 } from "./events-portal-domain";
+import { isEventTodayWita } from "@/features/events-checkin/events-checkin-domain";
 import {
   checkedInGuests,
   pendingAction,
@@ -67,6 +78,11 @@ export function OrganizerHomeTab({
     () => [...bookings].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, RECENT_TICKETS),
     [bookings],
   );
+
+  const nextEventSales = useMemo(() => {
+    if (!nextEvent) return null;
+    return calculateEventSalesSummary(nextEvent, bookings);
+  }, [nextEvent, bookings]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,6 +160,66 @@ export function OrganizerHomeTab({
           }
         />
       </div>
+
+      {nextEvent && nextEventSales ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="space-y-0.5">
+              <CardTitle>Penjualan tiket per jenis</CardTitle>
+              <CardDescription>
+                Rincian kuota dan pendapatan tiket untuk event &quot;{nextEvent.title}&quot;.
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => onSelectEvent(nextEvent)}>
+              Rincian event
+              <ArrowRight />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow className="border-b text-left text-muted-foreground">
+                    <TableHead className="pb-2 font-medium">Jenis tiket</TableHead>
+                    <TableHead className="pb-2 font-medium">Harga</TableHead>
+                    <TableHead className="pb-2 text-center font-medium">Terjual</TableHead>
+                    <TableHead className="pb-2 text-center font-medium">Sisa kuota</TableHead>
+                    <TableHead className="pb-2 text-right font-medium">Omzet</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {nextEventSales.tierBreakdown.map((t) => (
+                    <TableRow key={t.tierId} className="py-2.5">
+                      <TableCell className="py-2.5 font-medium text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <span>{t.tierName}</span>
+                          {t.isSoldOut ? (
+                            <Badge variant="secondary" className="px-1.5 py-0 text-xs">
+                              Habis
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-2.5 font-mono text-muted-foreground">
+                        {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
+                      </TableCell>
+                      <TableCell className="py-2.5 text-center font-mono tabular-nums text-foreground">
+                        {t.soldCount} tiket
+                      </TableCell>
+                      <TableCell className="py-2.5 text-center font-mono tabular-nums text-muted-foreground">
+                        {t.remainingQuota} tiket
+                      </TableCell>
+                      <TableCell className="py-2.5 text-right font-mono font-medium tabular-nums text-foreground">
+                        {formatCurrencyIDR(t.revenue)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -223,7 +299,12 @@ function NextEventCard({ event, bookings, onOpenCheckIn, onSelectEvent }: NextEv
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button size="lg" onClick={onOpenCheckIn}>
+          <Button
+            size="lg"
+            onClick={onOpenCheckIn}
+            disabled={!isEventTodayWita(event)}
+            title={!isEventTodayWita(event) ? "Meja check-in hanya aktif pada hari acara (WITA)" : undefined}
+          >
             <ScanLine />
             Mulai check-in
           </Button>

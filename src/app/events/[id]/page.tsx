@@ -50,6 +50,10 @@ import {
   validateBookingInput,
 } from "@/features/event-detail/event-detail-domain";
 import { eventCategoryLabel } from "@/features/landing/landing-logic";
+import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
 
 function MyTicketsNavAction({ user }: { user: AuthenticatedUser | null }) {
   if (user) {
@@ -218,8 +222,9 @@ export default function EventDetailPage() {
       }
 
       setIsBookingModalOpen(false);
+      void fetchEventDetail(event.id);
 
-      if (event.isPaid && orderData.totalPrice > 0) {
+      if (isEventPaidEffective(event) && orderData.totalPrice > 0) {
         setPendingTicket(orderData);
         setIsPaymentModalOpen(true);
       } else {
@@ -410,10 +415,10 @@ export default function EventDetailPage() {
               <div className="space-y-0.5">
                 <span className="text-muted-foreground block text-xs">Tiket masuk</span>
                 <span className="font-mono tabular-nums font-medium text-foreground block truncate">
-                  {event.isPaid ? formatCurrencyIDR(event.price) : "Gratis"}
+                  {formatEventPriceSummary(event)}
                 </span>
                 <span className="text-muted-foreground block text-xs truncate">
-                  {event.isPaid ? "Per tiket peserta" : "Registrasi terbuka"}
+                  {isEventPaidEffective(event) ? "Per tiket peserta" : "Registrasi terbuka"}
                 </span>
               </div>
             </div>
@@ -482,19 +487,24 @@ export default function EventDetailPage() {
 
       {/* Mobile Sticky Bottom CTA Bar */}
       {!isPast && !event.availability?.isSoldOut && (() => {
-        const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
+        const mobilePrice = formatEventPriceSummary(event);
+        const isPaidEffective = isEventPaidEffective(event);
         const tiers = event.ticketTiers || [];
-        const minPrice = hasTiers ? Math.min(...tiers.map((t) => Number(t.price || 0))) : event.price;
-        const maxPrice = hasTiers ? Math.max(...tiers.map((t) => Number(t.price || 0))) : event.price;
-        const mobilePrice = hasTiers
-          ? minPrice === 0 && maxPrice === 0
-            ? "Gratis"
-            : minPrice === maxPrice
-            ? formatCurrencyIDR(minPrice)
-            : `Mulai dari ${formatCurrencyIDR(minPrice)}`
-          : event.isPaid
-          ? formatCurrencyIDR(event.price)
-          : "Gratis";
+        const hasTiers = tiers.length > 0;
+        const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
+        const hasOnSaleTier = hasTiers
+          ? tiers.some((t) => {
+              if (t.isActive === false) return false;
+              const a = tierAvailabilities.find((ta) => ta.tierId === t.id);
+              return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" : true;
+            })
+          : true;
+        const hasUpcomingTier =
+          hasTiers &&
+          tierAvailabilities.some((a) => {
+            const matchingTier = tiers.find((t) => t.id === a.tierId);
+            return (!matchingTier || matchingTier.isActive !== false) && a.salesStatus === "UPCOMING";
+          });
 
         return (
           <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-background/95 backdrop-blur border-t p-3.5 px-4 flex items-center justify-between gap-4 shadow-lg">
@@ -507,13 +517,22 @@ export default function EventDetailPage() {
 
             <Button
               size="lg"
+              disabled={!hasOnSaleTier}
               onClick={() => {
                 setBookingError(null);
                 setIsBookingModalOpen(true);
               }}
             >
               <Ticket className="size-3.5" />
-              <span>{event.isPaid || (hasTiers && maxPrice > 0) ? "Pesan tiket" : "Daftar gratis"}</span>
+              <span>
+                {!hasOnSaleTier
+                  ? hasUpcomingTier
+                    ? "Penjualan belum dibuka"
+                    : "Penjualan telah berakhir"
+                  : isPaidEffective
+                  ? "Pesan tiket"
+                  : "Daftar gratis"}
+              </span>
             </Button>
           </div>
         );

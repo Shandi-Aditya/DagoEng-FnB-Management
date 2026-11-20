@@ -8,6 +8,7 @@ import {
   Eye,
   MessageSquare,
   MoreHorizontal,
+  Trash2,
   UserCheck,
   XCircle,
 } from "lucide-react";
@@ -33,6 +34,10 @@ import {
 import type { CommunityEvent } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
+import {
   eventCategoryLabel,
   eventStatusLabel,
   eventStatusTone,
@@ -55,6 +60,7 @@ export interface EventsModerationTableProps {
   onRequestRevision: (event: CommunityEvent) => void;
   onReject: (event: CommunityEvent) => void;
   onArchive: (event: CommunityEvent) => void;
+  onDelete?: (event: CommunityEvent) => void;
   searchQuery?: string;
 }
 
@@ -72,6 +78,7 @@ export function EventsModerationTable({
   onRequestRevision,
   onReject,
   onArchive,
+  onDelete,
   searchQuery,
 }: EventsModerationTableProps) {
   const startIndex = (currentPage - 1) * pageSize;
@@ -112,17 +119,10 @@ export function EventsModerationTable({
           <TableBody>
             {pagedEvents.map((event) => {
               const effStatus = getEffectiveStatus(event);
-              const activePaidTiers = (event.ticketTiers ?? []).filter(
-                (t) => t.isActive !== false && t.price > 0
-              );
-              const effectivePrice =
-                event.price > 0
-                  ? event.price
-                  : activePaidTiers.length > 0
-                  ? Math.min(...activePaidTiers.map((t) => t.price))
-                  : 0;
-              const isFree = !event.isPaid || effectivePrice === 0;
+              const isPaid = isEventPaidEffective(event);
+              const priceSummary = formatEventPriceSummary(event);
               const bookedCount = (event as any).bookedCount || 0;
+              const relatedBookingsCount = (event as any).relatedBookingsCount ?? bookedCount;
               const maxCapacity = event.maxCapacity || 0;
               const waUrl = formatWhatsAppUrl(event.organizerPhone);
 
@@ -166,7 +166,7 @@ export function EventsModerationTable({
                         {eventCategoryLabel(event.category)}
                       </span>
                       <span className="text-xs text-muted-foreground font-mono tabular-nums">
-                        {isFree ? "Gratis" : formatCurrencyIDR(effectivePrice)}
+                        {priceSummary}
                       </span>
                     </div>
                   </TableCell>
@@ -288,6 +288,19 @@ export function EventsModerationTable({
                               <DropdownMenuItem onClick={() => onArchive(event)}>
                                 <Archive />
                                 <span>Arsipkan event</span>
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+
+                          {onDelete && relatedBookingsCount === 0 && (effStatus === "PENDING" || effStatus === "REVISION_REQUESTED" || effStatus === "REJECTED" || effStatus === "ARCHIVED") ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onDelete(event)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 />
+                                <span>Hapus permanen</span>
                               </DropdownMenuItem>
                             </>
                           ) : null}

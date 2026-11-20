@@ -41,6 +41,46 @@ export interface EventTicketTierAvailability {
 
 export type PromoDiscountType = "PERCENT" | "NOMINAL";
 
+export type EventRefundPolicyType = "NO_REFUND" | "REFUNDABLE_UNTIL_H_MINUS";
+
+export interface EventRefundPolicy {
+  policyType: EventRefundPolicyType;
+  hMinusDays?: number; // e.g. 3 for H-3 (refund allowed until 3 days before event start)
+  refundFeePercent?: number; // admin fee deducted in percent (0 to 100)
+  description?: string;
+}
+
+export type TicketRefundStatus = "NONE" | "REQUESTED" | "APPROVED" | "REJECTED";
+
+export interface TicketRefundRequest {
+  requestedAt: string;
+  reason: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  refundAmount: number;
+  feeDeducted?: number;
+  status: TicketRefundStatus;
+  processedAt?: string | null;
+  processedBy?: string | null;
+  adminNote?: string | null;
+  rejectionReason?: string | null;
+}
+
+export interface RequestRefundPayload {
+  reason: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+}
+
+export interface ProcessRefundPayload {
+  decision: "APPROVE" | "REJECT";
+  adminNotes?: string;
+  rejectionReason?: string;
+  forceApproveDeficit?: boolean;
+}
+
 export interface EventPromoCode {
   id: string;
   eventId: string;
@@ -89,6 +129,7 @@ export interface CommunityEvent {
   destinationBankId?: string | null; // Override rekening bank tujuan khusus event
   ticketTiers?: EventTicketTier[];
   promoCodes?: EventPromoCode[];
+  refundPolicy?: EventRefundPolicy;
 
   // Collaboration requirements
   collaborationFacilities?: string[] | string | null;
@@ -121,6 +162,8 @@ export interface ProposedRevenueSplit {
   id?: string;
   organizerPercent: number; // e.g. 85
   platformPercent: number;  // e.g. 15
+  organizerFeePercent?: number;
+  customPlatformFeePercent?: number;
   proposedBy: RevenueSplitParty;
   reason?: string;
   status: RevenueSplitNegotiationStatus;
@@ -205,7 +248,8 @@ export interface PublicCommunityEvent {
   guidelines?: string[] | null;
   ticketTiers?: EventTicketTier[];
   tierAvailability?: EventTicketTierAvailability[];
-  promoCodes?: Pick<EventPromoCode, "code" | "discountType" | "discountValue" | "maxDiscountAmount" | "minOrderAmount" | "validFrom" | "validUntil" | "isActive" | "applicableTierIds">[];
+  hasActivePromos?: boolean;
+  refundPolicy?: EventRefundPolicy;
   availability?: EventTicketAvailability;
   createdAt: string;
 }
@@ -226,6 +270,7 @@ export interface EventSubmissionPayload {
   isPaid: boolean;
   price?: number;
   ticketTiers?: EventTicketTier[];
+  refundPolicy?: EventRefundPolicy;
   posterUrl: string;
   externalRegistrationUrl?: string;
   guidelines?: string[] | string | null;
@@ -244,7 +289,7 @@ export interface EventSubmissionPayload {
 }
 
 export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER" | "DOKU_CHECKOUT" | "MANUAL_TRANSFER" | "INVITATION";
-export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED" | "EXPIRED";
+export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED" | "EXPIRED" | "REFUNDED";
 export type AttendeeCheckInStatus = "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
 
 export type EventBankAccountType = "PLATFORM" | "EVENT_OVERRIDE" | "ORGANIZER";
@@ -293,6 +338,8 @@ export interface EventTicketAvailability {
   tiers?: EventTicketTierAvailability[];
 }
 
+export type EventBooking = EventTicketOrder;
+
 export interface EventTicketOrder {
   id: string; // e.g. "tkt-1729000-abc12"
   ticketCode: string; // e.g. "DAGO-EVT-93821"
@@ -317,6 +364,8 @@ export interface EventTicketOrder {
   promoCode?: string | null;
   isInvitation?: boolean;
   invitationNote?: string | null;
+  refundStatus?: TicketRefundStatus;
+  refundRequest?: TicketRefundRequest;
   platformFeePercent: number; // e.g. 20%
   platformFeeAmount: number;
   organizerRevenueAmount: number;
@@ -390,12 +439,12 @@ export interface EventBankAccountHistoryEntry {
 export interface EventRevenueSharingPolicy {
   _revision?: number; // Monotonic integer revision counter for cloud & disk consistency
   defaultPlatformFeePercent: number; // default 20 (20% DAGO Platform)
-  defaultOrganizerSharePercent: number; // default 80 (80% Penyelenggara)
-  minPlatformFeePercent: number; // default 0
-  maxPlatformFeePercent: number; // default 100
+  defaultOrganizerSharePercent?: number; // default 80 (80% Penyelenggara)
+  minPlatformFeePercent?: number; // default 0
+  maxPlatformFeePercent?: number; // default 100
   bookingPaymentExpiryMinutes?: number; // default 60 menit
   maxTicketsPerBooking?: number; // default 5 tiket
-  activePaymentMethod?: "MANUAL_TRANSFER" | "DOKU_CHECKOUT";
+  activePaymentMethod?: "MANUAL_TRANSFER" | "MANUAL_BANK_TRANSFER" | "DOKU_CHECKOUT";
   allowOrganizerBankAccounts?: boolean;
   allowEventBankOverride?: boolean;
   paymentInstructions?: string;
@@ -403,7 +452,7 @@ export interface EventRevenueSharingPolicy {
   maxProofFileSizeMb?: number;
   bankAccounts?: EventBankAccount[];
   bankHistory?: EventBankAccountHistoryEntry[];
-  effectiveDate: string; // ISO date
+  effectiveDate?: string; // ISO date
   policyNotes?: string;
   updatedAt?: string;
   updatedBy?: string;
@@ -422,8 +471,8 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     id: "bank-bca-plat",
     label: "BCA Platform Utama",
     bankName: "BCA (Bank Central Asia)",
-    accountNumber: "000012345678",
-    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+    accountNumber: "8830192841",
+    accountHolder: "PT DAGO CREATIVE HUB",
     branch: "KCU Singaraja",
     badge: "Utama / Rekomendasi",
     isDefault: true,
@@ -436,8 +485,8 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     id: "bank-mandiri-plat",
     label: "Mandiri Platform",
     bankName: "Bank Mandiri",
-    accountNumber: "000098765432",
-    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+    accountNumber: "1450012345678",
+    accountHolder: "PT DAGO KREATIF MANDIRI",
     branch: "KC Singaraja",
     badge: "Bebas Biaya Admin",
     isDefault: false,
@@ -450,8 +499,8 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     id: "bank-bri-plat",
     label: "BRI Platform",
     bankName: "Bank BRI",
-    accountNumber: "000011223344",
-    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+    accountNumber: "012301001234567",
+    accountHolder: "PT DAGO CREATIVE HUB",
     branch: "KC Singaraja",
     badge: "Jaringan Luas",
     isDefault: false,
@@ -484,7 +533,7 @@ export const DEFAULT_EVENT_POLICY: EventRevenueSharingPolicy = {
       changedBy: "Platform Super Admin",
       action: "SET_DEFAULT",
       bankId: "bank-bca-plat",
-      details: "Inisialisasi rekening bank default BCA (PT DAGO CREATIVE HUB - 000012345678)",
+      details: "Inisialisasi rekening bank default BCA (PT DAGO CREATIVE HUB - 8830192841)",
     },
   ],
   effectiveDate: "2026-01-01T00:00:00.000Z",

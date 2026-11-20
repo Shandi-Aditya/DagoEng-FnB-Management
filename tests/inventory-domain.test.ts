@@ -19,7 +19,7 @@ function makeIngredient(id: string, overrides: Partial<IngredientItem> = {}): In
   return {
     id,
     name: `Bahan ${id}`,
-    category: "Dairy & Milk",
+    category: "Dairy",
     stockNumber: 10,
     unit: "L",
     min: 5,
@@ -42,6 +42,7 @@ function makePO(id: string, overrides: Partial<PurchaseOrder> = {}): PurchaseOrd
     total: 111000,
     status: "SENT",
     orderDate: "11 Nov 2026",
+    expectedDelivery: "18 Nov 2026",
     ...overrides,
   };
 }
@@ -108,13 +109,13 @@ describe("filterStockIngredients", () => {
   it("filters ingredients by status, category, and search query", () => {
     const items = [
       makeIngredient("1", { name: "Susu Segar", category: "Dairy", status: "SAFE" }),
-      makeIngredient("2", { name: "Biji Kopi", category: "Coffee", status: "LOW" }),
-      makeIngredient("3", { name: "Sirup Aren", category: "Syrup", status: "CRITICAL", stockNumber: 0 }),
+      makeIngredient("2", { name: "Biji Kopi", category: "Coffee Beans", status: "LOW" }),
+      makeIngredient("3", { name: "Sirup Aren", category: "Syrup & Sweetener", status: "CRITICAL", stockNumber: 0 }),
     ];
 
     expect(filterStockIngredients(items, "ALL", "ALL", "")).toHaveLength(3);
     expect(filterStockIngredients(items, "OUT_OF_STOCK", "ALL", "")).toHaveLength(1);
-    expect(filterStockIngredients(items, "ALL", "Coffee", "")).toHaveLength(1);
+    expect(filterStockIngredients(items, "ALL", "Coffee Beans", "")).toHaveLength(1);
     expect(filterStockIngredients(items, "ALL", "ALL", "segar")).toHaveLength(1);
   });
 });

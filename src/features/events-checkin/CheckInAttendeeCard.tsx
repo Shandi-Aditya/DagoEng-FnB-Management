@@ -38,7 +38,10 @@ export function CheckInAttendeeCard({
 
   const isFullyCheckedIn = ticket.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
   const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
-  const isPaid = ticket.paymentStatus === "PAID";
+  const isPaid =
+    ticket.paymentStatus === "PAID" &&
+    ticket.refundStatus !== "REQUESTED" &&
+    ticket.refundStatus !== "APPROVED";
 
   const checkInStatus = getCheckInStatusTone(ticket);
   const paymentTone = getPaymentStatusTone(ticket.paymentStatus);
@@ -71,12 +74,34 @@ export function CheckInAttendeeCard({
       </div>
 
       {/* Guest Details */}
-      <div className="space-y-0.5">
+      <div className="space-y-1">
         <p className="font-semibold text-sm text-foreground leading-tight">
           {ticket.guestName}
         </p>
         {ticket.institution && (
           <p className="text-xs text-muted-foreground">{ticket.institution}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          {ticket.isInvitation && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              Tiket undangan
+            </span>
+          )}
+          {ticket.ticketTierName && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
+              {ticket.ticketTierName}
+            </span>
+          )}
+          {ticket.promoCode && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border">
+              Promo: {ticket.promoCode}
+            </span>
+          )}
+        </div>
+        {ticket.isInvitation && ticket.invitationNote && (
+          <p className="text-xs text-muted-foreground italic">
+            Keterangan: {ticket.invitationNote}
+          </p>
         )}
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground pt-0.5">
           <span className="truncate">{ticket.guestEmail}</span>

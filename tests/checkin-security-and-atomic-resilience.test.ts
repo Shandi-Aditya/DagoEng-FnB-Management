@@ -87,7 +87,7 @@ describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () 
       );
 
       const res = await handleAdminCheckIn(req, {
-        params: { id: booking.id },
+        params: Promise.resolve({ id: booking.id }),
       });
       const data = await res.json();
 
@@ -155,7 +155,7 @@ describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () 
       );
 
       const res = await handleAdminCheckIn(req, {
-        params: { id: booking.id },
+        params: Promise.resolve({ id: booking.id }),
       });
       const data = await res.json();
 

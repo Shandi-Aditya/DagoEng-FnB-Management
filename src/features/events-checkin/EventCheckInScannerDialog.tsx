@@ -56,6 +56,10 @@ interface ScanFeedback {
   ticketCode?: string;
   guestName?: string;
   timestamp: string;
+  isInvitation?: boolean;
+  invitationNote?: string;
+  ticketTierName?: string;
+  promoCode?: string;
 }
 
 export function EventCheckInScannerDialog({
@@ -178,6 +182,10 @@ export function EventCheckInScannerDialog({
             message: validation.message || "Validasi tiket gagal.",
             ticketCode: cleanCode,
             guestName: booking?.guestName,
+            isInvitation: booking?.isInvitation,
+            invitationNote: booking?.invitationNote || undefined,
+            ticketTierName: booking?.ticketTierName,
+            promoCode: booking?.promoCode || undefined,
             timestamp: nowStr,
           });
           return;
@@ -204,6 +212,10 @@ export function EventCheckInScannerDialog({
               : `Tiket ${cleanCode} atas nama ${booking.guestName} berhasil diverifikasi.`,
           ticketCode: cleanCode,
           guestName: booking.guestName,
+          isInvitation: booking.isInvitation,
+          invitationNote: booking.invitationNote || undefined,
+          ticketTierName: booking.ticketTierName,
+          promoCode: booking.promoCode || undefined,
           timestamp: nowStr,
         });
       } catch (err: unknown) {
@@ -238,7 +250,7 @@ export function EventCheckInScannerDialog({
 
       const qrCodeSuccessCallback = (decodedText: string) => {
         const now = Date.now();
-        const clean = decodedText.trim().toUpperCase();
+        const clean = decodedText.trim();
 
         if (
           lastScannedRef.current &&
@@ -391,8 +403,30 @@ export function EventCheckInScannerDialog({
               </div>
               <p className="text-xs text-foreground font-medium">{feedback.message}</p>
               {feedback.ticketCode && (
-                <p className="text-xs text-muted-foreground font-mono">
-                  {feedback.ticketCode} {feedback.guestName ? `• ${feedback.guestName}` : ""}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {feedback.ticketCode} {feedback.guestName ? `• ${feedback.guestName}` : ""}
+                  </span>
+                  {feedback.isInvitation && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                      Tiket undangan
+                    </span>
+                  )}
+                  {feedback.ticketTierName && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
+                      {feedback.ticketTierName}
+                    </span>
+                  )}
+                  {feedback.promoCode && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border">
+                      Promo: {feedback.promoCode}
+                    </span>
+                  )}
+                </div>
+              )}
+              {feedback.invitationNote && (
+                <p className="text-xs text-muted-foreground pt-0.5">
+                  Catatan undangan: {feedback.invitationNote}
                 </p>
               )}
             </div>

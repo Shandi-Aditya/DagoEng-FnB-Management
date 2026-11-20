@@ -16,6 +16,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 export interface BankFormData {
   label: string;
   bankName: string;
+  customBankName?: string;
   accountNumber: string;
   accountHolder: string;
   branch: string;
@@ -61,16 +62,30 @@ export function BankModal({
               onChange={(e) => onFormChange({ ...formData, bankName: e.target.value })}
               required
             >
-              <NativeSelectOption value="BCA">BCA (Bank Central Asia)</NativeSelectOption>
-              <NativeSelectOption value="Mandiri">Bank Mandiri</NativeSelectOption>
-              <NativeSelectOption value="BNI">BNI (Bank Negara Indonesia)</NativeSelectOption>
-              <NativeSelectOption value="BRI">BRI (Bank Rakyat Indonesia)</NativeSelectOption>
-              <NativeSelectOption value="BSI">BSI (Bank Syariah Indonesia)</NativeSelectOption>
-              <NativeSelectOption value="CIMB">CIMB Niaga</NativeSelectOption>
-              <NativeSelectOption value="Permata">Bank Permata</NativeSelectOption>
+              <NativeSelectOption value="BCA (Bank Central Asia)">BCA (Bank Central Asia)</NativeSelectOption>
+              <NativeSelectOption value="Bank Mandiri">Bank Mandiri</NativeSelectOption>
+              <NativeSelectOption value="BNI (Bank Negara Indonesia)">BNI (Bank Negara Indonesia)</NativeSelectOption>
+              <NativeSelectOption value="Bank BRI">Bank BRI</NativeSelectOption>
+              <NativeSelectOption value="BSI (Bank Syariah Indonesia)">BSI (Bank Syariah Indonesia)</NativeSelectOption>
+              <NativeSelectOption value="CIMB Niaga">CIMB Niaga</NativeSelectOption>
+              <NativeSelectOption value="Bank Permata">Bank Permata</NativeSelectOption>
               <NativeSelectOption value="Other">Lainnya</NativeSelectOption>
             </NativeSelect>
           </div>
+
+          {formData.bankName === "Other" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customBankName">Nama bank kustom</Label>
+              <Input
+                id="customBankName"
+                type="text"
+                placeholder="Masukkan nama bank"
+                value={formData.customBankName || ""}
+                onChange={(e) => onFormChange({ ...formData, customBankName: e.target.value })}
+                required
+              />
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="accountNumber">Nomor rekening</Label>

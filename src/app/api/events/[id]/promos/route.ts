@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminEventById, createEventPromoCode } from "@/lib/events";
+import { getAdminEventById, createEventPromoCode, validateAndCalculatePromoDiscount } from "@/lib/events";
 import { assertOrganizerAuth, assertEventAdmin } from "@/lib/server-auth";
 import { EventPromoCode } from "@/types/event";
 
@@ -22,20 +22,34 @@ export async function GET(
     const adminAuth = await assertEventAdmin(req);
     const organizerAuth = await assertOrganizerAuth(req, event.organizerEmail);
 
+    const codeParam = req.nextUrl.searchParams.get("code");
+    if (codeParam && codeParam.trim() !== "") {
+      const subtotalParam = Number(req.nextUrl.searchParams.get("subtotal") || 0);
+      const tierIdParam = req.nextUrl.searchParams.get("tierId") || undefined;
+      const calc = validateAndCalculatePromoDiscount(event, codeParam, subtotalParam, tierIdParam);
+      if (!calc.valid) {
+        return NextResponse.json(
+          { success: false, error: calc.error || "Kode promo tidak valid." },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        promo: {
+          code: calc.promo?.code || codeParam.trim().toUpperCase(),
+          discountType: calc.promo?.discountType,
+          discountValue: calc.promo?.discountValue,
+          discountAmount: calc.discountAmount,
+          finalPrice: calc.finalPrice,
+        },
+      });
+    }
+
     if (!adminAuth.authorized && !organizerAuth.authorized) {
-      const publicPromos = (event.promoCodes || [])
-        .filter((p: EventPromoCode) => p.isActive)
-        .map((p: EventPromoCode) => ({
-          code: p.code,
-          discountType: p.discountType,
-          discountValue: p.discountValue,
-          maxDiscountAmount: p.maxDiscountAmount,
-          minOrderAmount: p.minOrderAmount,
-          validFrom: p.validFrom,
-          validUntil: p.validUntil,
-          applicableTierIds: p.applicableTierIds,
-        }));
-      return NextResponse.json({ success: true, promoCodes: publicPromos });
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak: Hanya admin atau penyelenggara yang dapat melihat daftar promo." },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({
@@ -68,7 +82,7 @@ export async function POST(
     }
 
     const adminAuth = await assertEventAdmin(req);
-    const organizerAuth = await assertOrganizerAuth(req, body.organizerEmail || event.organizerEmail);
+    const organizerAuth = await assertOrganizerAuth(req, event.organizerEmail);
 
     if (!adminAuth.authorized && !organizerAuth.authorized) {
       return NextResponse.json(
@@ -84,18 +98,26 @@ export async function POST(
       );
     }
 
-    const promo = await createEventPromoCode(id, {
-      code: body.code,
-      discountType: body.discountType,
-      discountValue: Number(body.discountValue),
-      maxDiscountAmount: body.maxDiscountAmount ? Number(body.maxDiscountAmount) : undefined,
-      minOrderAmount: body.minOrderAmount ? Number(body.minOrderAmount) : undefined,
-      quota: body.quota !== undefined ? Number(body.quota) : 100,
-      validFrom: body.validFrom,
-      validUntil: body.validUntil,
-      applicableTierIds: body.applicableTierIds,
-      isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
-    });
+    const actor = adminAuth.authorized
+      ? { name: adminAuth.name || adminAuth.email || "Admin", role: adminAuth.role || "SUPER_ADMIN" }
+      : { name: event.organizerName || "Organizer", role: "ORGANIZER" };
+
+    const promo = await createEventPromoCode(
+      id,
+      {
+        code: body.code,
+        discountType: body.discountType,
+        discountValue: Number(body.discountValue),
+        maxDiscountAmount: body.maxDiscountAmount ? Number(body.maxDiscountAmount) : undefined,
+        minOrderAmount: body.minOrderAmount ? Number(body.minOrderAmount) : undefined,
+        quota: body.quota !== undefined ? Number(body.quota) : 100,
+        validFrom: body.validFrom,
+        validUntil: body.validUntil,
+        applicableTierIds: body.applicableTierIds,
+        isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
+      },
+      actor
+    );
 
     return NextResponse.json({
       success: true,

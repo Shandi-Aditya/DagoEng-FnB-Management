@@ -89,14 +89,14 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
       id: "evt-paid-bank-guard-01",
       title: "Workshop Desain UI Berbayar",
       description: "Workshop berbayar untuk validasi rekening resmi",
-      category: "Workshop",
+      category: "WORKSHOP",
       location: "Coworking Hall",
       startDate: new Date(Date.now() + 86400000).toISOString(),
       endDate: new Date(Date.now() + 172800000).toISOString(),
-      capacity: 50,
+      maxCapacity: 50,
       price: 100000,
       isPaid: true,
-      isFree: false,
+      posterUrl: "/images/events/default-poster.jpg",
       status: "APPROVED",
       organizerName: "Dago Community",
       organizerEmail: "org@dago.com",
@@ -110,12 +110,30 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
       id: "evt-free-bank-guard-02",
       title: "Meetup Komunitas Gratis",
       price: 0,
-      isFree: true,
+      isPaid: false,
     };
 
     it("2.1 should reject paid booking when default platform bank is placeholder/demo", async () => {
       await saveEventsToDisk([mockPaidEvent]);
       await saveBookingsToDisk([]);
+      const placeholderPolicy: EventRevenueSharingPolicy = {
+        ...getEventRevenuePolicy(),
+        bankAccounts: [
+          {
+            id: "bank-demo",
+            label: "Akun Demo",
+            bankName: "BCA Demo",
+            accountNumber: "000011223344",
+            accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+            isDefault: true,
+            isActive: true,
+            accountType: "PLATFORM",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await saveEventSettingsToDisk(placeholderPolicy);
 
       await expect(
         createEventBooking({
@@ -190,6 +208,24 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
 
     it("2.4 should allow bypass when ALLOW_DEMO_BANK='true'", async () => {
       process.env.ALLOW_DEMO_BANK = "true";
+      const demoPolicy: EventRevenueSharingPolicy = {
+        ...getEventRevenuePolicy(),
+        bankAccounts: [
+          {
+            id: "bank-demo-placeholder",
+            label: "BCA Demo Sandbox",
+            bankName: "Bank BCA",
+            accountNumber: "1234567890",
+            accountHolder: "PT DEMO DAGOENG",
+            isDefault: true,
+            isActive: true,
+            accountType: "PLATFORM",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await saveEventSettingsToDisk(demoPolicy);
       await saveEventsToDisk([mockPaidEvent]);
       await saveBookingsToDisk([]);
 
@@ -199,6 +235,7 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
         guestEmail: "tester@demo.com",
         guestPhone: "081234567890",
         ticketCount: 1,
+        enforceOfficialBank: true,
       });
 
       expect(booking).toBeDefined();

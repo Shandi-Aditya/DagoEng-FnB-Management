@@ -19,6 +19,8 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import type { PromoConfig } from "@/lib/promo";
+import { useSettings } from "@/contexts/SettingsContext";
+import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
 
 import {
   COWORKING_CLOSE_MINUTES,
@@ -99,7 +101,13 @@ export function CustomerBookingModal({
   onSubmitBooking,
   coworkingHolidays,
 }: CustomerBookingModalProps) {
+  const { settings } = useSettings();
   if (!space) return null;
+
+  const cwTaxConfig = settings?.categoryTax?.coworking;
+  const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+  const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
+  const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
 
   const isHourly = bookingDurationMode === "HOURLY";
   const rate = isHourly ? space.hourlyRate : (space.dailyRate || space.hourlyRate * 8);
@@ -115,7 +123,9 @@ export function CustomerBookingModal({
     }
   }
 
-  const finalCost = Math.max(0, baseCost - discount);
+  const subtotalAfterDiscount = Math.max(0, baseCost - discount);
+  const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(subtotalAfterDiscount * (cwTaxRatePercent / 100)) : 0;
+  const finalCost = subtotalAfterDiscount + taxAmount;
   const endTime = calculateEndTime(bookingStartTime, bookingDurationHours);
   const dateStatus = isCoworkingDateOpen(bookingDate, coworkingHolidays);
   const isPastClosing =
@@ -344,6 +354,11 @@ export function CustomerBookingModal({
                 <span className="font-mono tabular-nums">-{formatCurrencyIDR(discount)}</span>
               </div>
             ) : null}
+
+            <div className="flex justify-between text-muted-foreground">
+              <span>{formatCoworkingTaxLabel(taxAmount, cwTaxType, cwTaxRatePercent)}</span>
+              <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(taxAmount)}</span>
+            </div>
 
             <div className="flex justify-between border-t pt-1.5 font-medium text-sm text-foreground">
               <span>Total sewa</span>

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "fs";
 import path from "path";
+import { readPersistentData } from "../src/lib/persistent-storage";
+import type { ActivityLogEntry } from "../src/types/audit";
 import {
   createEventSubmission,
   updateEventStatus,
@@ -16,19 +18,23 @@ import { CommunityEvent, EventTicketOrder } from "../src/types/event";
 const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 const BOOKINGS_FILE = path.join(DATA_DIR, "event_bookings.json");
+const AUDIT_LOGS_FILE = path.join(DATA_DIR, "audit_logs.json");
 
 describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
   let originalEventsBackup: string | null = null;
   let originalBookingsBackup: string | null = null;
+  let originalAuditLogsBackup: string | null = null;
 
   beforeAll(() => {
     if (fs.existsSync(EVENTS_FILE)) originalEventsBackup = fs.readFileSync(EVENTS_FILE, "utf-8");
     if (fs.existsSync(BOOKINGS_FILE)) originalBookingsBackup = fs.readFileSync(BOOKINGS_FILE, "utf-8");
+    if (fs.existsSync(AUDIT_LOGS_FILE)) originalAuditLogsBackup = fs.readFileSync(AUDIT_LOGS_FILE, "utf-8");
   });
 
   afterAll(() => {
     if (originalEventsBackup !== null) fs.writeFileSync(EVENTS_FILE, originalEventsBackup, "utf-8");
     if (originalBookingsBackup !== null) fs.writeFileSync(BOOKINGS_FILE, originalBookingsBackup, "utf-8");
+    if (originalAuditLogsBackup !== null) fs.writeFileSync(AUDIT_LOGS_FILE, originalAuditLogsBackup, "utf-8");
   });
 
   describe("Promo Code Calculation & Boundary Rules", () => {
@@ -42,6 +48,7 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
       location: "Amphitheater Dago",
       isPaid: true,
       price: 100000,
+      posterUrl: "https://example.com/poster.jpg",
       organizerName: "Dago Jazz Collective",
       organizerEmail: "jazz@dagohub.id",
       organizerPhone: "081199887766",
@@ -258,6 +265,60 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
         })
       ).rejects.toThrow(/Kuota penggunaan kode promo "ROASTER20K" telah habis/);
     });
+
+    it("supports unlimited quota promo code (quota === 0) without clamping or exhaustion", async () => {
+      const unlimitedPromo = await createEventPromoCode(
+        testEventId,
+        {
+          code: "UNLIMITED10",
+          discountType: "PERCENT",
+          discountValue: 10,
+          quota: 0, // 0 = unlimited quota
+          isActive: true,
+        },
+        { name: "Super Admin", role: "SUPER_ADMIN" }
+      );
+
+      expect(unlimitedPromo.quota).toBe(0);
+
+      // Book with UNLIMITED10 multiple times
+      const b1 = await createEventBooking({
+        eventId: testEventId,
+        guestName: "Unlimited User 1",
+        guestEmail: "unlimited1@testmail.com",
+        guestPhone: "081234567888",
+        promoCode: "UNLIMITED10",
+        ticketCount: 1,
+      });
+
+      const b2 = await createEventBooking({
+        eventId: testEventId,
+        guestName: "Unlimited User 2",
+        guestEmail: "unlimited2@testmail.com",
+        guestPhone: "081234567889",
+        promoCode: "UNLIMITED10",
+        ticketCount: 1,
+      });
+
+      expect(b1.totalPrice).toBe(72000);
+      expect(b2.totalPrice).toBe(72000);
+
+      // Re-saving promo with quota 0 preserves quota 0 rather than clamping to usedCount
+      const updatedPromo = await createEventPromoCode(
+        testEventId,
+        {
+          code: "UNLIMITED10",
+          discountType: "PERCENT",
+          discountValue: 15,
+          quota: 0,
+          isActive: true,
+        },
+        { name: "Organizer", role: "ORGANIZER" }
+      );
+
+      expect(updatedPromo.quota).toBe(0);
+      expect(updatedPromo.discountValue).toBe(15);
+    });
   });
 
   describe("Invitation Tickets (Tiket Undangan Gratis & Check-In Scan)", () => {
@@ -331,6 +392,49 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
           "CHECKED_IN"
         )
       ).rejects.toThrow(/sudah digunakan untuk check-in/);
+    });
+
+    it("records OWNER/MANAGER actorRole on createEventPromoCode and supports quota 0 unlimited in UI", async () => {
+      const promoOwner = await createEventPromoCode(
+        inviteEventId,
+        {
+          code: "OWNERPROMO",
+          discountType: "PERCENT",
+          discountValue: 10,
+          quota: 0,
+          isActive: true,
+        },
+        { name: "Pak Hendra Owner", role: "OWNER" }
+      );
+      expect(promoOwner.quota).toBe(0);
+
+      const logs = await readPersistentData<ActivityLogEntry[]>("audit_logs.json", []);
+      const promoLog = logs.find(
+        (l) => l.recordId === promoOwner.id && l.action === "EVENT_PROMO_CREATED"
+      );
+      expect(promoLog?.actorName).toBe("Pak Hendra Owner");
+      expect(promoLog?.actorRole).toBe("OWNER");
+
+      const promoDialogSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/components/events/EventPromosDialog.tsx"),
+        "utf-8"
+      );
+      expect(promoDialogSrc).toContain("min={0}");
+      expect(promoDialogSrc).toContain("Tanpa batas");
+
+      const attendeesTabSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-portal/OrganizerAttendeesTab.tsx"),
+        "utf-8"
+      );
+      expect(attendeesTabSrc).toContain('selectedEvent?.status === "APPROVED"');
+      expect(attendeesTabSrc).toContain("Tiket undangan");
+      expect(attendeesTabSrc).not.toContain("Tiket Undangan");
+
+      const scannerSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-checkin/EventCheckInScannerDialog.tsx"),
+        "utf-8"
+      );
+      expect(scannerSrc).toContain("feedback.invitationNote");
     });
   });
 });

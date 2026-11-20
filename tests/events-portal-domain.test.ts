@@ -1,4 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import fs from "fs";
+import path from "path";
+import { NextRequest } from "next/server";
+import * as serverAuth from "@/lib/server-auth";
+import { GET as getBookingsRoute } from "@/app/api/events/bookings/route";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
   filterOrganizerEvents,
@@ -26,6 +31,7 @@ describe("events-portal-domain", () => {
       location: "Amphitheater Dago",
       isPaid: true,
       price: 50000,
+      posterUrl: "https://example.com/poster1.jpg",
       status: "APPROVED",
       organizerName: "Barista Guild",
       organizerEmail: "barista@dago.id",
@@ -43,6 +49,7 @@ describe("events-portal-domain", () => {
       location: "Creative Hall",
       isPaid: false,
       price: 0,
+      posterUrl: "https://example.com/poster2.jpg",
       status: "PENDING",
       organizerName: "Barista Guild",
       organizerEmail: "barista@dago.id",
@@ -60,6 +67,7 @@ describe("events-portal-domain", () => {
       location: "Workshop Room",
       isPaid: true,
       price: 75000,
+      posterUrl: "https://example.com/poster3.jpg",
       status: "REVISION_REQUESTED",
       revisionNotes: "Harap lengkapi panduan protokol keselamatan alat seduh.",
       organizerName: "Barista Guild",
@@ -75,16 +83,21 @@ describe("events-portal-domain", () => {
       id: "bk-1",
       eventId: "evt-1",
       eventTitle: "Latte Art Workshop",
+      eventDate: "2026-11-20T10:00:00Z",
+      eventLocation: "Amphitheater Dago",
       ticketCode: "DAGO-EVT-001",
       guestName: "Budi Santoso",
       guestEmail: "budi@example.com",
       guestPhone: "081211112222",
       institution: "Universitas Dago",
       ticketCount: 2,
+      unitPrice: 50000,
       totalPrice: 100000,
+      paymentMethod: "MANUAL_TRANSFER",
       paymentStatus: "PAID",
       checkInStatus: "CHECKED_IN",
       checkInTime: "2026-11-20T10:15:00Z",
+      platformFeePercent: 20,
       organizerRevenueAmount: 80000,
       platformFeeAmount: 20000,
       createdAt: "2026-11-05T08:00:00Z",
@@ -94,14 +107,19 @@ describe("events-portal-domain", () => {
       id: "bk-2",
       eventId: "evt-1",
       eventTitle: "Latte Art Workshop",
+      eventDate: "2026-11-20T10:00:00Z",
+      eventLocation: "Amphitheater Dago",
       ticketCode: "DAGO-EVT-002",
       guestName: "Siti Rahma",
       guestEmail: "siti@example.com",
       guestPhone: "081333334444",
       ticketCount: 1,
+      unitPrice: 50000,
       totalPrice: 50000,
+      paymentMethod: "MANUAL_TRANSFER",
       paymentStatus: "PAID",
-      checkInStatus: "PENDING",
+      checkInStatus: "REGISTERED",
+      platformFeePercent: 20,
       organizerRevenueAmount: 40000,
       platformFeeAmount: 10000,
       createdAt: "2026-11-06T09:00:00Z",
@@ -111,14 +129,21 @@ describe("events-portal-domain", () => {
       id: "bk-3",
       eventId: "evt-2",
       eventTitle: "Coffee Cupping Session",
+      eventDate: "2026-11-25T14:00:00Z",
+      eventLocation: "Creative Hall",
       ticketCode: "DAGO-EVT-003",
       guestName: "Rian Pratama",
       guestEmail: "rian@example.com",
       guestPhone: "081555556666",
       ticketCount: 1,
+      unitPrice: 0,
       totalPrice: 0,
+      paymentMethod: "MANUAL_TRANSFER",
       paymentStatus: "PAID",
-      checkInStatus: "PENDING",
+      checkInStatus: "REGISTERED",
+      platformFeePercent: 20,
+      organizerRevenueAmount: 0,
+      platformFeeAmount: 0,
       createdAt: "2026-11-07T10:00:00Z",
       updatedAt: "2026-11-07T10:00:00Z",
     },
@@ -126,13 +151,21 @@ describe("events-portal-domain", () => {
       id: "bk-4",
       eventId: "evt-1",
       eventTitle: "Latte Art Workshop",
+      eventDate: "2026-11-20T10:00:00Z",
+      eventLocation: "Amphitheater Dago",
       ticketCode: "DAGO-EVT-004",
       guestName: "Ahmad Dani",
       guestEmail: "ahmad@example.com",
+      guestPhone: "081777778888",
       ticketCount: 1,
+      unitPrice: 50000,
       totalPrice: 50000,
+      paymentMethod: "MANUAL_TRANSFER",
       paymentStatus: "CANCELLED",
-      checkInStatus: "PENDING",
+      checkInStatus: "REGISTERED",
+      platformFeePercent: 20,
+      organizerRevenueAmount: 40000,
+      platformFeeAmount: 10000,
       createdAt: "2026-11-08T11:00:00Z",
       updatedAt: "2026-11-08T11:00:00Z",
     },
@@ -208,9 +241,56 @@ describe("events-portal-domain", () => {
     expect(rows).toHaveLength(4);
     expect(rows[0][0]).toBe("DAGO-EVT-001");
     expect(rows[0][1]).toBe("Latte Art Workshop");
-    expect(rows[0][2]).toBe("Budi Santoso");
-    expect(rows[0][6]).toBe("Lunas");
-    expect(rows[0][7]).toBe("Hadir");
+    expect(rows[0][2]).toBe("Standar");
+    expect(rows[0][3]).toBe("Budi Santoso");
+    expect(rows[0][7]).toBe("Lunas");
+    expect(rows[0][8]).toBe("Hadir");
+  });
+
+  it("exports 'Pengajuan refund' when refundStatus is REQUESTED even if paymentStatus is PAID, and 'Tiket undangan' for invitations", () => {
+    const refundAndInvBookings: EventTicketOrder[] = [
+      {
+        id: "bk-refund-1",
+        eventId: "evt-1",
+        eventTitle: "Latte Art Workshop",
+        ticketCode: "DAGO-EVT-REF",
+        guestName: "Dewi Lestari",
+        guestEmail: "dewi@example.com",
+        ticketCount: 1,
+        totalPrice: 50000,
+        paymentStatus: "PAID",
+        refundStatus: "REQUESTED",
+        checkInStatus: "REGISTERED",
+        createdAt: "2026-11-05T08:00:00Z",
+      },
+      {
+        id: "bk-inv-1",
+        eventId: "evt-1",
+        eventTitle: "Latte Art Workshop",
+        ticketCode: "DAGO-EVT-INV",
+        guestName: "VIP Ambassador",
+        guestEmail: "vip@example.com",
+        isInvitation: true,
+        paymentMethod: "INVITATION",
+        paymentStatus: "PAID",
+        ticketCount: 1,
+        totalPrice: 0,
+        checkInStatus: "REGISTERED",
+        createdAt: "2026-11-05T08:00:00Z",
+      },
+    ] as any;
+
+    const rows = buildAttendeesExportRows(refundAndInvBookings);
+    expect(rows).toHaveLength(2);
+
+    // Row 1: Refund requested
+    expect(rows[0][0]).toBe("DAGO-EVT-REF");
+    expect(rows[0][7]).toBe("Pengajuan refund");
+
+    // Row 2: Invitation ticket
+    expect(rows[1][0]).toBe("DAGO-EVT-INV");
+    expect(rows[1][2]).toBe("Tiket undangan");
+    expect(rows[1][7]).toBe("Lunas");
   });
 
   it("re-exports or maps status labels and tones consistently with events-admin", () => {
@@ -221,5 +301,44 @@ describe("events-portal-domain", () => {
 
     expect(paymentStatusLabel("PAID")).toBe("Lunas");
     expect(paymentStatusTone("PAID")).toBe("success");
+  });
+
+  describe("S-06 QR scanner selection stability & CHECKIN_STAFF stats guard", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("omits global platform stats when CHECKIN_STAFF requests ?includeStats=true without eventId", async () => {
+      vi.spyOn(serverAuth, "assertEventAdmin").mockResolvedValue({ authorized: false });
+      vi.spyOn(serverAuth, "assertCheckInAuth").mockResolvedValue({
+        authorized: true,
+        role: "CHECKIN_STAFF",
+      });
+
+      const resNoEvent = await getBookingsRoute(
+        new NextRequest("http://localhost:3000/api/events/bookings?includeStats=true")
+      );
+      expect(resNoEvent.status).toBe(200);
+      const jsonNoEvent = await resNoEvent.json();
+      expect(jsonNoEvent.stats).toBeNull();
+
+      const resWithEvent = await getBookingsRoute(
+        new NextRequest("http://localhost:3000/api/events/bookings?includeStats=true&eventId=evt-1")
+      );
+      expect(resWithEvent.status).toBe(200);
+      const jsonWithEvent = await resWithEvent.json();
+      expect(jsonWithEvent.stats).not.toBeNull();
+    });
+
+    it("keeps OrganizerQRScannerDialog dropdown selection without snapping back or restarting camera", () => {
+      const src = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-portal/OrganizerQRScannerDialog.tsx"),
+        "utf-8"
+      );
+      expect(src).toContain("prevOpenRef");
+      expect(src).toContain("processCheckInRef");
+      expect(src).toContain("[open, selectedEventId, todayEvents]);");
+      expect(src).not.toContain("[open, selectedEventId, todayEvents, activeEventId]");
+    });
   });
 });

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Laptop, Calendar, Clock, AlertTriangle, MapPin } from "lucide-react";
 import type { CoworkingSpaceItem, CoworkingBooking } from "@/types/coworking";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { useSettings } from "@/contexts/SettingsContext";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import {
   calculateHourlyEndTime,
   spaceTypeLabel,
   getTodayWitaDateString,
+  formatCoworkingTaxLabel,
   type DailyPreset,
 } from "./coworking-domain";
 
@@ -67,6 +69,12 @@ export function NewBookingModal({
   defaultSpaceId,
   onSubmit,
 }: NewBookingModalProps) {
+  const { settings } = useSettings();
+  const cwTaxConfig = settings?.categoryTax?.coworking;
+  const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+  const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
+  const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
+
   const todayStr = useMemo(
     () => getNextOpenCoworkingDate(getTodayWitaDateString(), coworkingHolidays),
     [coworkingHolidays]
@@ -578,23 +586,36 @@ export function NewBookingModal({
             </div>
 
             {/* Bill Preview Card */}
-            <div className="flex items-center justify-between rounded-lg border bg-card p-3">
-              <div>
-                <span className="block text-xs font-medium text-muted-foreground">
-                  Total tagihan
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {bookType === "HOURLY"
-                    ? `${pricing.computedDuration} jam (${bookStartTime} – ${pricing.computedEndTime})`
-                    : bookType === "DAILY"
-                    ? `${pricing.computedDuration} hari (${bookStartDate})`
-                    : "Paket bulanan 30 hari"}
-                </span>
-              </div>
-              <span className="font-mono text-base font-semibold tabular-nums text-foreground">
-                {formatCurrencyIDR(pricing.computedTotal)}
-              </span>
-            </div>
+            {(() => {
+              const baseCost = pricing.computedTotal;
+              const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(baseCost * (cwTaxRatePercent / 100)) : 0;
+              const grandTotal = baseCost + taxAmount;
+              return (
+                <div className="rounded-lg border bg-card p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-border/60 pb-2">
+                    <span>{formatCoworkingTaxLabel(taxAmount, cwTaxType, cwTaxRatePercent)}</span>
+                    <span className="font-mono tabular-nums">{formatCurrencyIDR(taxAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="block text-xs font-medium text-muted-foreground">
+                        Total tagihan
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {bookType === "HOURLY"
+                          ? `${pricing.computedDuration} jam (${bookStartTime} – ${pricing.computedEndTime})`
+                          : bookType === "DAILY"
+                          ? `${pricing.computedDuration} hari (${bookStartDate})`
+                          : "Paket bulanan 30 hari"}
+                      </span>
+                    </div>
+                    <span className="font-mono text-base font-semibold tabular-nums text-foreground">
+                      {formatCurrencyIDR(grandTotal)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <DialogFooter className="border-t pt-3">

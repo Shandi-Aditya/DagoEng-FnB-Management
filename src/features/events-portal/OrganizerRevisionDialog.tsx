@@ -18,7 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import type { CommunityEvent, EventCategory } from "@/types/event";
+import type { CommunityEvent, EventCategory, EventTicketTier, EventRefundPolicy } from "@/types/event";
+import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
+import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
+import { validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 
 interface OrganizerRevisionDialogProps {
   event: CommunityEvent | null;
@@ -47,6 +50,11 @@ interface OrganizerRevisionDialogProps {
   onUploadPoster: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmitRevision: (e: React.FormEvent) => void;
   isSubmitting: boolean;
+  ticketTiers?: EventTicketTier[];
+  setTicketTiers?: (v: EventTicketTier[]) => void;
+  refundPolicy?: EventRefundPolicy;
+  setRefundPolicy?: (v: EventRefundPolicy) => void;
+  hasPaidTickets?: boolean;
 }
 
 export function OrganizerRevisionDialog({
@@ -76,8 +84,61 @@ export function OrganizerRevisionDialog({
   onUploadPoster,
   onSubmitRevision,
   isSubmitting,
+  ticketTiers,
+  setTicketTiers,
+  refundPolicy,
+  setRefundPolicy,
+  hasPaidTickets,
 }: OrganizerRevisionDialogProps) {
+  const [rawCapacity, setRawCapacity] = React.useState<string>(String(capacity ?? ""));
+  const [capacityError, setCapacityError] = React.useState<string | null>(null);
+  const [tiersError, setTiersError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setRawCapacity(String(capacity ?? ""));
+    setCapacityError(null);
+    setTiersError(null);
+  }, [event?.id, open]);
+
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRawCapacity(val);
+    if (val.trim() === "") {
+      setCapacity(0);
+      setCapacityError("Kuota kapasitas wajib diisi.");
+      return;
+    }
+    const capCheck = validateEventCapacity(val, false);
+    if (!capCheck.valid) {
+      setCapacityError(capCheck.error || "Kapasitas tidak valid.");
+    } else {
+      setCapacityError(null);
+      setCapacity(capCheck.value!);
+    }
+  };
+
   if (!event) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    const capCheck = validateEventCapacity(rawCapacity, false);
+    const num = capCheck.value ?? Number(rawCapacity);
+    if (!capCheck.valid) {
+      e.preventDefault();
+      setCapacityError(capCheck.error || "Kapasitas tidak valid.");
+      return;
+    }
+    if (ticketTiers && ticketTiers.length > 0) {
+      const tierCheck = validateEventTicketTiers(ticketTiers, { maxCapacity: num });
+      if (!tierCheck.valid) {
+        e.preventDefault();
+        setTiersError(tierCheck.error || "Format tiket bertingkat tidak valid.");
+        return;
+      }
+    }
+    setCapacityError(null);
+    setTiersError(null);
+    onSubmitRevision(e);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -106,7 +167,7 @@ export function OrganizerRevisionDialog({
           </div>
         )}
 
-        <form onSubmit={onSubmitRevision} className="space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Poster Section */}
           <div className="rounded-lg border p-3.5 space-y-2 bg-muted/20">
             <label className="font-medium text-foreground block">Poster event</label>
@@ -199,11 +260,14 @@ export function OrganizerRevisionDialog({
               <input
                 type="number"
                 min={1}
+                max={1000}
+                step={1}
                 required
-                value={capacity}
-                onChange={(e) => setCapacity(Number(e.target.value))}
+                value={rawCapacity}
+                onChange={handleCapacityChange}
                 className="w-full h-9 rounded-md border bg-background px-3 text-xs font-mono font-medium text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
               />
+              {capacityError && <p className="text-xs text-destructive">{capacityError}</p>}
             </div>
           </div>
 
@@ -253,6 +317,32 @@ export function OrganizerRevisionDialog({
               className="w-full rounded-md border bg-background p-2.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
             />
           </div>
+
+          {/* Ticket Tiers Editor */}
+          {setTicketTiers && (
+            <div className="border-t pt-3">
+              <TicketTiersEditor
+                tiers={ticketTiers || []}
+                onChange={(newTiers) => {
+                  setTicketTiers(newTiers);
+                  const sumQuota = newTiers.reduce((acc, t) => acc + (t.quota || 0), 0);
+                  if (sumQuota > 0) setCapacity(sumQuota);
+                }}
+              />
+              {tiersError && <p className="text-xs text-destructive mt-1.5">{tiersError}</p>}
+            </div>
+          )}
+
+          {/* Refund Policy Editor */}
+          {setRefundPolicy && (event.isPaid || (ticketTiers && ticketTiers.some((t) => Number(t.price) > 0))) && (
+            <div className="border-t pt-3">
+              <EventRefundPolicyEditor
+                value={refundPolicy || { policyType: "NO_REFUND" }}
+                onChange={setRefundPolicy}
+                hasPaidTickets={hasPaidTickets}
+              />
+            </div>
+          )}
 
           <DialogFooter className="pt-2">
             <Button

@@ -10,6 +10,7 @@ import { UnitScope } from "@/components/app/unit-scope";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/app/empty-state";
 import { downloadTicketAsImage } from "@/lib/ticket-download";
+import { buildOfficialCsWhatsAppUrl } from "@/lib/contact-config";
 
 import {
   TicketPassHeader,
@@ -20,6 +21,7 @@ import {
   TicketPaymentTransferSection,
   TicketPaymentProofDialog,
   TicketActionsBar,
+  TicketRefundSection,
   calculatePaymentDeadline,
   getSubTicketDetails,
   type TicketPassData,
@@ -232,16 +234,40 @@ export default function PrivateTicketViewPage() {
       checkedInSeats: ticket.checkedInSeats,
       checkedInQty: ticket.checkedInQty,
       checkInStatus: ticket.checkInStatus,
+      eventId: ticket.eventId,
     },
     selectedTicketIndex
   );
 
-  const bankAccounts =
-    ticket.activeBankAccounts && ticket.activeBankAccounts.length > 0
+  const isSafeBank = (b: any) => {
+    if (!b) return false;
+    if (b.accountType === "ORGANIZER") return false;
+    const holder = (b.accountHolder || "").toLowerCase();
+    const num = b.accountNumber || "";
+    const label = (b.label || "").toLowerCase();
+    if (
+      holder.includes("demo") ||
+      holder.includes("dummy") ||
+      holder.includes("sandbox") ||
+      holder.includes("placeholder")
+    )
+      return false;
+    if (label.includes("demo") || label.includes("sandbox") || label.includes("placeholder"))
+      return false;
+    if (num === "1234567890" || num === "0000000000" || num === "1111111111") return false;
+    return true;
+  };
+
+  const rawBankAccounts =
+    ticket.paymentStatus === "PAID" && ticket.destinationBankSnapshot
+      ? [ticket.destinationBankSnapshot]
+      : ticket.activeBankAccounts && ticket.activeBankAccounts.length > 0
       ? ticket.activeBankAccounts
       : ticket.destinationBankSnapshot
       ? [ticket.destinationBankSnapshot]
       : [];
+
+  const bankAccounts = rawBankAccounts.filter(isSafeBank);
 
   return (
     <div data-unit="event" className="min-h-screen bg-background text-foreground flex flex-col justify-between">
@@ -284,10 +310,13 @@ export default function PrivateTicketViewPage() {
                 eventDate={ticket.eventDate}
                 location={ticket.eventLocation}
                 paymentStatus={ticket.paymentStatus}
+                ticketTierName={ticket.ticketTierName}
+                isInvitation={ticket.isInvitation}
               />
 
               <TicketQRSection
                 paymentStatus={ticket.paymentStatus}
+                refundStatus={ticket.refundStatus}
                 isMultiTicket={isMultiTicket}
                 ticketCount={ticket.ticketCount || 1}
                 selectedTicketIndex={selectedTicketIndex}
@@ -307,6 +336,24 @@ export default function PrivateTicketViewPage() {
                 institution={ticket.institution}
                 ticketCount={ticket.ticketCount}
                 totalPrice={ticket.totalPrice}
+                ticketTierName={ticket.ticketTierName}
+                isInvitation={ticket.isInvitation}
+                invitationNote={ticket.invitationNote}
+                promoCode={ticket.promoCode}
+                discountAmount={ticket.discountAmount}
+                subtotalPrice={ticket.subtotalPrice}
+              />
+
+              <TicketRefundSection
+                bookingId={ticket.id}
+                guestToken={token}
+                totalPrice={ticket.totalPrice}
+                paymentStatus={ticket.paymentStatus}
+                refundStatus={ticket.refundStatus}
+                refundRequest={ticket.refundRequest}
+                refundPolicy={ticket.refundPolicy}
+                refundEligibility={ticket.refundEligibility}
+                onRefundSubmitted={fetchTicket}
               />
 
               {isMultiTicket && (
@@ -318,6 +365,16 @@ export default function PrivateTicketViewPage() {
                   onDownloadSubTicket={handleDownloadSubTicket}
                   isDownloading={isDownloadingTicket}
                 />
+              )}
+
+              {ticket.paymentStatus === "CANCELLED" && ticket.paymentRejectionReason && (
+                <div className="p-3.5 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <AlertCircle className="size-4 shrink-0" />
+                    <span>Alasan penolakan / pembatalan pembayaran:</span>
+                  </div>
+                  <p className="leading-relaxed text-foreground">{ticket.paymentRejectionReason}</p>
+                </div>
               )}
 
               {ticket.paymentStatus === "PENDING" && ticket.totalPrice > 0 && (
@@ -347,6 +404,24 @@ export default function PrivateTicketViewPage() {
             onDownloadAll={handleDownloadAllTickets}
             isPaidOrFree={isPaidOrFree}
           />
+
+          <div className="rounded-xl border bg-card p-4 text-center text-sm text-muted-foreground flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span>Butuh bantuan pembayaran atau mengalami kendala tiket?</span>
+            <Button
+              variant="outline"
+              size="sm"
+              render={
+                <a
+                  href={buildOfficialCsWhatsAppUrl(`Halo CS Dago Creative Hub, saya butuh bantuan untuk tiket ${ticket.ticketCode}`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+              nativeButton={false}
+            >
+              Hubungi CS via WhatsApp
+            </Button>
+          </div>
         </main>
       </div>
 

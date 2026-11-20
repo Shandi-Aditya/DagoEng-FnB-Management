@@ -200,7 +200,9 @@ export async function GET(req: NextRequest) {
     let products = data.products || [];
 
     if (outletId && outletId !== "ALL") {
-      products = products.filter((p) => p.outletId === outletId || p.outletId === "ALL");
+      products = products.filter(
+        (p) => p.outletId === outletId || p.outletId === "ALL" || !p.outletId
+      );
     }
     if (category) {
       products = products.filter((p) => p.category === category);

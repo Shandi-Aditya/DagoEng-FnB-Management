@@ -8,9 +8,9 @@ import {
 } from "@/contexts/DateFilterContext";
 import { bucketOrdersByDateRange } from "@/features/dashboard/dashboard-metrics";
 import { checkPromoValidity, getPromoComputedStatus } from "@/lib/promo";
-import type { PromoConfig } from "@/types/promo";
+import type { PromoConfig } from "@/lib/promo";
 import { filterActivityLogs } from "@/features/activity-log/activity-log-domain";
-import type { ActivityLogEntry } from "@/contexts/ActivityLogContext";
+import type { ActivityLogEntry } from "@/types/audit";
 import { checkSlotAvailability } from "@/features/pos/pos-coworking";
 import {
   checkCoworkingBookingConflict,
@@ -41,8 +41,11 @@ import {
 } from "@/features/events-admin/events-admin-domain";
 import { filterOrganizerAttendees } from "@/features/events-portal/events-portal-domain";
 import { GET as getCoworkingBookingsRoute } from "@/app/api/coworking/bookings/route";
-import type { CoworkingBooking, CoworkingSpaceItem } from "@/contexts/InventoryContext";
+import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 import type { EventTicketOrder, PublicCommunityEvent } from "@/types/event";
+import type { LoyaltyMember } from "@/types/loyalty";
+import type { MasterProduct } from "@/types/product";
+import type { EmployeeProfile, ShiftRecord } from "@/types/shift";
 
 describe("Filter audit behavioral regressions", () => {
   describe("DateFilterContext WITA date parsing and range normalization", () => {
@@ -123,7 +126,6 @@ describe("Filter audit behavioral regressions", () => {
     const basePromo: PromoConfig = {
       id: "promo-nov18",
       name: "Promo Hari Kerja",
-      type: "AUTOMATIC_PROMO",
       scope: "ALL",
       targetType: "ALL",
       discountType: "PERCENTAGE",
@@ -132,8 +134,6 @@ describe("Filter audit behavioral regressions", () => {
       validUntil: "2026-11-18",
       isActive: true,
       usageCount: 0,
-      createdAt: "2026-11-01T00:00:00.000Z",
-      updatedAt: "2026-11-01T00:00:00.000Z",
     };
 
     it("keeps YYYY-MM-DD promos active from 00:00 WITA through 23:59:59.999 WITA", () => {
@@ -169,7 +169,7 @@ describe("Filter audit behavioral regressions", () => {
         userName: "Ghost",
         userRole: "STAFF",
         outletId: "OUTLET-001",
-        module: "POS_ORDER",
+        module: "POS",
         action: "CREATE",
         description: "Data korup",
         status: "FAILED",
@@ -204,27 +204,30 @@ describe("Filter audit behavioral regressions", () => {
       hourlyRate: 15000,
       dailyRate: 60000,
       monthlyRate: 900000,
+      area: "Ground Floor Main",
       status: "AVAILABLE",
-      facilities: ["WiFi"],
+      amenities: ["WiFi"],
     };
 
-    const makeBooking = (overrides: Partial<CoworkingBooking>): CoworkingBooking => ({
+    const makeBooking = (overrides: Partial<CoworkingBooking> = {}): CoworkingBooking => ({
       id: "cw-1",
       bookingCode: "CW-001",
       guestName: "Tamu Satu",
       guestPhone: "081234567890",
+      guestEmail: "tamu@dago.id",
       spaceId: "sp-hotdesk",
       spaceName: "Hot Desk Utama",
+      spaceType: "HOT_DESK",
       bookingType: "HOURLY",
       date: "2026-11-18",
       startTime: "10:00",
       endTime: "12:00",
       duration: 2,
-      basePrice: 30000,
-      discountAmount: 0,
-      totalPrice: 30000,
+      price: 30000,
+      discount: 0,
+      totalAmount: 30000,
       paymentStatus: "PAID",
-      checkInStatus: "BOOKED",
+      checkInStatus: "RESERVED",
       createdAt: "2026-11-18T01:00:00.000Z",
       ...overrides,
     });
@@ -314,35 +317,37 @@ describe("Filter audit behavioral regressions", () => {
 
   describe("Customer catalog and coworking labels", () => {
     it("excludes INACTIVE products and resolves canonical tenant slugs", () => {
-      const products = [
+      const products: MasterProduct[] = [
         {
           id: "p-active",
-          sku: "KS-1",
           name: "Es Kopi Dago",
           category: "Minuman",
-          price: 25000,
-          cost: 10000,
-          stock: 10,
-          minStock: 2,
-          unit: "Cup",
-          status: "ACTIVE" as const,
+          basePrice: 25000,
+          cogsEstimate: 10000,
+          grossMarginPercent: "60%",
+          status: "ACTIVE",
           outletId: "OUTLET-001",
+          outletName: "Dago Singaraja",
+          isAvailable: true,
+          createdAt: "2026-11-01T00:00:00.000Z",
+          updatedAt: "2026-11-01T00:00:00.000Z",
         },
         {
           id: "p-inactive",
-          sku: "KS-2",
           name: "Menu Lama",
           category: "Minuman",
-          price: 20000,
-          cost: 8000,
-          stock: 10,
-          minStock: 2,
-          unit: "Cup",
-          status: "INACTIVE" as const,
+          basePrice: 20000,
+          cogsEstimate: 8000,
+          grossMarginPercent: "60%",
+          status: "INACTIVE",
           outletId: "OUTLET-001",
+          outletName: "Dago Singaraja",
+          isAvailable: false,
+          createdAt: "2026-11-01T00:00:00.000Z",
+          updatedAt: "2026-11-01T00:00:00.000Z",
         },
       ];
-      const visible = filterCustomerProducts(products, "tenant-ks", "Semua", "");
+      const visible = filterCustomerProducts(products, { partnerId: "tenant-ks", category: "ALL", searchQuery: "" });
       expect(visible.map((p) => p.id)).toEqual(["p-active"]);
       expect(spaceTypeLabel("PRIVATE_POD")).toBe("Private pod");
       expect(bookingStatusLabel("RESERVED")).toBe("Dipesan");
@@ -351,51 +356,64 @@ describe("Filter audit behavioral regressions", () => {
 
   describe("CRM, HR, and Coworking API/domain filters", () => {
     it("matches normalized Indonesian phone numbers and emails across customers, employees, and coworking", () => {
-      const members = [
+      const members: LoyaltyMember[] = [
         {
           id: "m-1",
           name: "Kadek Ayu",
           phone: "+62 812-3456-7890",
           email: "kadek@dago.id",
           points: 150,
-          tier: "Silver" as const,
-          joinDate: "2026-01-10",
+          tier: "Silver",
+          totalSpend: 450000,
+          totalVisits: 5,
+          favoriteItem: "Es Kopi Dago",
+          registeredOutletId: "OUTLET-001",
+          registeredOutletName: "Dago Singaraja",
+          status: "ACTIVE",
+          joinedDate: "2026-01-10",
           lastVisit: "2026-11-17",
-          totalSpent: 450000,
+          pointHistory: [],
+          tierHistory: [],
         },
       ];
       expect(filterMembers(members, "081234567890", "ALL")).toHaveLength(1);
 
-      const employees = [
+      const employees: EmployeeProfile[] = [
         {
           id: "emp-1",
           employeeNumber: "EMP-01",
           name: "Gede Putra",
           role: "Barista",
-          department: "F&B" as const,
+          department: "Barista",
           outletId: "OUTLET-001",
           outletName: "Dago Singaraja",
-          status: "AKTIF" as const,
-          joinDate: "2026-02-01",
+          status: "AKTIF",
+          assignedShift: "Shift Pagi",
+          joinedDate: "2026-02-01",
           contact: "+62 819-9988-7766",
           email: "gede@dago.id",
-          pin: "1234",
         },
       ];
       expect(filterEmployees(employees, "ALL", "ALL", "081999887766")).toHaveLength(1);
       expect(filterEmployees(employees, "ALL", "ALL", "gede@dago.id")).toHaveLength(1);
 
-      const shifts = [
+      const shifts: ShiftRecord[] = [
         {
           id: "sh-1",
           shiftName: "Shift Pagi",
           assignedCashierId: "emp-1",
           assignedCashierName: "Gede Putra",
           outletId: "OUTLET-001",
+          outletName: "Dago Singaraja",
           startTime: "2026-11-17T23:30:00.000Z",
-          openingBalance: 200000,
-          systemExpectedCash: 350000,
-          status: "OPEN" as const,
+          openingCash: 200000,
+          cashSales: 150000,
+          nonCashSales: 0,
+          refundAmount: 0,
+          expectedCash: 350000,
+          actualCash: 350000,
+          cashVariance: 0,
+          status: "OPEN",
         },
       ];
       expect(filterShifts(shifts, "", "ACTIVE", "2026-11-18")).toHaveLength(1);
@@ -407,16 +425,18 @@ describe("Filter audit behavioral regressions", () => {
           bookingCode: "CW-900",
           guestName: "Putu Adi",
           guestPhone: "+62 813-1122-3344",
+          guestEmail: "putu@buleleng.id",
           company: "Studio Buleleng",
           spaceId: "sp-1",
           spaceName: "Hot Desk",
+          spaceType: "HOT_DESK",
           bookingType: "DAILY",
           date: "18 Nov 2026",
           startTime: "09:00",
           duration: 1,
-          basePrice: 60000,
-          discountAmount: 0,
-          totalPrice: 60000,
+          price: 60000,
+          discount: 0,
+          totalAmount: 60000,
           paymentStatus: "PAID",
           checkInStatus: "CHECKED_IN",
           createdAt: "2026-11-18T01:00:00.000Z",
@@ -522,7 +542,7 @@ describe("Filter audit behavioral regressions", () => {
     });
 
     it("separates rejected payment proofs from pending verification in events-admin and portal", () => {
-      const bookings: EventTicketOrder[] = [
+      const bookings: EventTicketOrder[] = ([
         {
           id: "bk-pending-valid",
           eventId: "ev-1",
@@ -569,9 +589,9 @@ describe("Filter audit behavioral regressions", () => {
           checkInStatus: "PARTIALLY_CHECKED_IN",
           createdAt: "2026-11-18T04:00:00.000Z",
         },
-      ];
+      ] as any);
 
-      expect(filterBookings(bookings, "PENDING_PROOF", "").map((b) => b.id)).toEqual([
+      expect(filterBookings(bookings as any, "PENDING_PROOF", "").map((b) => b.id)).toEqual([
         "bk-pending-valid",
       ]);
       expect(filterBookings(bookings, "REJECTED", "").map((b) => b.id)).toEqual([

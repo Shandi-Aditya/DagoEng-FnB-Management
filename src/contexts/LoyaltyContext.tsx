@@ -1,8 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+export type { LoyaltyMember } from "@/types/loyalty";
 import {
-  LoyaltyMember,
+  type LoyaltyMember,
   LoyaltyTier,
   LoyaltyPointTransaction,
   LoyaltyTierChangeLog,
@@ -20,6 +21,13 @@ import {
   syncWithOutbox,
 } from "@/lib/sync-outbox";
 import { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
+import {
+  maskCustomerPhone,
+  maskCustomerEmail,
+  canUserViewFullCustomerContacts,
+  resolveAuthoritativeMemberTier,
+  calculateTierFromPoints,
+} from "@/features/customers/customers-domain";
 export { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 
 interface LoyaltyContextType {
@@ -108,17 +116,36 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     return "Bronze";
   };
 
-  const normalizeLoadedMembers = (list: LoyaltyMember[]): LoyaltyMember[] =>
-    list.map((m) => {
-      const hasManualOverride = m.tierHistory?.some((th) => th.isManualOverride);
-      if (!hasManualOverride) {
-        const expectedTier = calculateTierForPoints(m.points);
-        if (m.tier !== expectedTier) {
-          return { ...m, tier: expectedTier };
-        }
+  const normalizeLoadedMembers = (list: LoyaltyMember[]): LoyaltyMember[] => {
+    const roleSlug = user?.role?.slug;
+    const canView = canUserViewFullCustomerContacts(roleSlug);
+    const sessionEmail = user?.email?.toLowerCase().trim();
+    const isCustomer = roleSlug === "CUSTOMER";
+    return list.map((m) => {
+      const tier = resolveAuthoritativeMemberTier(m, settings.loyaltyTiers);
+      if (canView) {
+        return { ...m, tier };
       }
-      return m;
+      const isOwnCustomerRecord =
+        isCustomer &&
+        Boolean(sessionEmail) &&
+        Boolean(m.email && m.email.toLowerCase().trim() === sessionEmail);
+      if (isOwnCustomerRecord) {
+        return {
+          ...m,
+          tier,
+          identityNo: "",
+        };
+      }
+      return {
+        ...m,
+        tier,
+        phone: maskCustomerPhone(m.phone),
+        email: maskCustomerEmail(m.email),
+        identityNo: "",
+      };
     });
+  };
 
   useEffect(() => {
     try {
@@ -143,6 +170,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return;
     let cancelled = false;
 
+    commitMembers((prev) => normalizeLoadedMembers(prev));
+
     const hydrateMembers = async () => {
       await flushOutbox().catch(() => {});
       if (cancelled) return;
@@ -162,7 +191,11 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
             )
           );
         }
-      } catch {}
+      } catch {
+        if (!cancelled) {
+          commitMembers((prev) => normalizeLoadedMembers(prev));
+        }
+      }
     };
 
     void hydrateMembers();
@@ -170,8 +203,9 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY_LOYALTY) return;
       if (event.newValue === null) {
-        membersRef.current = INITIAL_MEMBERS;
-        setMembers(INITIAL_MEMBERS);
+        const normalizedDefaults = normalizeLoadedMembers(INITIAL_MEMBERS);
+        membersRef.current = normalizedDefaults;
+        setMembers(normalizedDefaults);
         return;
       }
       try {
@@ -198,16 +232,22 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
     };
-  }, [user?.id]);
+  }, [user?.id, user?.role?.slug, user?.email, settings.loyaltyTiers]);
 
   useEffect(() => {
     if (!isInitialized) return;
+    if (!canUserViewFullCustomerContacts(user?.role?.slug)) {
+      try {
+        localStorage.removeItem(STORAGE_KEY_LOYALTY);
+      } catch {}
+      return;
+    }
     try {
       localStorage.setItem(STORAGE_KEY_LOYALTY, JSON.stringify(members));
     } catch (e) {
       console.error("Failed to save loyalty members", e);
     }
-  }, [members, isInitialized]);
+  }, [members, isInitialized, user?.role?.slug]);
 
   const filteredMembers = members.filter((m) => {
     if (isAllOutlets) return true;
@@ -337,13 +377,12 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     if (!target) return;
 
     const nextPoints = updates.points !== undefined ? updates.points : target.points;
-    const hasManualOverride = (updates.tierHistory ?? target.tierHistory)?.some(
-      (th) => th.isManualOverride
-    );
+    const historyToCheck = updates.tierHistory ?? target.tierHistory;
+    const isManualOverride = historyToCheck?.[0]?.isManualOverride === true;
     const nextTier =
       updates.tier !== undefined
         ? updates.tier
-        : hasManualOverride
+        : isManualOverride
         ? target.tier
         : calculateTierForPoints(nextPoints);
 
@@ -836,8 +875,9 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetLoyaltyData = () => {
-    membersRef.current = INITIAL_MEMBERS;
-    setMembers(INITIAL_MEMBERS);
+    const normalizedDefaults = normalizeLoadedMembers(INITIAL_MEMBERS);
+    membersRef.current = normalizedDefaults;
+    setMembers(normalizedDefaults);
     try {
       localStorage.removeItem(STORAGE_KEY_LOYALTY);
     } catch (e) {

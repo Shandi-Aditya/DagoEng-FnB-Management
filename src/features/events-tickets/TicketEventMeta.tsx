@@ -13,6 +13,8 @@ interface TicketEventMetaProps {
   eventDate: string;
   location: string;
   paymentStatus: string;
+  ticketTierName?: string | null;
+  isInvitation?: boolean;
 }
 
 export function TicketEventMeta({
@@ -22,6 +24,8 @@ export function TicketEventMeta({
   eventDate,
   location,
   paymentStatus,
+  ticketTierName,
+  isInvitation,
 }: TicketEventMetaProps) {
   const statusInfo = getTicketPaymentStatusTone(paymentStatus);
 
@@ -44,11 +48,23 @@ export function TicketEventMeta({
 
       {/* Event Details */}
       <div className="space-y-1">
-        {category && (
-          <Badge variant="secondary" className="text-xs">
-            {category}
-          </Badge>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {category && (
+            <Badge variant="secondary" className="text-xs">
+              {category}
+            </Badge>
+          )}
+          {isInvitation && (
+            <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-xs">
+              Tiket undangan
+            </Badge>
+          )}
+          {ticketTierName && (
+            <Badge variant="outline" className="text-xs">
+              {ticketTierName}
+            </Badge>
+          )}
+        </div>
         <h1 className="text-lg sm:text-xl font-semibold text-foreground leading-snug">
           {title}
         </h1>

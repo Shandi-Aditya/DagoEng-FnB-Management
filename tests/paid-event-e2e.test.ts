@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { NextRequest } from "next/server";
 import * as dataStorage from "@/lib/data-storage";
 import {
   createEventSubmission,
@@ -18,6 +19,7 @@ import {
   validateTicketCheckIn,
   calculateCheckInStats,
 } from "@/features/events-checkin";
+import { GET as getTicketRoute } from "@/app/api/events/tickets/[token]/route";
 import type { CommunityEvent, EventRevenueSharingPolicy, EventTicketOrder } from "@/types/event";
 
 describe("TASK S-07 — End-to-End Paid Event Lifecycle Test Suite", () => {
@@ -443,6 +445,146 @@ describe("TASK S-07 — End-to-End Paid Event Lifecycle Test Suite", () => {
           enforceDateWindow: true,
         })
       ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/);
+    });
+  });
+
+  describe("Tahap 8: Pengujian Lapisan Route Tiket & Regresi Error Scanner", () => {
+    it("8.1 route GET /api/events/tickets/[token] mengembalikan seatCheckInTimes, paymentRejectionReason, tier, dan snapshot bank resmi", async () => {
+      const booking = await createEventBooking({
+        eventId: paidEvent.id,
+        guestName: "Dewi Lestari",
+        guestEmail: "dewi@example.com",
+        guestPhone: "081298765432",
+        ticketCount: 2,
+        enforceOfficialBank: true,
+      });
+
+      // Simulasikan persetujuan pembayaran dan check-in parsial kursi 1
+      await adminApproveBookingPayment(booking.id, "Disetujui admin", "Admin");
+      const operationalTimestamp = "2026-12-21T01:30:00.000Z";
+      await updateBookingCheckIn(booking.id, "PARTIALLY_CHECKED_IN", {
+        ticketCode: `${booking.ticketCode}-01`,
+        seatNumber: 1,
+        incrementQty: 1,
+        currentTimestamp: operationalTimestamp,
+        enforceDateWindow: true,
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/events/tickets/${booking.guestToken}`);
+      const res = await getTicketRoute(req, {
+        params: Promise.resolve({ token: booking.guestToken! }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.data.id).toBe(booking.id);
+      expect(json.data.ticketCode).toBe(booking.ticketCode);
+      expect(json.data.guestName).toBe("Dewi Lestari");
+      expect(json.data.checkInStatus).toBe("PARTIALLY_CHECKED_IN");
+      expect(json.data.checkedInSeats).toEqual([1]);
+      expect(json.data.seatCheckInTimes).toBeDefined();
+      expect(typeof json.data.seatCheckInTimes["1"]).toBe("string");
+      expect(json.data.destinationBankSnapshot).toBeDefined();
+      expect(json.data.destinationBankSnapshot?.bankName).toContain("BCA");
+      expect(json.data.destinationBankSnapshot?.accountNumber).toBe("135002938411");
+    });
+
+    it("8.2 route GET /api/events/tickets/[token] menolak token < 16 karakter dengan 400 dan token fiktif dengan 404", async () => {
+      // Token terlalu pendek
+      const shortReq = new NextRequest("http://localhost:3000/api/events/tickets/short-token");
+      const shortRes = await getTicketRoute(shortReq, {
+        params: Promise.resolve({ token: "short-token" }),
+      });
+      expect(shortRes.status).toBe(400);
+      const shortJson = await shortRes.json();
+      expect(shortJson.success).toBe(false);
+      expect(shortJson.error).toContain("Format token akses tiket tidak valid");
+
+      // Token fiktif 32 karakter
+      const notFoundReq = new NextRequest(
+        "http://localhost:3000/api/events/tickets/fictionaltoken1234567890abcdef"
+      );
+      const notFoundRes = await getTicketRoute(notFoundReq, {
+        params: Promise.resolve({ token: "fictionaltoken1234567890abcdef" }),
+      });
+      expect(notFoundRes.status).toBe(404);
+      const notFoundJson = await notFoundRes.json();
+      expect(notFoundJson.success).toBe(false);
+      expect(notFoundJson.error).toContain("Tiket tidak ditemukan");
+    });
+
+    it("8.3 scanner check-in melempar error penolakan saat tiket duplikat dan melindungi state kehadiran rombongan", async () => {
+      const booking = await createEventBooking({
+        eventId: paidEvent.id,
+        guestName: "Rudi Hartono",
+        guestEmail: "rudi@example.com",
+        guestPhone: "081234567891",
+        ticketCount: 2,
+        enforceOfficialBank: true,
+      });
+      await adminApproveBookingPayment(booking.id, "Approved", "Admin");
+
+      const operationalTimestamp = "2026-12-21T01:30:00.000Z";
+      const code01 = `${booking.ticketCode}-01`;
+
+      // Scan pertama berhasil
+      const firstScan = await updateBookingCheckIn(booking.id, "PARTIALLY_CHECKED_IN", {
+        ticketCode: code01,
+        seatNumber: 1,
+        incrementQty: 1,
+        currentTimestamp: operationalTimestamp,
+        enforceDateWindow: true,
+      });
+      expect(firstScan.checkedInQty).toBe(1);
+
+      // Scan kedua pada sub-tiket yang sama harus melempar error penolakan (re-thrown exception)
+      let thrownError: Error | null = null;
+      try {
+        await updateBookingCheckIn(booking.id, "PARTIALLY_CHECKED_IN", {
+          ticketCode: code01,
+          seatNumber: 1,
+          incrementQty: 1,
+          currentTimestamp: operationalTimestamp,
+          enforceDateWindow: true,
+        });
+      } catch (err) {
+        thrownError = err as Error;
+      }
+
+      expect(thrownError).not.toBeNull();
+      expect(thrownError?.message).toMatch(/sudah digunakan untuk check-in sebelumnya/);
+
+      // Verifikasi state booking di database tidak terkorupsi setelah penolakan
+      const freshBooking = await getBookingById(booking.id);
+      expect(freshBooking?.checkedInQty).toBe(1);
+      expect(freshBooking?.checkedInSeats).toEqual([1]);
+      expect(freshBooking?.checkInStatus).toBe("PARTIALLY_CHECKED_IN");
+    });
+
+    it("8.4 validator scanner membedakan tiket salah event dan tiket yang dibatalkan", async () => {
+      const booking = await createEventBooking({
+        eventId: paidEvent.id,
+        guestName: "Siti Rahma",
+        guestEmail: "siti@example.com",
+        guestPhone: "081234567892",
+        ticketCount: 1,
+        enforceOfficialBank: true,
+      });
+
+      // Validasi untuk event lain (ID berbeda)
+      const wrongEventValidation = validateTicketCheckIn(booking, "other-event-id-999");
+      expect(wrongEventValidation.valid).toBe(false);
+      expect(wrongEventValidation.message).toMatch(/bukan event ini/);
+
+      // Simulasikan tiket berstatus CANCELLED
+      const cancelledBooking: EventTicketOrder = {
+        ...booking,
+        paymentStatus: "CANCELLED",
+      };
+      const cancelledValidation = validateTicketCheckIn(cancelledBooking, paidEvent.id);
+      expect(cancelledValidation.valid).toBe(false);
+      expect(cancelledValidation.message).toMatch(/CANCELLED/);
     });
   });
 });

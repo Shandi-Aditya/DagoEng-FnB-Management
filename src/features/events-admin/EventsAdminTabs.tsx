@@ -1,10 +1,10 @@
 "use client";
 
-import { Calendar, CreditCard, Settings, Wallet } from "lucide-react";
+import { Calendar, CreditCard, Settings, Wallet, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export type AdminSectionType = "MODERATION" | "PAYMENTS" | "PAYOUTS" | "SETTINGS";
+export type AdminSectionType = "MODERATION" | "PAYMENTS" | "PAYOUTS" | "REFUNDS" | "SETTINGS";
 
 export interface EventsAdminTabsProps {
   currentSection: AdminSectionType;
@@ -12,6 +12,7 @@ export interface EventsAdminTabsProps {
   pendingReviewsCount?: number;
   pendingPaymentsCount?: number;
   pendingPayoutsCount?: number;
+  pendingRefundsCount?: number;
 }
 
 export function EventsAdminTabs({
@@ -20,6 +21,7 @@ export function EventsAdminTabs({
   pendingReviewsCount = 0,
   pendingPaymentsCount = 0,
   pendingPayoutsCount = 0,
+  pendingRefundsCount = 0,
 }: EventsAdminTabsProps) {
   return (
     <Tabs
@@ -54,6 +56,16 @@ export function EventsAdminTabs({
           {pendingPayoutsCount > 0 ? (
             <Badge variant="secondary">
               {pendingPayoutsCount}
+            </Badge>
+          ) : null}
+        </TabsTrigger>
+
+        <TabsTrigger value="REFUNDS" className="gap-2">
+          <RotateCcw />
+          <span>Pengajuan refund</span>
+          {pendingRefundsCount > 0 ? (
+            <Badge variant="secondary">
+              {pendingRefundsCount}
             </Badge>
           ) : null}
         </TabsTrigger>

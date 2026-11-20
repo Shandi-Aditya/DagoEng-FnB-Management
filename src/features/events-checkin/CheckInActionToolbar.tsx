@@ -39,6 +39,7 @@ export function CheckInActionToolbar({
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Makassar",
   });
 
   const formattedTime =

@@ -8,7 +8,7 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
 import { useAuth } from "@/contexts/AuthContext";
 import { downloadCSV } from "@/lib/export-utils";
@@ -38,10 +38,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OrganizerPayoutDialog } from "@/features/events-portal/OrganizerPayoutDialog";
 import { OrganizerBankGuardDialog } from "@/features/events-portal/OrganizerBankGuardDialog";
 import { OrganizerQRScannerDialog } from "@/features/events-portal/OrganizerQRScannerDialog";
+import { validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 import { OrganizerSignedOut } from "@/features/events-portal/OrganizerSignedOut";
 import { EventSubmissionForm } from "@/features/events-portal/EventSubmissionForm";
+import { EventPromosDialog } from "@/components/events/EventPromosDialog";
+import type { EventTicketTier, EventRefundPolicy } from "@/types/event";
 import type { SectionId } from "@/features/events-portal/OrganizerEventsTab";
 import { eventBalances, groupOrganizerEvents } from "@/features/events-portal/events-portal-groups";
+import { buildAttendeesExportRows } from "@/features/events-portal/events-portal-domain";
+import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
 
 const ALL_COMMUNITIES_VALUE = "all_admin";
 
@@ -97,6 +102,9 @@ export default function CommunityOrganizerPortalPage() {
   const [isUploadingRevisionPoster, setIsUploadingRevisionPoster] = useState(false);
   const [revisionUploadError, setRevisionUploadError] = useState<string | null>(null);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+  const [revisionTiers, setRevisionTiers] = useState<EventTicketTier[]>([]);
+  const [revisionRefundPolicy, setRevisionRefundPolicy] = useState<EventRefundPolicy>({ policyType: "NO_REFUND" });
+  const [promoEvent, setPromoEvent] = useState<CommunityEvent | null>(null);
 
   // Revenue Split Negotiation Form State
   const [splitOrgPercent, setSplitOrgPercent] = useState<number>(80);
@@ -249,6 +257,8 @@ export default function CommunityOrganizerPortalPage() {
     setRevisionPosterUrl(evt.posterUrl || "");
     setRevisionStartDate(toDateTimeLocal(evt.startDate));
     setRevisionEndDate(toDateTimeLocal(evt.endDate));
+    setRevisionTiers(evt.ticketTiers || []);
+    setRevisionRefundPolicy(evt.refundPolicy || { policyType: "NO_REFUND" });
     setRevisionUploadError(null);
   };
 
@@ -297,6 +307,22 @@ export default function CommunityOrganizerPortalPage() {
     const targetEmail = activeEmail || organizerEmail || user?.email || "";
     if (!revisionEvent || !targetEmail) return;
 
+    const capNum = Number(revisionCapacity);
+    const capCheck = validateEventCapacity(capNum, false);
+    if (!capCheck.valid) {
+      setErrorMessage(capCheck.error || "Kapasitas kuota event tidak valid.");
+      notify.error("Validasi gagal", capCheck.error);
+      return;
+    }
+    if (revisionTiers && revisionTiers.length > 0) {
+      const tierCheck = validateEventTicketTiers(revisionTiers, { maxCapacity: capNum });
+      if (!tierCheck.valid) {
+        setErrorMessage(tierCheck.error || "Format jenis tiket tidak valid.");
+        notify.error("Validasi gagal", tierCheck.error);
+        return;
+      }
+    }
+
     try {
       setIsSubmittingRevision(true);
       setErrorMessage(null);
@@ -325,6 +351,8 @@ export default function CommunityOrganizerPortalPage() {
                 : new Date(revisionEndDate).toISOString()
               : revisionEvent.endDate,
             guidelines: revisionGuidelines,
+            ticketTiers: revisionTiers,
+            refundPolicy: revisionRefundPolicy,
           },
         }),
       });
@@ -539,6 +567,7 @@ export default function CommunityOrganizerPortalPage() {
     const headers = [
       "Kode Tiket",
       "Nama Event",
+      "Jenis Tiket",
       "Nama Peserta",
       "No HP",
       "Instansi",
@@ -547,19 +576,7 @@ export default function CommunityOrganizerPortalPage() {
       "Check In",
       "Waktu Check In",
     ];
-    const rows = rowsToExport.map((b) => [
-      b.ticketCode,
-      b.eventTitle || "—",
-      b.guestName,
-      b.guestPhone || "—",
-      b.institution || "—",
-      String(b.ticketCount || 1),
-      b.paymentStatus,
-      b.checkInStatus,
-      b.checkInTime
-        ? new Date(b.checkInTime).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
-        : "—",
-    ]);
+    const rows = buildAttendeesExportRows(rowsToExport);
 
     downloadCSV(`peserta-komunitas-${Date.now()}.csv`, headers, rows);
     notify.info("File CSV diunduh");
@@ -607,6 +624,25 @@ export default function CommunityOrganizerPortalPage() {
 
   const currentTargetAvailable =
     balances.rows.find((row) => row.eventId === payoutTargetEventId)?.available ?? 0;
+
+  if (isCheckInStaffRole(user?.role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="max-w-md w-full text-center space-y-4 p-6 border rounded-xl bg-card shadow-sm">
+          <div className="mx-auto size-12 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+            <AlertCircle className="size-6" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Akses ditolak</h2>
+          <p className="text-sm text-muted-foreground">{CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE}</p>
+          <div className="pt-2">
+            <Link href="/events/checkin" className={buttonVariants({ variant: "outline" })}>
+              Kembali ke meja check-in
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!portalData && !isLoading) {
     return <OrganizerSignedOut signedInEmail={user?.email} />;
@@ -718,6 +754,7 @@ export default function CommunityOrganizerPortalPage() {
                 onSelectEvent={(evt) => setViewingDetailEvent(evt)}
                 onEditRevision={openRevisionModal}
                 onReviewSplit={(evt) => setNegotiatingEvent(evt)}
+                onManagePromos={(evt) => setPromoEvent(evt)}
                 initialSection={eventsSection}
                 onShowAttendees={(eventId) => {
                   setSelectedEventId(eventId);
@@ -738,6 +775,7 @@ export default function CommunityOrganizerPortalPage() {
                 dateRange={attendeeDateRange}
                 onDateRangeChange={setAttendeeDateRange}
                 onExportCSV={handleExportCSV}
+                onInvitationIssued={() => loadPortalData(activeEmail)}
               />
             )}
 
@@ -820,6 +858,7 @@ export default function CommunityOrganizerPortalPage() {
         bookings={portalData?.bookings || []}
         onEditRevision={openRevisionModal}
         onReviewSplit={(evt) => setNegotiatingEvent(evt)}
+        onManagePromos={(evt) => setPromoEvent(evt)}
       />
 
       <OrganizerRevisionDialog
@@ -851,6 +890,25 @@ export default function CommunityOrganizerPortalPage() {
         onUploadPoster={handleUploadRevisionPoster}
         onSubmitRevision={handleSaveRevision}
         isSubmitting={isSubmittingRevision}
+        ticketTiers={revisionTiers}
+        setTicketTiers={setRevisionTiers}
+        refundPolicy={revisionRefundPolicy}
+        setRefundPolicy={setRevisionRefundPolicy}
+        hasPaidTickets={Boolean(
+          revisionEvent &&
+            (portalData?.bookings || []).some(
+              (b) => b.eventId === revisionEvent.id && b.paymentStatus === "PAID"
+            )
+        )}
+      />
+
+      <EventPromosDialog
+        open={Boolean(promoEvent)}
+        onOpenChange={(open) => {
+          if (!open) setPromoEvent(null);
+        }}
+        event={promoEvent}
+        onPromoUpdated={() => loadPortalData(activeEmail)}
       />
 
       <OrganizerRevenueSplitDialog

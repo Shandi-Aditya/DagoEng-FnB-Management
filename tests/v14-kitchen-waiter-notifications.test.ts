@@ -12,6 +12,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
   const multiTenantOrder: OrderRecord = {
     id: "ord-v14-001",
     orderNumber: "ORD-V14-001",
+    organizationId: "org-dago-hub",
     customerName: "Budi Pratama",
     orderType: "DINE_IN",
     tableNumber: "05",
@@ -20,6 +21,8 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
     paymentMethod: "QRIS",
     outletId: "outlet-sgr",
     outletName: "Singaraja",
+    targetServiceMinutes: 15,
+    statusHistory: [],
     subtotal: 80000,
     tax: 8000,
     total: 88000,
@@ -27,7 +30,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
     items: [
       {
         id: "item-coffee-1",
-        menuItemId: "menu-coffee",
+        productId: "menu-coffee",
         productName: "Kopi Senja Gula Aren",
         quantity: 2,
         unitPrice: 25000,
@@ -37,7 +40,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
       },
       {
         id: "item-bakery-1",
-        menuItemId: "menu-bakery",
+        productId: "menu-bakery",
         productName: "Croissant Cokelat",
         quantity: 1,
         unitPrice: 30000,
@@ -50,6 +53,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
   const singleBakeryOrder: OrderRecord = {
     id: "ord-v14-002",
     orderNumber: "ORD-V14-002",
+    organizationId: "org-dago-hub",
     customerName: "Siti Rahma",
     orderType: "TAKEAWAY",
     tableNumber: "TAKEAWAY",
@@ -58,6 +62,8 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
     paymentMethod: "CASH",
     outletId: "outlet-sgr",
     outletName: "Singaraja",
+    targetServiceMinutes: 15,
+    statusHistory: [],
     subtotal: 50000,
     tax: 5000,
     total: 55000,
@@ -65,7 +71,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
     items: [
       {
         id: "item-bakery-2",
-        menuItemId: "menu-bakery-2",
+        productId: "menu-bakery-2",
         productName: "Almond Croissant",
         quantity: 2,
         unitPrice: 25000,
@@ -155,6 +161,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
     const readyOrder: OrderRecord = {
       id: "ord-v14-003",
       orderNumber: "ORD-V14-003",
+      organizationId: "org-dago-hub",
       customerName: "I Wayan Dharma",
       orderType: "DINE_IN",
       tableNumber: "12",
@@ -162,8 +169,11 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
       paymentStatus: "PAID",
       outletId: "outlet-sgr",
       outletName: "Singaraja",
+      targetServiceMinutes: 15,
+      statusHistory: [],
       subtotal: 65000,
-      total: 71500,
+        tax: 0,
+        total: 71500,
       createdAt: "2026-11-17T11:10:00Z",
       items: [
         {
@@ -227,6 +237,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
       const pendingPosOrder: OrderRecord = {
         id: "ord-pos-flow-1",
         orderNumber: "ORD-POS-9999",
+        organizationId: "org-dago-hub",
         customerName: "Tamu Kasir",
         tableNumber: "02",
         orderType: "DINE_IN",
@@ -234,7 +245,11 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
         paymentStatus: "PAID",
         paymentMethod: "CASH",
         outletId: "outlet-sgr",
+        outletName: "Singaraja",
+        targetServiceMinutes: 15,
+        statusHistory: [],
         subtotal: 50000,
+        tax: 0,
         total: 55000,
         createdAt: new Date().toISOString(),
         items: [

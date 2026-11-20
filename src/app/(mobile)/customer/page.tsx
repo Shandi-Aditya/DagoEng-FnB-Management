@@ -24,6 +24,7 @@ import { CustomerTicketPassModal } from "@/features/customer/CustomerTicketPassM
 import { calculateCartTotals, calculateEndTime, filterCustomerProducts, type CustomerCartItem } from "@/features/customer/customer-domain";
 import { filterGuestBookings, filterGuestOrders, parseTableParam } from "@/features/customer/guest-session";
 import { CoworkingReceiptModal } from "@/features/coworking/CoworkingReceiptModal";
+import { resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import { buildOrderReceiptData } from "@/features/orders/orders-domain";
 import { PaymentWaitingModal } from "@/features/payment/PaymentWaitingModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
@@ -241,6 +242,13 @@ function CustomerApp() {
     setIsBooking(true);
     try {
       const subtotal = request.space.hourlyRate * request.hours;
+      const cwTaxConfig = settings?.categoryTax?.coworking;
+      const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+      const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
+      const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
+      const tax = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(subtotal * (cwTaxRatePercent / 100)) : 0;
+      const totalAmount = subtotal + tax;
+
       const booking = bookSpace({
         spaceId: request.space.id,
         spaceName: request.space.name,
@@ -255,9 +263,12 @@ function CustomerApp() {
         duration: request.hours,
         price: subtotal,
         discount: 0,
-        totalAmount: subtotal,
+        tax,
+        taxType: cwTaxType,
+        taxRatePercent: cwTaxRatePercent,
+        totalAmount,
         paidAmount: 0,
-        remainingAmount: subtotal,
+        remainingAmount: totalAmount,
         paymentMethod: request.payment,
         paymentStatus: "PENDING",
         notes: `Booking ${request.space.name}`,
@@ -266,7 +277,7 @@ function CustomerApp() {
       if (request.payment === "QRIS") {
         openPayment(null, booking);
       } else {
-        notify.success("Ruang dipesan", `${request.space.name}, bayar ${formatCurrencyIDR(subtotal)} di kasir.`);
+        notify.success("Ruang dipesan", `${request.space.name}, bayar ${formatCurrencyIDR(totalAmount)} di kasir.`);
         setView("activity");
       }
     } catch (err: unknown) {
@@ -376,12 +387,6 @@ function CustomerApp() {
     };
   }, [currentMember, settings.loyaltyTiers]);
 
-  const outlet = activeOutlet || {
-    name: "Singaraja",
-    address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
-    phone: "",
-  };
-
   return (
     <>
       <CustomerShell view={view} onViewChange={setView} tableNumber={lockedTable} activeCount={activeCount}>
@@ -488,16 +493,19 @@ function CustomerApp() {
             company: receiptBooking.company,
             spaceName: receiptBooking.spaceName,
             spaceType: receiptBooking.spaceType,
-            outletName: outlet.name,
-            outletAddress: outlet.address,
-            outletPhone: outlet.phone ?? "",
+            outletName: resolveCoworkingReceiptPublisher(activeOutlet).outletName,
+            outletAddress: resolveCoworkingReceiptPublisher(activeOutlet).outletAddress,
+            outletPhone: resolveCoworkingReceiptPublisher(activeOutlet).outletPhone,
             bookingDate: receiptBooking.date,
-            startTime: receiptBooking.startTime,
-            endTime: receiptBooking.endTime ?? "",
+            startTime: receiptBooking.startTime.replace(/\s*WITA$/i, ""),
+            endTime: (receiptBooking.endTime ?? "").replace(/\s*WITA$/i, ""),
             duration: receiptBooking.duration,
             bookingType: receiptBooking.bookingType,
-            basePrice: receiptBooking.totalAmount,
-            discount: 0,
+            basePrice: (receiptBooking as any).basePrice ?? receiptBooking.price ?? receiptBooking.totalAmount,
+            discount: receiptBooking.discount ?? 0,
+            tax: receiptBooking.tax ?? 0,
+            taxType: receiptBooking.taxType ?? "NON_TAX",
+            taxRatePercent: receiptBooking.taxRatePercent ?? 0,
             totalAmount: receiptBooking.totalAmount,
             paymentMethod: receiptBooking.paymentMethod ?? "QRIS",
             paymentStatus: receiptBooking.paymentStatus,

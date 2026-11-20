@@ -63,6 +63,30 @@ export function calculateDaysCount(start: string, end: string): number {
   return Math.max(1, isNaN(diffDays) ? 1 : diffDays);
 }
 
+/**
+ * Pure calendar function to add days to YYYY-MM-DD using UTC to avoid timezone shift.
+ */
+export function addDaysToYmd(ymd: string, days: number): string {
+  if (!ymd) return ymd;
+  const parts = ymd.split("-").map(Number);
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return ymd;
+  const utcDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  utcDate.setUTCDate(utcDate.getUTCDate() + days);
+  return utcDate.toISOString().slice(0, 10);
+}
+
+/**
+ * Returns formatted tax label consistent with exemption status.
+ */
+export function formatCoworkingTaxLabel(
+  tax: number,
+  taxType?: string,
+  taxRatePercent?: number
+): string {
+  if (tax <= 0) return "Pajak (bebas PB1)";
+  return `Pajak (${taxType || "PPN"} ${taxRatePercent ?? 0}%)`;
+}
+
 export function calculateHourlyEndTime(startTime: string, hours: number): string {
   const [h, m] = (startTime || "09:00").split(":").map(Number);
   const endH = Math.min(23, (h || 9) + (hours || 2));
@@ -106,19 +130,13 @@ export function computeBookingPricing(params: {
       computedEndDate = startDate;
     } else if (dailyPreset === "3_DAYS") {
       computedDuration = 3;
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + 2);
-      computedEndDate = d.toISOString().split("T")[0];
+      computedEndDate = addDaysToYmd(startDate, 2);
     } else if (dailyPreset === "7_DAYS") {
       computedDuration = 7;
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + 6);
-      computedEndDate = d.toISOString().split("T")[0];
+      computedEndDate = addDaysToYmd(startDate, 6);
     } else if (dailyPreset === "14_DAYS") {
       computedDuration = 14;
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + 13);
-      computedEndDate = d.toISOString().split("T")[0];
+      computedEndDate = addDaysToYmd(startDate, 13);
     } else {
       computedDuration = calculateDaysCount(startDate, endDate);
       computedEndDate = endDate;
@@ -135,9 +153,7 @@ export function computeBookingPricing(params: {
 
   // MONTHLY
   const computedDuration = 30;
-  const d = new Date(startDate);
-  d.setDate(d.getDate() + 29);
-  const computedEndDate = d.toISOString().split("T")[0];
+  const computedEndDate = addDaysToYmd(startDate, 29);
   const computedTotal = space.monthlyRate || (space.dailyRate || 0) * 20;
 
   return {

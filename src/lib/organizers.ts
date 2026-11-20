@@ -13,6 +13,7 @@ export {
 };
 
 import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
+import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 
 const getDataFile = () => getDataFilePath("organizers.json");
 
@@ -160,7 +161,7 @@ export function ensureOrganizerActive(
     name: payload.name?.trim() || "Komunitas Kreatif",
     category: payload.category?.trim() || "Komunitas",
     contactPerson: payload.contactPerson?.trim() || payload.name?.trim() || "PIC Komunitas",
-    phone: payload.phone?.trim() || "+62 812-0000-0000",
+    phone: payload.phone?.trim() || OFFICIAL_CS_DISPLAY_PHONE,
     email: normalizedEmail,
     status: "ACTIVE",
     serviceModule: "CO_WORKING",

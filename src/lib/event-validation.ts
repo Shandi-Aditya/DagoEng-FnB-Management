@@ -4,6 +4,8 @@
  * Safe for use in both server-side modules and client components.
  */
 
+import type { EventTicketTier, EventRefundPolicy } from "@/types/event";
+
 export const MIN_EVENT_CAPACITY = 1;
 export const MAX_EVENT_CAPACITY = 1000;
 
@@ -290,4 +292,320 @@ export function resolveOrganizerSharePercent(
 ): number {
   const platformFee = resolveEffectivePlatformFeePercent(event, fallbackDefault);
   return 100 - platformFee;
+}
+
+/**
+ * Normalizes date/datetime-local string into ISO string with WITA (+08:00) offset.
+ */
+export function normalizeDateToWitaIso(dateInput: string): string {
+  if (!dateInput) return "";
+  const trimmed = dateInput.trim();
+  let parsed: Date;
+  if (trimmed.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+    parsed = new Date(trimmed);
+  } else if (trimmed.includes("T")) {
+    const withSec = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
+    parsed = new Date(`${withSec}+08:00`);
+  } else {
+    parsed = new Date(`${trimmed}T00:00:00+08:00`);
+  }
+  if (isNaN(parsed.getTime())) {
+    throw new Error(`Format tanggal tidak valid: '${dateInput}'.`);
+  }
+  return parsed.toISOString();
+}
+
+/**
+ * Validates ticket tiers array based on Task S-12 policy:
+ * - Each tier must have unique ID (auto-generated if empty), clean name (2..80 chars).
+ * - Price must be safe integer >= 0 (rejects decimals like 0.9, negative, NaN, 1e58).
+ * - Quota validated via validateEventCapacity(tier.quota, false) (1..1000).
+ * - Sales start and end dates normalized to ISO WIT (+08:00) with salesEndDate >= salesStartDate.
+ * - Total sum of quotas must not exceed MAX_EVENT_CAPACITY (1000) or explicit maxCapacity.
+ */
+export function validateEventTicketTiers(
+  rawTiers: unknown,
+  options?: { maxCapacity?: number }
+): EventValidationResult<EventTicketTier[]> {
+  if (rawTiers === undefined || rawTiers === null) {
+    return { valid: true, value: undefined };
+  }
+
+  if (!Array.isArray(rawTiers)) {
+    return { valid: false, error: "Format daftar jenis tiket (ticketTiers) harus berupa array." };
+  }
+
+  if (rawTiers.length === 0) {
+    return { valid: true, value: [] };
+  }
+
+  const validatedTiers: EventTicketTier[] = [];
+  const seenIds = new Set<string>();
+  let sumTierQuota = 0;
+
+  for (let i = 0; i < rawTiers.length; i++) {
+    const rawTier = rawTiers[i];
+    if (!rawTier || typeof rawTier !== "object") {
+      return { valid: false, error: `Jenis tiket ke-${i + 1} harus berupa objek yang valid.` };
+    }
+
+    const t = rawTier as Record<string, unknown>;
+
+    // 1. Name
+    const name = typeof t.name === "string" ? t.name.trim() : "";
+    if (name.length < 2 || name.length > 80) {
+      return {
+        valid: false,
+        error: `Nama jenis tiket ke-${i + 1} wajib diisi antara 2 hingga 80 karakter.`,
+      };
+    }
+
+    // 2. ID
+    let id = typeof t.id === "string" && t.id.trim() ? t.id.trim() : "";
+    if (!id) {
+      id = `tier-${i + 1}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+    if (seenIds.has(id)) {
+      return {
+        valid: false,
+        error: `ID jenis tiket harus unik. Ditemukan duplikasi ID: ${id}`,
+      };
+    }
+    seenIds.add(id);
+
+    // 3. Price (safe integer >= 0, strict rejection of decimals like 0.9, 1e58, negative)
+    if (t.price === undefined || t.price === null || t.price === "") {
+      return {
+        valid: false,
+        error: `Harga tiket untuk jenis '${name}' wajib diisi.`,
+      };
+    }
+
+    if (typeof t.price === "string") {
+      const trimmedPrice = t.price.trim();
+      if (!/^\d+$/.test(trimmedPrice)) {
+        return {
+          valid: false,
+          error: `Harga tiket untuk jenis '${name}' harus berupa bilangan bulat rupiah tanpa pecahan desimal atau notasi eksponensial.`,
+        };
+      }
+    }
+
+    if (typeof t.price !== "number" && typeof t.price !== "string") {
+      return {
+        valid: false,
+        error: `Format harga tiket untuk jenis '${name}' tidak valid.`,
+      };
+    }
+
+    const numPrice = typeof t.price === "number" ? t.price : Number(t.price);
+    if (isNaN(numPrice) || !Number.isFinite(numPrice) || !Number.isSafeInteger(numPrice) || numPrice < 0) {
+      return {
+        valid: false,
+        error: `Harga tiket untuk jenis '${name}' harus berupa bilangan bulat rupiah yang aman (>= 0).`,
+      };
+    }
+
+    // 4. Quota (1..1000)
+    const capVal = validateEventCapacity(t.quota, false);
+    if (!capVal.valid || capVal.value === undefined) {
+      return {
+        valid: false,
+        error: `Kuota jenis tiket '${name}': ${capVal.error || "Kuota tidak valid."}`,
+      };
+    }
+    const quota = capVal.value;
+    sumTierQuota += quota;
+
+    // 5. Sales dates
+    let salesStartDate: string | undefined;
+    let salesEndDate: string | undefined;
+
+    if (t.salesStartDate && typeof t.salesStartDate === "string" && t.salesStartDate.trim()) {
+      try {
+        salesStartDate = normalizeDateToWitaIso(t.salesStartDate);
+      } catch {
+        return {
+          valid: false,
+          error: `Waktu mulai penjualan jenis tiket '${name}' tidak valid.`,
+        };
+      }
+      if (isNaN(new Date(salesStartDate).getTime())) {
+        return {
+          valid: false,
+          error: `Waktu mulai penjualan jenis tiket '${name}' tidak valid.`,
+        };
+      }
+    }
+
+    if (t.salesEndDate && typeof t.salesEndDate === "string" && t.salesEndDate.trim()) {
+      try {
+        salesEndDate = normalizeDateToWitaIso(t.salesEndDate);
+      } catch {
+        return {
+          valid: false,
+          error: `Waktu selesai penjualan jenis tiket '${name}' tidak valid.`,
+        };
+      }
+      if (isNaN(new Date(salesEndDate).getTime())) {
+        return {
+          valid: false,
+          error: `Waktu selesai penjualan jenis tiket '${name}' tidak valid.`,
+        };
+      }
+    }
+
+    if (salesStartDate && salesEndDate) {
+      if (new Date(salesEndDate).getTime() < new Date(salesStartDate).getTime()) {
+        return {
+          valid: false,
+          error: `Waktu selesai penjualan jenis tiket '${name}' tidak boleh mendahului waktu mulai.`,
+        };
+      }
+    }
+
+    validatedTiers.push({
+      id,
+      name,
+      price: numPrice,
+      quota,
+      description: typeof t.description === "string" ? t.description.trim() : undefined,
+      salesStartDate,
+      salesEndDate,
+      isActive: t.isActive !== undefined ? Boolean(t.isActive) : true,
+    });
+  }
+
+  // Check sum of quotas
+  if (sumTierQuota > MAX_EVENT_CAPACITY) {
+    return {
+      valid: false,
+      error: `Total kuota seluruh jenis tiket (${sumTierQuota}) tidak boleh melebihi batas maksimal event (${MAX_EVENT_CAPACITY} peserta).`,
+    };
+  }
+
+  if (options?.maxCapacity !== undefined && options.maxCapacity !== null && (options.maxCapacity as unknown) !== "") {
+    const maxCap = Number(options.maxCapacity);
+    if (Number.isSafeInteger(maxCap) && sumTierQuota > maxCap) {
+      return {
+        valid: false,
+        error: `Total kuota seluruh jenis tiket (${sumTierQuota}) tidak boleh melebihi kapasitas event (${maxCap} peserta).`,
+      };
+    }
+  }
+
+  return { valid: true, value: validatedTiers };
+}
+
+/**
+ * Validates event refund policy:
+ * - policyType: "NO_REFUND" | "REFUNDABLE_UNTIL_H_MINUS"
+ * - hMinusDays: safe integer 0..60
+ * - refundFeePercent: safe integer 0..100
+ */
+export function validateEventRefundPolicy(rawPolicy: unknown): EventValidationResult<EventRefundPolicy> {
+  if (rawPolicy === undefined || rawPolicy === null) {
+    return { valid: true, value: { policyType: "NO_REFUND" } };
+  }
+
+  if (typeof rawPolicy !== "object" || rawPolicy === null) {
+    return { valid: false, error: "Kebijakan refund harus berupa objek yang valid." };
+  }
+
+  const p = rawPolicy as Record<string, unknown>;
+  const policyType = p.policyType;
+
+  if (policyType !== "NO_REFUND" && policyType !== "REFUNDABLE_UNTIL_H_MINUS") {
+    return {
+      valid: false,
+      error: "Tipe kebijakan refund tidak valid (hanya NO_REFUND atau REFUNDABLE_UNTIL_H_MINUS).",
+    };
+  }
+
+  const description = typeof p.description === "string" ? p.description.trim() : undefined;
+
+  if (policyType === "NO_REFUND") {
+    return {
+      valid: true,
+      value: {
+        policyType: "NO_REFUND",
+        description,
+      },
+    };
+  }
+
+  // REFUNDABLE_UNTIL_H_MINUS
+  if (p.hMinusDays === undefined || p.hMinusDays === null || p.hMinusDays === "") {
+    return {
+      valid: false,
+      error: "Batas hari pengajuan refund (H-) wajib diisi.",
+    };
+  }
+
+  if (typeof p.hMinusDays !== "number" && typeof p.hMinusDays !== "string") {
+    return {
+      valid: false,
+      error: "Batas hari pengajuan refund (H-) harus berupa angka atau teks numerik.",
+    };
+  }
+
+  if (typeof p.hMinusDays === "string") {
+    const trimmedDays = p.hMinusDays.trim();
+    if (!/^\d+$/.test(trimmedDays)) {
+      return {
+        valid: false,
+        error: "Batas hari pengajuan refund (H-) harus berupa bilangan bulat tanpa pecahan desimal.",
+      };
+    }
+  }
+
+  const days = typeof p.hMinusDays === "number" ? p.hMinusDays : Number(p.hMinusDays);
+  if (!Number.isSafeInteger(days) || days < 0 || days > 60) {
+    return {
+      valid: false,
+      error: "Batas hari pengajuan refund (H-) harus berupa bilangan bulat antara 0 hingga 60 hari.",
+    };
+  }
+
+  if (p.refundFeePercent === undefined || p.refundFeePercent === null || p.refundFeePercent === "") {
+    return {
+      valid: false,
+      error: "Potongan biaya admin refund wajib diisi.",
+    };
+  }
+
+  if (typeof p.refundFeePercent !== "number" && typeof p.refundFeePercent !== "string") {
+    return {
+      valid: false,
+      error: "Potongan biaya admin refund harus berupa angka atau teks numerik.",
+    };
+  }
+
+  if (typeof p.refundFeePercent === "string") {
+    const trimmedFee = p.refundFeePercent.trim();
+    if (!/^\d+$/.test(trimmedFee)) {
+      return {
+        valid: false,
+        error: "Potongan biaya admin refund harus berupa bilangan bulat tanpa pecahan desimal.",
+      };
+    }
+  }
+
+  const fee = typeof p.refundFeePercent === "number" ? p.refundFeePercent : Number(p.refundFeePercent);
+  if (!Number.isSafeInteger(fee) || fee < 0 || fee > 100) {
+    return {
+      valid: false,
+      error: "Potongan biaya admin refund harus berupa bilangan bulat antara 0% hingga 100%.",
+    };
+  }
+
+  return {
+    valid: true,
+    value: {
+      policyType: "REFUNDABLE_UNTIL_H_MINUS",
+      hMinusDays: days,
+      refundFeePercent: fee,
+      description,
+    },
+  };
 }

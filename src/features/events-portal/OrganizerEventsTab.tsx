@@ -15,6 +15,10 @@ import { DataPagination } from "@/components/app/data-pagination";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
+import {
   calculateEventOccupancy,
   eventStatusLabel,
   eventStatusTone,
@@ -41,6 +45,7 @@ interface OrganizerEventsTabProps {
   onEditRevision: (event: CommunityEvent) => void;
   onReviewSplit: (event: CommunityEvent) => void;
   onShowAttendees: (eventId: string) => void;
+  onManagePromos?: (event: CommunityEvent) => void;
   /** Opens on this group instead of the first one with events, e.g. "inReview" right after submitting. */
   initialSection?: SectionId;
 }
@@ -58,6 +63,7 @@ export function OrganizerEventsTab({
   onEditRevision,
   onReviewSplit,
   onShowAttendees,
+  onManagePromos,
   initialSection,
 }: OrganizerEventsTabProps) {
   const [section, setSection] = useState<SectionId>(
@@ -137,6 +143,7 @@ export function OrganizerEventsTab({
               onEditRevision={onEditRevision}
               onReviewSplit={onReviewSplit}
               onShowAttendees={onShowAttendees}
+              onManagePromos={onManagePromos}
             />
           ))}
         </ul>
@@ -156,14 +163,15 @@ interface EventRowProps {
   onEditRevision: (event: CommunityEvent) => void;
   onReviewSplit: (event: CommunityEvent) => void;
   onShowAttendees: (eventId: string) => void;
+  onManagePromos?: (event: CommunityEvent) => void;
 }
 
-function EventRow({ event, bookings, onSelectEvent, onEditRevision, onReviewSplit, onShowAttendees }: EventRowProps) {
+function EventRow({ event, bookings, onSelectEvent, onEditRevision, onReviewSplit, onShowAttendees, onManagePromos }: EventRowProps) {
   const status = getEffectiveStatus(event);
   const action = pendingAction(event);
   const occupancy = calculateEventOccupancy(event, bookings);
   const isApproved = status === "APPROVED";
-  const price = !event.isPaid || event.price === 0 ? "Gratis" : formatCurrencyIDR(event.price);
+  const price = formatEventPriceSummary(event);
 
   return (
     <li className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
@@ -224,9 +232,16 @@ function EventRow({ event, bookings, onSelectEvent, onEditRevision, onReviewSpli
           </Button>
         )}
         {isApproved && (
-          <Button size="sm" variant="outline" onClick={() => onShowAttendees(event.id)}>
-            Peserta
-          </Button>
+          <>
+            {onManagePromos && (
+              <Button size="sm" variant="outline" onClick={() => onManagePromos(event)}>
+                Kelola promo
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => onShowAttendees(event.id)}>
+              Peserta
+            </Button>
+          </>
         )}
       </div>
     </li>

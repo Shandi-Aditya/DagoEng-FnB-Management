@@ -31,6 +31,9 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
   const qrisOrder: OrderRecord = {
     id: "ord-qris-101",
     orderNumber: "ORD-QRIS-101",
+    organizationId: "org-dago-hub",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
     customerName: "Gede Arya",
     customerPhone: "081234567890",
     orderType: "DINE_IN",
@@ -43,11 +46,12 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
     serviceCharge: 0,
     total: 66000,
     discount: 0,
+    targetServiceMinutes: 15,
     createdAt: "2026-11-17T09:30:00Z",
     items: [
       {
         id: "item-101",
-        menuItemId: "menu-coffee",
+        productId: "menu-coffee",
         productName: "Espresso Blend Kopi Senja",
         quantity: 2,
         unitPrice: 30000,
@@ -78,6 +82,9 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
   const cashOrder: OrderRecord = {
     id: "ord-cash-202",
     orderNumber: "ORD-CASH-202",
+    organizationId: "org-dago-hub",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
     customerName: "Made Suardana",
     orderType: "DINE_IN",
     tableNumber: "07",
@@ -89,11 +96,12 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
     serviceCharge: 0,
     total: 55000,
     discount: 0,
+    targetServiceMinutes: 15,
     createdAt: "2026-11-17T10:15:00Z",
     items: [
       {
         id: "item-202",
-        menuItemId: "menu-bakery",
+        productId: "menu-bakery",
         productName: "Croissant Almond",
         quantity: 2,
         unitPrice: 25000,
@@ -133,7 +141,7 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
         refundedAt: nowIso,
         refundMethod: "CASH",
         statusHistory: [
-          ...qrisOrder.statusHistory,
+          ...(qrisOrder.statusHistory || []),
           {
             id: "sh-refund-1",
             orderId: qrisOrder.id,
@@ -264,11 +272,16 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
         id: "mem-01",
         name: "Gede Arya",
         phone: "081234567890",
-        tier: "CLASSIC",
+        tier: "Bronze",
         points: 100,
         totalSpend: 100000,
         totalVisits: 2,
-        joinDate: "2026-01-01",
+        favoriteItem: "Espresso",
+        registeredOutletId: "outlet-sgr",
+        registeredOutletName: "Singaraja",
+        status: "ACTIVE",
+        joinedDate: "2026-01-01",
+        lastVisit: "2026-11-17",
         pointHistory: [
           {
             id: "ptx-earn-1",

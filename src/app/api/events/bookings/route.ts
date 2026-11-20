@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEventBookings, getEventOperationalStats } from "@/lib/events";
-import { assertEventAdmin, assertCheckInAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import { getEventBookings, getEventOperationalStats, getAdminEvents } from "@/lib/events";
+import { assertEventAdmin, assertCheckInAuth, assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
 import { normalizeIndonesianPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
     const adminAuth = await assertEventAdmin(req);
     let isAuthorized = adminAuth.authorized;
     let authRole = adminAuth.role;
+    let isOrganizer = false;
+    let organizerEmail: string | undefined = undefined;
 
     if (!isAuthorized) {
       const checkInAuth = await assertCheckInAuth(req, eventId);
@@ -34,17 +36,45 @@ export async function GET(req: NextRequest) {
     }
 
     if (!isAuthorized) {
+      const organizerAuth = await assertOrganizerAuth(req);
+      if (organizerAuth.authorized && organizerAuth.email) {
+        isAuthorized = true;
+        isOrganizer = true;
+        organizerEmail = organizerAuth.email.toLowerCase().trim();
+      }
+    }
+
+    if (!isAuthorized) {
       return NextResponse.json(
         { success: false, error: adminAuth.error || "Akses pemesanan tiket ditolak." },
         { status: 403 }
       );
     }
 
+    let myEventIds = new Set<string>();
+    if (isOrganizer && organizerEmail) {
+      const allEvents = await getAdminEvents();
+      const myEvents = allEvents.filter(
+        (e) => e.status === "APPROVED" && (e.organizerEmail || "").toLowerCase().trim() === organizerEmail
+      );
+      myEventIds = new Set(myEvents.map((e) => e.id));
+
+      if (eventId && !myEventIds.has(eventId)) {
+        return NextResponse.json(
+          { success: false, error: "Akses ditolak: Anda tidak memiliki izin untuk melihat peserta event ini." },
+          { status: 403 }
+        );
+      }
+    }
+
     const canViewUnmasked =
       allowUnmasked &&
       (authRole === "SUPER_ADMIN" || authRole === "OWNER" || authRole === "MANAGER");
 
-    const rawBookings = await getEventBookings(eventId);
+    let rawBookings = await getEventBookings(eventId);
+    if (isOrganizer) {
+      rawBookings = rawBookings.filter((b) => myEventIds.has(b.eventId));
+    }
 
     const phoneQuery = searchParams.get("phone")?.trim();
     const searchQuery = (searchParams.get("search") || searchParams.get("q"))?.trim().toLowerCase();
@@ -81,7 +111,13 @@ export async function GET(req: NextRequest) {
 
     let stats = null;
     if (includeStats) {
-      stats = await getEventOperationalStats();
+      if (adminAuth.authorized) {
+        stats = await getEventOperationalStats(eventId ? [eventId] : undefined);
+      } else if (isOrganizer) {
+        stats = await getEventOperationalStats(myEventIds);
+      } else if (eventId) {
+        stats = await getEventOperationalStats([eventId]);
+      }
     }
 
     return NextResponse.json({

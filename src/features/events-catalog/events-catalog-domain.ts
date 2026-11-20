@@ -21,13 +21,15 @@ export const CATALOG_CATEGORIES: readonly { key: string; label: string }[] = [
 export function resolveEventEffectiveMinPrice(
   evt: Pick<PublicCommunityEvent, "isPaid" | "price" | "ticketTiers">
 ): number {
-  if (!evt.isPaid) return 0;
-  if (evt.price > 0) return evt.price;
-  const paidTiers = (evt.ticketTiers ?? []).filter(
-    (tier) => tier.isActive !== false && tier.price > 0
-  );
-  if (paidTiers.length === 0) return 0;
-  return Math.min(...paidTiers.map((tier) => tier.price));
+  if (!isEventPaidEffective(evt)) return 0;
+  if (evt.ticketTiers && evt.ticketTiers.length > 0) {
+    const paidTiers = evt.ticketTiers.filter(
+      (tier) => tier.isActive !== false && tier.price > 0
+    );
+    if (paidTiers.length === 0) return 0;
+    return Math.min(...paidTiers.map((tier) => tier.price));
+  }
+  return evt.price > 0 ? evt.price : 0;
 }
 
 export function sortPublicEvents(
@@ -65,11 +67,11 @@ export function filterPublicEvents(
 
   return basePool.filter((evt) => {
     const matchesCategory = category === "ALL" || evt.category === category;
-    const effectivePrice = resolveEventEffectiveMinPrice(evt);
+    const isPaid = isEventPaidEffective(evt);
     const matchesPrice =
       priceFilter === "ALL" ||
-      (priceFilter === "FREE" && (!evt.isPaid || effectivePrice === 0)) ||
-      (priceFilter === "PAID" && evt.isPaid && effectivePrice > 0);
+      (priceFilter === "FREE" && !isPaid) ||
+      (priceFilter === "PAID" && isPaid);
 
     if (dateRange && !isEventInWitaPeriod(evt, dateRange)) {
       return false;
@@ -86,29 +88,57 @@ export function filterPublicEvents(
   });
 }
 
+export function isEventPaidEffective(
+  event?: {
+    isPaid?: boolean;
+    price?: number;
+    ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[] | null;
+  } | null
+): boolean {
+  if (!event) return false;
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    return event.ticketTiers.some((t) => t.isActive !== false && Number(t.price) > 0);
+  }
+  return Boolean(event.isPaid && Number(event.price) > 0);
+}
+
+export function formatEventPriceSummary(
+  event?: {
+    isPaid?: boolean;
+    price?: number;
+    ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[] | null;
+  } | null
+): string {
+  if (!event || !isEventPaidEffective(event)) {
+    return "Gratis";
+  }
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    const activeTiers = event.ticketTiers.filter((tier) => tier.isActive !== false);
+    const hasFree = activeTiers.some((t) => Number(t.price) === 0);
+    const paidTiers = activeTiers.filter((tier) => Number(tier.price) > 0);
+    if (paidTiers.length === 0) {
+      return "Gratis";
+    }
+    const prices = paidTiers.map((t) => Number(t.price));
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    if (hasFree) {
+      return `Gratis & Berbayar (Mulai ${formatCurrencyIDR(minPrice)})`;
+    }
+    if (minPrice !== maxPrice) {
+      return `Mulai dari ${formatCurrencyIDR(minPrice)}`;
+    }
+    return formatCurrencyIDR(minPrice);
+  }
+  return formatCurrencyIDR(Number(event.price) || 0);
+}
+
 export function eventPriceLabel(
   isPaid?: boolean,
   price?: number,
   ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[]
 ): string {
-  if (!isPaid) {
-    return "Gratis";
-  }
-  if (price && price > 0) {
-    return formatCurrencyIDR(price);
-  }
-  const paidTiers = (ticketTiers ?? []).filter(
-    (tier) => tier.isActive !== false && tier.price > 0
-  );
-  if (paidTiers.length === 0) {
-    return "Gratis";
-  }
-  const minTierPrice = Math.min(...paidTiers.map((tier) => tier.price));
-  const maxTierPrice = Math.max(...paidTiers.map((tier) => tier.price));
-  if (minTierPrice !== maxTierPrice) {
-    return `Mulai ${formatCurrencyIDR(minTierPrice)}`;
-  }
-  return formatCurrencyIDR(minTierPrice);
+  return formatEventPriceSummary({ isPaid, price, ticketTiers });
 }
 
 /**

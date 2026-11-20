@@ -10,6 +10,7 @@ import {
   isTimestampInWitaPeriod,
 } from "@/components/events/EventDateRangeFilter";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
+import { resolveOrganizerSharePercent } from "@/lib/event-validation";
 import { normalizeIndonesianPhone } from "@/lib/utils";
 
 // Reuse and re-export shared domain logic from events-admin for maximum efficiency
@@ -128,13 +129,17 @@ export function calculateOrganizerEventMetrics(
     (e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED"
   ).length;
 
-  const paidBookings = bookings.filter((b) => b.paymentStatus === "PAID");
+  const eventIds = new Set(events.map((e) => e.id));
+  const paidBookings = bookings.filter(
+    (b) => b.paymentStatus === "PAID" && (eventIds.size === 0 || eventIds.has(b.eventId))
+  );
   const totalAttendees = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
   const grossRevenue = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
-  const organizerEarnings = paidBookings.reduce(
-    (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round(b.totalPrice * 0.8)),
-    0
-  );
+  const organizerEarnings = paidBookings.reduce((sum, b) => {
+    const event = events.find((e) => e.id === b.eventId);
+    const shareRatio = event ? resolveOrganizerSharePercent(event) / 100 : 0.8;
+    return sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * shareRatio));
+  }, 0);
 
   return {
     totalEvents,
@@ -144,6 +149,24 @@ export function calculateOrganizerEventMetrics(
     grossRevenue,
     organizerEarnings,
   };
+}
+
+/**
+ * Menghitung kapasitas total event mengikuti aturan getEventTicketAvailability:
+ * maxCapacity jika > 0, fallback ke jumlah kuota tier jika ada, lalu kapasitas ruangan venue.
+ */
+export function resolveEventTotalCapacity(event: CommunityEvent): number {
+  if (typeof event.maxCapacity === "number" && event.maxCapacity > 0) {
+    return event.maxCapacity;
+  }
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    const sumTierQuota = event.ticketTiers.reduce((acc, t) => acc + (t.quota || 0), 0);
+    if (sumTierQuota > 0) {
+      return sumTierQuota;
+    }
+  }
+  const capacityRes = resolveVenueCapacity(event);
+  return capacityRes.capacity || 0;
 }
 
 /**
@@ -157,8 +180,7 @@ export function calculateEventOccupancy(
   const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
   const ticketsPaid = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
 
-  const capacityRes = resolveVenueCapacity(event);
-  const totalCapacity = capacityRes.capacity || 0;
+  const totalCapacity = resolveEventTotalCapacity(event);
   const occupancyRate =
     totalCapacity > 0 ? Math.min(100, Math.round((ticketsPaid / totalCapacity) * 100)) : 0;
 
@@ -243,19 +265,246 @@ export function emptyOrganizerAttendeeMessage(hasSearch: boolean): {
 export function buildAttendeesExportRows(
   bookings: readonly EventTicketOrder[]
 ): string[][] {
-  return bookings.map((b) => [
-    b.ticketCode,
-    b.eventTitle || "—",
-    b.guestName,
-    b.guestPhone || "—",
-    b.institution || "—",
-    String(b.ticketCount || 1),
-    b.paymentStatus === "PAID"
-      ? "Lunas"
-      : b.paymentStatus === "CANCELLED"
-      ? "Batal"
-      : "Menunggu pembayaran",
-    b.checkInStatus === "CHECKED_IN" ? "Hadir" : "Belum hadir",
-    b.checkInTime ? new Date(b.checkInTime).toLocaleString("id-ID") : "—",
-  ]);
+  return bookings.map((b) => {
+    const isCheckedIn = b.checkInStatus === "CHECKED_IN";
+    const checkedQty = b.checkedInQty || 0;
+    const isPartiallyCheckedIn =
+      b.checkInStatus === "PARTIALLY_CHECKED_IN" || (!isCheckedIn && checkedQty > 0);
+
+    const paymentLabel =
+      b.refundStatus === "REQUESTED"
+        ? "Pengajuan refund"
+        : b.paymentStatus === "PAID"
+        ? "Lunas"
+        : b.paymentStatus === "REFUNDED"
+        ? "Dikembalikan"
+        : b.paymentStatus === "CANCELLED"
+        ? "Dibatalkan"
+        : b.paymentStatus === "EXPIRED"
+        ? "Kedaluwarsa"
+        : "Menunggu pembayaran";
+
+    const checkInLabel = isCheckedIn
+      ? "Hadir"
+      : isPartiallyCheckedIn
+      ? "Sebagian hadir"
+      : "Belum hadir";
+
+    const formattedTime = b.checkInTime
+      ? new Date(b.checkInTime).toLocaleString("id-ID", {
+          timeZone: "Asia/Makassar",
+        })
+      : "—";
+
+    return [
+      b.ticketCode,
+      b.eventTitle || "—",
+      b.ticketTierName || (b.isInvitation ? "Tiket undangan" : "Standar"),
+      b.guestName,
+      b.guestPhone || "—",
+      b.institution || "—",
+      String(b.ticketCount || 1),
+      paymentLabel,
+      checkInLabel,
+      formattedTime,
+    ];
+  });
+}
+
+export interface EventTierSalesStats {
+  tierId: string;
+  tierName: string;
+  price: number;
+  quota: number;
+  soldCount: number;
+  remainingQuota: number;
+  revenue: number;
+  organizerRevenue: number;
+  isSoldOut: boolean;
+}
+
+export interface EventSalesSummary {
+  eventId: string;
+  eventTitle: string;
+  totalCapacity: number;
+  totalTicketsSold: number;
+  remainingCapacity: number;
+  occupancyRate: number;
+  totalRevenue: number;
+  organizerEarnings: number;
+  tierBreakdown: EventTierSalesStats[];
+  attendeeCount: number;
+  isSoldOut: boolean;
+}
+
+function isBookingActiveForQuota(b: EventTicketOrder, now = Date.now()): boolean {
+  if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED" || b.paymentStatus === "REFUNDED") {
+    return false;
+  }
+  if (b.paymentStatus === "PENDING" && (b.totalPrice || 0) > 0 && !b.paymentProofUrl) {
+    const createdMs = new Date(b.createdAt).getTime();
+    const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
+    if (!isNaN(expiresAtMs) && now > expiresAtMs) return false;
+    const expiryWindow = 3 * 60 * 60 * 1000;
+    if (!isNaN(createdMs) && now - createdMs > expiryWindow) return false;
+  }
+  return true;
+}
+
+/**
+ * Menghitung ringkasan performa penjualan tiket per jenis (tier) dan sisa kuota event.
+ */
+export function calculateEventSalesSummary(
+  event: CommunityEvent,
+  bookings: readonly EventTicketOrder[]
+): EventSalesSummary {
+  const eventBookings = bookings.filter((b) => b.eventId === event.id);
+  const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
+  const paidSalesBookings = paidBookings.filter(
+    (b) => !b.isInvitation && b.paymentMethod !== "INVITATION"
+  );
+  const activeBookings = eventBookings.filter((b) => isBookingActiveForQuota(b));
+
+  const totalTicketsSold = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+  const totalRevenue = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+  const shareRatio = resolveOrganizerSharePercent(event) / 100;
+  const organizerEarnings = paidBookings.reduce(
+    (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * shareRatio)),
+    0
+  );
+
+  const totalCapacity = resolveEventTotalCapacity(event);
+  const totalTicketsReserved = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+  const remainingCapacity = Math.max(0, totalCapacity - totalTicketsReserved);
+  const occupancyRate =
+    totalCapacity > 0 ? Math.min(100, Math.round((totalTicketsSold / totalCapacity) * 100)) : 0;
+
+  const tierBreakdown: EventTierSalesStats[] = [];
+
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    const knownTierIds = new Set(event.ticketTiers.map((t) => t.id));
+
+    for (const tier of event.ticketTiers) {
+      const tierSalesBookings = paidSalesBookings.filter((b) => b.ticketTierId === tier.id);
+      const soldCount = tierSalesBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+
+      const tierActiveBookings = activeBookings.filter((b) => b.ticketTierId === tier.id);
+      const reservedCount = tierActiveBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+
+      const remainingQuota = Math.max(0, (tier.quota || 0) - reservedCount);
+      const revenue = tierSalesBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+      const organizerRevenue = tierSalesBookings.reduce(
+        (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * shareRatio)),
+        0
+      );
+      const isSoldOut = tier.quota > 0 && reservedCount >= tier.quota;
+
+      tierBreakdown.push({
+        tierId: tier.id,
+        tierName: tier.name,
+        price: tier.price,
+        quota: tier.quota,
+        soldCount,
+        remainingQuota,
+        revenue,
+        organizerRevenue,
+        isSoldOut,
+      });
+    }
+
+    const invitationBookings = paidBookings.filter(
+      (b) => b.isInvitation || b.paymentMethod === "INVITATION"
+    );
+    if (invitationBookings.length > 0) {
+      const soldCount = invitationBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+      tierBreakdown.push({
+        tierId: "invitation",
+        tierName: "Tiket undangan",
+        price: 0,
+        quota: soldCount,
+        soldCount,
+        remainingQuota: 0,
+        revenue: 0,
+        organizerRevenue: 0,
+        isSoldOut: false,
+      });
+    }
+
+    const nonTierBookings = paidSalesBookings.filter(
+      (b) => !b.ticketTierId || !knownTierIds.has(b.ticketTierId)
+    );
+    if (nonTierBookings.length > 0) {
+      const soldCount = nonTierBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+      const revenue = nonTierBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+      const organizerRevenue = nonTierBookings.reduce(
+        (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * shareRatio)),
+        0
+      );
+      tierBreakdown.push({
+        tierId: "other",
+        tierName: "Standar / lainnya",
+        price: event.price || 0,
+        quota: soldCount,
+        soldCount,
+        remainingQuota: 0,
+        revenue,
+        organizerRevenue,
+        isSoldOut: true,
+      });
+    }
+  } else {
+    const isFree = !event.isPaid || event.price === 0;
+    const reservedCount = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+    const remainingQuota = Math.max(0, totalCapacity - reservedCount);
+    const regularSoldCount = paidSalesBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+    const regularRevenue = paidSalesBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+    const regularEarnings = paidSalesBookings.reduce(
+      (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * shareRatio)),
+      0
+    );
+
+    tierBreakdown.push({
+      tierId: "default",
+      tierName: isFree ? "Tiket masuk (gratis)" : "Tiket masuk (reguler)",
+      price: event.price || 0,
+      quota: totalCapacity,
+      soldCount: regularSoldCount,
+      remainingQuota,
+      revenue: regularRevenue,
+      organizerRevenue: regularEarnings,
+      isSoldOut: totalCapacity > 0 && reservedCount >= totalCapacity,
+    });
+
+    const invitationBookings = paidBookings.filter(
+      (b) => b.isInvitation || b.paymentMethod === "INVITATION"
+    );
+    if (invitationBookings.length > 0) {
+      const soldCount = invitationBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+      tierBreakdown.push({
+        tierId: "invitation",
+        tierName: "Tiket undangan",
+        price: 0,
+        quota: soldCount,
+        soldCount,
+        remainingQuota: 0,
+        revenue: 0,
+        organizerRevenue: 0,
+        isSoldOut: false,
+      });
+    }
+  }
+
+  return {
+    eventId: event.id,
+    eventTitle: event.title,
+    totalCapacity,
+    totalTicketsSold,
+    remainingCapacity,
+    occupancyRate,
+    totalRevenue,
+    organizerEarnings,
+    tierBreakdown,
+    attendeeCount: paidBookings.length,
+    isSoldOut: totalCapacity > 0 && totalTicketsReserved >= totalCapacity,
+  };
 }

@@ -23,6 +23,7 @@ import {
 import type { POSReceiptData } from "@/features/pos/types";
 import type { KitchenTicketData } from "@/types/printer";
 import { usePrinter } from "@/contexts/PrinterContext";
+import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 import { splitCustomerReceiptByTenant } from "@/lib/printer";
 import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { isAddonActive } from "@/lib/subscription";
@@ -145,7 +146,7 @@ export function ReceiptModal({
     : (storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge);
 
   const contactPhone = isMultiTenant
-    ? activeReceipt.outletPhone || MASTER_HQ_OUTLET.phone || "+62 821-1550-1995"
+    ? activeReceipt.outletPhone || MASTER_HQ_OUTLET.phone || OFFICIAL_CS_DISPLAY_PHONE
     : (storedTenantSettings?.contactPhone || activeReceipt.outletPhone);
 
   const footerMessage =

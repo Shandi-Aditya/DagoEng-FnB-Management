@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +15,9 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { CommunityEvent, EventCategory } from "@/types/event";
 import { eventCategoryLabel } from "./events-admin-domain";
+import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
+import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
+import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
 
 function toWitaDateTimeLocal(value?: string): string {
   if (!value) return "";
@@ -64,6 +68,7 @@ export interface EventEditModalProps {
   onGuidelinesTextChange: (text: string) => void;
   onSave: () => void;
   isSaving?: boolean;
+  hasPaidTickets?: boolean;
 }
 
 export function EventEditModal({
@@ -76,8 +81,64 @@ export function EventEditModal({
   onGuidelinesTextChange,
   onSave,
   isSaving,
+  hasPaidTickets = false,
 }: EventEditModalProps) {
+  const [rawPrice, setRawPrice] = useState<string>(
+    formData.price !== undefined ? String(formData.price) : "0"
+  );
+  const [rawQuota, setRawQuota] = useState<string>(
+    formData.maxCapacity !== undefined ? String(formData.maxCapacity) : "30"
+  );
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open && event) {
+      const p = formData.price !== undefined ? String(formData.price) : String(event.price ?? 0);
+      const q = formData.maxCapacity !== undefined ? String(formData.maxCapacity) : String(event.maxCapacity ?? 30);
+      setRawPrice(p);
+      setRawQuota(q);
+      setPriceError(null);
+      setQuotaError(null);
+    }
+  }, [open, event?.id]);
+
   if (!event) return null;
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setRawPrice(raw);
+    if (raw === "") {
+      setPriceError(null);
+      onFormDataChange({ ...formData, price: 0, isPaid: false });
+      return;
+    }
+    const isPaid = raw !== "0";
+    const res = validateEventPrice(isPaid, raw);
+    if (!res.valid) {
+      setPriceError(res.error || "Harga tiket tidak valid.");
+    } else {
+      setPriceError(null);
+      onFormDataChange({ ...formData, price: res.value, isPaid: (res.value ?? 0) > 0 });
+    }
+  };
+
+  const handleQuotaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setRawQuota(raw);
+    if (raw === "") {
+      setQuotaError("Kapasitas maksimal venue/tiket wajib diisi.");
+      onFormDataChange({ ...formData, maxCapacity: undefined });
+      return;
+    }
+    const res = validateEventCapacity(raw, false);
+    if (!res.valid) {
+      setQuotaError(res.error || "Kapasitas kuota tidak valid.");
+    } else {
+      setQuotaError(null);
+      onFormDataChange({ ...formData, maxCapacity: res.value });
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,21 +233,11 @@ export function EventEditModal({
                 type="number"
                 min={0}
                 step={1}
-                value={formData.price ?? 0}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    onFormDataChange({ ...formData, price: 0, isPaid: false });
-                    return;
-                  }
-                  if (raw.includes(".") || raw.includes(",")) return;
-                  const val = Number(raw);
-                  if (Number.isSafeInteger(val) && val >= 0) {
-                    onFormDataChange({ ...formData, price: val, isPaid: val > 0 });
-                  }
-                }}
+                value={rawPrice}
+                onChange={handlePriceChange}
                 required
               />
+              {priceError && <p className="text-xs text-destructive">{priceError}</p>}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -197,21 +248,11 @@ export function EventEditModal({
                 min={1}
                 max={1000}
                 step={1}
-                value={formData.maxCapacity ?? 30}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    onFormDataChange({ ...formData, maxCapacity: undefined });
-                    return;
-                  }
-                  if (raw.includes(".") || raw.includes(",")) return;
-                  const val = Number(raw);
-                  if (Number.isSafeInteger(val) && val >= 1 && val <= 1000) {
-                    onFormDataChange({ ...formData, maxCapacity: val });
-                  }
-                }}
+                value={rawQuota}
+                onChange={handleQuotaChange}
                 required
               />
+              {quotaError && <p className="text-xs text-destructive">{quotaError}</p>}
             </div>
           </div>
 
@@ -237,6 +278,47 @@ export function EventEditModal({
               className="w-full rounded-md border bg-card p-2 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
+
+          {/* Editor Jenis Tiket Bertingkat */}
+          <div className="border-t pt-3">
+            <TicketTiersEditor
+              tiers={formData.ticketTiers || []}
+              onChange={(newTiers) => {
+                const isPaid = newTiers.some((t) => Number(t.price) > 0);
+                const sumQuota = newTiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
+                const nextPrice = isPaid ? Math.min(...newTiers.filter((t) => t.price > 0).map((t) => t.price)) : 0;
+                onFormDataChange({
+                  ...formData,
+                  ticketTiers: newTiers,
+                  isPaid,
+                  price: nextPrice,
+                  maxCapacity: sumQuota > 0 ? sumQuota : formData.maxCapacity,
+                });
+                if (sumQuota > 0) {
+                  setRawQuota(String(sumQuota));
+                  setQuotaError(null);
+                }
+                setRawPrice(String(nextPrice));
+                setPriceError(null);
+              }}
+            />
+          </div>
+
+          {/* Editor Kebijakan Refund */}
+          {(formData.isPaid || (formData.ticketTiers && formData.ticketTiers.some((t) => Number(t.price) > 0))) && (
+            <div className="border-t pt-3">
+              <EventRefundPolicyEditor
+                value={formData.refundPolicy || { policyType: "NO_REFUND" }}
+                onChange={(newPolicy) => {
+                  onFormDataChange({
+                    ...formData,
+                    refundPolicy: newPolicy,
+                  });
+                }}
+                hasPaidTickets={Boolean(hasPaidTickets || (event as any)?.bookedCount > 0)}
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter className="border-t pt-3">
@@ -249,7 +331,12 @@ export function EventEditModal({
           >
             Batal
           </Button>
-          <Button type="button" size="lg" onClick={onSave} disabled={isSaving}>
+          <Button
+            type="button"
+            size="lg"
+            onClick={onSave}
+            disabled={isSaving || Boolean(priceError) || Boolean(quotaError)}
+          >
             {isSaving ? "Menyimpan…" : "Simpan perubahan"}
           </Button>
         </DialogFooter>

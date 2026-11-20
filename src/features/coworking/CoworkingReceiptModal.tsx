@@ -3,6 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { formatCoworkingTaxLabel } from "./coworking-domain";
 import { X, Printer, CheckCircle2, Laptop } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -202,7 +203,7 @@ export function CoworkingReceiptModal({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Waktu:</span>
                     <span className="font-medium text-foreground">
-                      {receiptData.startTime} s/d {receiptData.endTime} WITA
+                      {receiptData.startTime.replace(/\s*WITA$/i, "")} s/d {receiptData.endTime.replace(/\s*WITA$/i, "")} WITA
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -236,20 +237,18 @@ export function CoworkingReceiptModal({
                   </div>
                 )}
 
-                {receiptData.tax !== undefined && receiptData.tax > 0 ? (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Pajak ({receiptData.taxType || "PPN"}
-                      {receiptData.taxRatePercent !== undefined ? ` ${receiptData.taxRatePercent}%` : ""}):
-                    </span>
-                    <span className="tabular-nums">{formatCurrencyIDR(receiptData.tax)}</span>
-                  </div>
-                ) : (
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Pajak (bebas PB1):</span>
-                    <span className="tabular-nums">Rp 0</span>
-                  </div>
-                )}
+                <div className="flex justify-between text-muted-foreground">
+                  <span>
+                    {formatCoworkingTaxLabel(
+                      receiptData.tax ?? 0,
+                      receiptData.taxType,
+                      receiptData.taxRatePercent
+                    )}:
+                  </span>
+                  <span className="tabular-nums">
+                    {formatCurrencyIDR(receiptData.tax ?? 0)}
+                  </span>
+                </div>
 
                 {receiptData.serviceCharge !== undefined && receiptData.serviceCharge > 0 && (
                   <div className="flex justify-between">

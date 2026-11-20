@@ -14,6 +14,32 @@ import {
 } from "@/features/events-checkin/events-checkin-domain";
 import type { EventTicketOrder } from "@/types/event";
 
+function mockTicket(override: Partial<EventTicketOrder> & Record<string, any>): EventTicketOrder {
+  return {
+    id: "ord-mock",
+    eventId: "ev-mock",
+    ticketCode: "TCK-MOCK",
+    guestName: "Guest Mock",
+    guestEmail: "guest@example.com",
+    guestPhone: "081234567890",
+    eventTitle: "Event Mock",
+    eventDate: "2026-12-01T10:00:00Z",
+    eventLocation: "Singaraja",
+    ticketCount: 1,
+    unitPrice: 50000,
+    totalPrice: 50000,
+    platformFeePercent: 20,
+    platformFeeAmount: 10000,
+    organizerRevenueAmount: 40000,
+    paymentMethod: "MANUAL_TRANSFER",
+    paymentStatus: "PAID",
+    checkInStatus: "REGISTERED",
+    createdAt: "2026-11-11T12:00:00Z",
+    updatedAt: "2026-11-11T12:00:00Z",
+    ...override,
+  };
+}
+
 describe("events-checkin-domain", () => {
   describe("parseTicketScanCode", () => {
     it("parses raw ticket code", () => {
@@ -48,7 +74,7 @@ describe("events-checkin-domain", () => {
   });
 
   describe("validateTicketCheckIn", () => {
-    const baseTicket: EventTicketOrder = {
+    const baseTicket: EventTicketOrder = mockTicket({
       id: "ord-1",
       ticketCode: "DAGO-EVT-100",
       eventId: "ev-1",
@@ -60,10 +86,10 @@ describe("events-checkin-domain", () => {
       paymentStatus: "PAID",
       checkInStatus: "REGISTERED",
       unitPrice: 50000,
-      totalAmount: 50000,
+      totalPrice: 50000,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
+    });
 
     it("returns error if ticket is null", () => {
       const result = validateTicketCheckIn(null, "ev-1");
@@ -129,7 +155,7 @@ describe("events-checkin-domain", () => {
 
   describe("calculateCheckInStats", () => {
     it("computes stats accurately", () => {
-      const tickets: EventTicketOrder[] = [
+      const tickets: EventTicketOrder[] = ([
         {
           id: "1",
           ticketCode: "T-1",
@@ -143,7 +169,7 @@ describe("events-checkin-domain", () => {
           checkInStatus: "CHECKED_IN",
           paymentStatus: "PAID",
           unitPrice: 10000,
-          totalAmount: 20000,
+          totalPrice: 20000,
           createdAt: "",
           updatedAt: "",
         },
@@ -160,7 +186,7 @@ describe("events-checkin-domain", () => {
           checkInStatus: "PARTIALLY_CHECKED_IN",
           paymentStatus: "PAID",
           unitPrice: 10000,
-          totalAmount: 30000,
+          totalPrice: 30000,
           createdAt: "",
           updatedAt: "",
         },
@@ -177,11 +203,11 @@ describe("events-checkin-domain", () => {
           checkInStatus: "REGISTERED",
           paymentStatus: "PAID",
           unitPrice: 10000,
-          totalAmount: 10000,
+          totalPrice: 10000,
           createdAt: "",
           updatedAt: "",
         },
-      ];
+      ] as any[]).map(mockTicket);
 
       const stats = calculateCheckInStats(tickets);
       expect(stats.totalTickets).toBe(6);
@@ -195,7 +221,7 @@ describe("events-checkin-domain", () => {
   });
 
   describe("filterCheckInTickets", () => {
-    const list: EventTicketOrder[] = [
+    const list: EventTicketOrder[] = ([
       {
         id: "1",
         ticketCode: "DAGO-01",
@@ -208,7 +234,7 @@ describe("events-checkin-domain", () => {
         checkInStatus: "CHECKED_IN",
         paymentStatus: "PAID",
         unitPrice: 10000,
-        totalAmount: 10000,
+        totalPrice: 10000,
         createdAt: "",
         updatedAt: "",
       },
@@ -225,11 +251,11 @@ describe("events-checkin-domain", () => {
         checkInStatus: "REGISTERED",
         paymentStatus: "PAID",
         unitPrice: 10000,
-        totalAmount: 20000,
+        totalPrice: 20000,
         createdAt: "",
         updatedAt: "",
       },
-    ];
+    ] as any[]).map(mockTicket);
 
     it("filters by UNCHECKED tab", () => {
       const res = filterCheckInTickets(list, "UNCHECKED", "");
@@ -275,7 +301,7 @@ describe("events-checkin-domain", () => {
     });
 
     it("maps check-in status to tone and label", () => {
-      const order: EventTicketOrder = {
+      const order: EventTicketOrder = mockTicket({
         id: "1",
         ticketCode: "T-1",
         eventId: "ev-1",
@@ -288,10 +314,10 @@ describe("events-checkin-domain", () => {
         checkInStatus: "PARTIALLY_CHECKED_IN",
         paymentStatus: "PAID",
         unitPrice: 10000,
-        totalAmount: 30000,
+        totalPrice: 30000,
         createdAt: "",
         updatedAt: "",
-      };
+    });
 
       const res = getCheckInStatusTone(order);
       expect(res.tone).toBe("info");

@@ -38,6 +38,7 @@ export interface OrderRecord {
   organizationId: string;
   outletId: string;
   outletName: string;
+  tenantId?: string;
   tableNumber: string;
   customerName: string;
   /** Phone left by the guest at self-order checkout; the customer app finds "my orders" by this, never by name. */

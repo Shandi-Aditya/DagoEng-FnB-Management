@@ -15,6 +15,7 @@ import {
   saveBookingsToDisk,
   appendAuditLog,
 } from "../src/lib/events";
+import { syncStorageFromDb } from "../src/lib/data-storage";
 import type { CommunityEvent, EventTicketOrder } from "../src/types/event";
 
 const isApply = process.argv.includes("--apply");
@@ -26,17 +27,32 @@ function isIdentifiedTestData(event: CommunityEvent): boolean {
   const o = (event.organizerName || "").toLowerCase();
   const id = (event.id || "").toLowerCase();
 
+  const testPatterns = [
+    "yjryuxrt",
+    "kfhjgdhsgfaf",
+    "fixing bug",
+    "[test qa 2]",
+    "sdfghjkl",
+    "cek sans",
+    "cek 1234567890",
+    "test",
+    "testing",
+    "uji coba",
+    "dummy",
+    "disposable",
+    "tes 1",
+    "(tes 1)",
+    "tes cek",
+    "cek mas",
+    "111",
+    "sdhghfdsdsghjhghfgd",
+  ];
+
   return (
     id.startsWith("evt-test") ||
     id.startsWith("evt-dist-lock") ||
     id.startsWith("evt-zero-booking") ||
-    id.includes("disposable") ||
-    t.includes("test") ||
-    t.includes("testing") ||
-    t.includes("uji coba") ||
-    t.includes("dummy") ||
-    o.includes("test") ||
-    o.includes("fixing bug")
+    testPatterns.some((p) => t.includes(p) || o.includes(p) || d.includes(p) || id.includes(p))
   );
 }
 
@@ -44,8 +60,11 @@ function isIdentifiedTestBooking(booking: EventTicketOrder): boolean {
   const n = (booking.guestName || "").toLowerCase();
   const e = (booking.guestEmail || "").toLowerCase();
   const id = (booking.id || "").toLowerCase();
+  const code = (booking.ticketCode || "").toUpperCase();
 
   return (
+    code.includes("DAGO-EVT-88221") ||
+    code.includes("DAGO-EVT-14704") ||
     id.startsWith("bk-test") ||
     id.startsWith("bk-init") ||
     id.startsWith("tkt-test") ||
@@ -57,6 +76,30 @@ function isIdentifiedTestBooking(booking: EventTicketOrder): boolean {
 }
 
 async function main() {
+  if (process.env.DATABASE_URL) {
+    let syncedEvents = false;
+    let syncedBookings = false;
+    try {
+      syncedEvents = await syncStorageFromDb("events.json");
+      syncedBookings = await syncStorageFromDb("event_bookings.json");
+    } catch (e) {
+      if (isApply) {
+        throw new Error(`Gagal pra-sinkronisasi database saat mode --apply: ${e}`);
+      }
+      console.warn("Peringatan pra-sinkronisasi database gagal:", e);
+    }
+    if (!syncedEvents || !syncedBookings) {
+      if (isApply) {
+        throw new Error(
+          `Gagal pra-sinkronisasi database saat mode --apply (events=${syncedEvents}, event_bookings=${syncedBookings}).`
+        );
+      }
+      console.warn(
+        `Peringatan pra-sinkronisasi database tidak lengkap (events=${syncedEvents}, event_bookings=${syncedBookings}).`
+      );
+    }
+  }
+
   console.log("================================================================================");
   console.log(`DAGOENG TEST DATA CLEANUP UTILITY (Mode: ${isApply ? "EXECUTION (--apply)" : "DRY RUN (Preview Only)"})`);
   console.log("================================================================================");
@@ -85,11 +128,16 @@ async function main() {
     rejectedEvents: [],
   };
 
+  const EXPLICIT_CLEANUP_CODES = new Set(["DAGO-EVT-88221", "DAGO-EVT-14704"]);
+
   // 1. Process Bookings
   const survivingBookings: EventTicketOrder[] = [];
   for (const b of allBookings) {
     if (isIdentifiedTestBooking(b)) {
-      if (b.paymentStatus === "PAID" && b.paymentMethod !== "FREE" && !b.guestEmail.includes("example.com")) {
+      const isExplicitTarget = EXPLICIT_CLEANUP_CODES.has(
+        (b.ticketCode || "").trim().toUpperCase()
+      );
+      if (!isExplicitTarget && b.paymentStatus === "PAID" && b.paymentMethod !== "FREE" && !b.guestEmail.includes("example.com")) {
         report.rejectedBookings.push({
           id: b.id,
           reason: `Pemesanan tiket berbayar non-mock (${b.ticketCode}) ditolak demi keamanan finansial.`,
@@ -111,9 +159,14 @@ async function main() {
       if (remainingBookings.length > 0) {
         report.rejectedEvents.push({
           id: ev.id,
-          reason: `Event [${ev.title}] masih memiliki ${remainingBookings.length} tiket aktif yang tidak dihapus.`,
+          reason: `Event [${ev.title}] masih memiliki ${remainingBookings.length} tiket aktif yang tidak dihapus (diarsipkan secara aman).`,
         });
-        survivingEvents.push(ev);
+        survivingEvents.push({
+          ...ev,
+          status: "ARCHIVED",
+          isTestData: true,
+          updatedAt: new Date().toISOString(),
+        });
       } else {
         report.deletedEvents.push(`[${ev.id}] ${ev.title}`);
       }

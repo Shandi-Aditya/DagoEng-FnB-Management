@@ -18,6 +18,7 @@ import {
   type DateRange,
 } from "@/components/events/EventDateRangeFilter";
 import { downloadCSV } from "@/lib/export-utils";
+import { notify } from "@/components/app/notify";
 
 // Sub-komponen modular yang sudah diredesign
 import {
@@ -36,6 +37,7 @@ import { EventsModerationToolbar } from "@/features/events-admin/EventsModeratio
 import { EventsModerationTable } from "@/features/events-admin/EventsModerationTable";
 import { EventsPaymentsTable } from "@/features/events-admin/EventsPaymentsTable";
 import { EventsPayoutsTable } from "@/features/events-admin/EventsPayoutsTable";
+import { EventsRefundsTable } from "@/features/events-admin/EventsRefundsTable";
 import { EventsSettingsView } from "@/features/events-admin/EventsSettingsView";
 import { EventDetailSheet } from "@/features/events-admin/EventDetailSheet";
 import { EventAttendeesModal } from "@/features/events-admin/EventAttendeesModal";
@@ -51,6 +53,7 @@ import {
 } from "@/features/events-admin/PayoutActionDialog";
 import { BankFormData, BankModal } from "@/features/events-admin/BankModal";
 import { EventEditModal } from "@/features/events-admin/EventEditModal";
+import { EventPromosDialog } from "@/components/events/EventPromosDialog";
 
 export default function AdminEventsPage() {
   const { user } = useAuth();
@@ -65,6 +68,7 @@ export default function AdminEventsPage() {
   // Core Data
   const [events, setEvents] = useState<CommunityEvent[]>([]);
   const [allBookings, setAllBookings] = useState<EventTicketOrder[]>([]);
+  const [allRefunds, setAllRefunds] = useState<EventTicketOrder[]>([]);
   const [operationalStats, setOperationalStats] = useState<EventOperationalStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -120,6 +124,7 @@ export default function AdminEventsPage() {
   const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
   const [editGuidelinesText, setEditGuidelinesText] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [promoEvent, setPromoEvent] = useState<CommunityEvent | null>(null);
 
   // Settings State
   const [businessPolicy, setBusinessPolicy] = useState<any>(null);
@@ -144,7 +149,7 @@ export default function AdminEventsPage() {
       const params = new URLSearchParams(window.location.search);
       const sec = params.get("section");
       const tab = params.get("tab");
-      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "SETTINGS") {
+      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "REFUNDS" || sec === "SETTINGS") {
         setAdminSection(sec);
       }
       if (tab) {
@@ -169,14 +174,27 @@ export default function AdminEventsPage() {
     }
   }, [actionSuccessMessage]);
 
+  const loadAdminRefunds = async () => {
+    try {
+      const res = await fetch("/api/events/admin/refunds");
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setAllRefunds(json.refunds || []);
+      }
+    } catch (e) {
+      console.error("Error loading event refunds:", e);
+    }
+  };
+
   const loadAdminEvents = async () => {
     try {
       setIsLoading(true);
       setActionErrorMessage(null);
 
-      const [eventsRes, bookingsRes] = await Promise.all([
+      const [eventsRes, bookingsRes, refundsRes] = await Promise.all([
         fetch("/api/events/admin"),
         fetch("/api/events/bookings?includeStats=true&unmasked=true"),
+        fetch("/api/events/admin/refunds"),
       ]);
 
       const eventsJson = await eventsRes.json();
@@ -192,6 +210,11 @@ export default function AdminEventsPage() {
         if (bookingsJson.stats) {
           setOperationalStats(bookingsJson.stats);
         }
+      }
+
+      const refundsJson = await refundsRes.json();
+      if (refundsRes.ok && refundsJson.success) {
+        setAllRefunds(refundsJson.refunds || []);
       }
     } catch (err: any) {
       setActionErrorMessage(err.message || "Kesalahan jaringan.");
@@ -212,7 +235,8 @@ export default function AdminEventsPage() {
       }
       const banksData = await banksRes.json();
       if (banksData.success) {
-        setBankAccountsList(banksData.data.bankAccounts || []);
+        const rawAccounts = banksData.data.bankAccounts || [];
+        setBankAccountsList(rawAccounts.filter((b: any) => b.accountType !== "ORGANIZER"));
         setBankChangeHistory(banksData.data.bankHistory || []);
       }
     } catch (e) {
@@ -222,7 +246,9 @@ export default function AdminEventsPage() {
 
   const eventsWithBookedCount = useMemo(() => {
     const bookedByEvent = new Map<string, number>();
+    const relatedByEvent = new Map<string, number>();
     for (const b of allBookings) {
+      relatedByEvent.set(b.eventId, (relatedByEvent.get(b.eventId) ?? 0) + 1);
       if (b.paymentStatus === "PAID") {
         bookedByEvent.set(b.eventId, (bookedByEvent.get(b.eventId) ?? 0) + (b.ticketCount || 1));
       }
@@ -230,6 +256,7 @@ export default function AdminEventsPage() {
     return events.map((e) => ({
       ...e,
       bookedCount: bookedByEvent.get(e.id) ?? (e as CommunityEvent & { bookedCount?: number }).bookedCount ?? 0,
+      relatedBookingsCount: relatedByEvent.get(e.id) ?? 0,
     }));
   }, [events, allBookings]);
 
@@ -277,6 +304,11 @@ export default function AdminEventsPage() {
   const pendingPayoutsCount = useMemo(
     () => allPayouts.filter((p) => p.status === "REQUESTED" || p.status === "PROCESSING").length,
     [allPayouts]
+  );
+
+  const pendingRefundsCount = useMemo(
+    () => allRefunds.filter((r) => r.refundStatus === "REQUESTED").length,
+    [allRefunds]
   );
 
   const filteredPayoutsForExport = useMemo(() => {
@@ -393,6 +425,28 @@ export default function AdminEventsPage() {
       setActionErrorMessage(err.message || "Gagal menghapus event.");
     } finally {
       setIsProcessingModeration(false);
+    }
+  };
+
+  const handleDeleteBooking = async (booking: EventTicketOrder) => {
+    if (!window.confirm(`Hapus permanen pesanan tiket ${booking.ticketCode} (${booking.guestName})? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+    try {
+      setIsProcessingPaymentAction(true);
+      const res = await fetch(`/api/events/bookings/${booking.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus pesanan tiket.");
+      }
+      setActionSuccessMessage(`Pesanan tiket "${booking.ticketCode}" berhasil dihapus permanen.`);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menghapus pesanan tiket.");
+    } finally {
+      setIsProcessingPaymentAction(false);
     }
   };
 
@@ -525,8 +579,11 @@ export default function AdminEventsPage() {
       startDate: event.startDate,
       endDate: event.endDate,
       description: event.description,
+      isPaid: event.isPaid,
       price: event.price,
       maxCapacity: event.maxCapacity,
+      ticketTiers: event.ticketTiers,
+      refundPolicy: event.refundPolicy,
     });
     setEditGuidelinesText((event.guidelines || []).join("\n"));
     setIsEditModalOpen(true);
@@ -608,7 +665,8 @@ export default function AdminEventsPage() {
     setEditingBank(null);
     setBankForm({
       label: "",
-      bankName: "BCA",
+      bankName: "BCA (Bank Central Asia)",
+      customBankName: "",
       accountNumber: "",
       accountHolder: "",
       branch: "",
@@ -620,9 +678,30 @@ export default function AdminEventsPage() {
 
   const handleOpenEditBank = (acc: any) => {
     setEditingBank(acc);
+    const knownBanks = [
+      "BCA (Bank Central Asia)",
+      "Bank Mandiri",
+      "BNI (Bank Negara Indonesia)",
+      "Bank BRI",
+      "BSI (Bank Syariah Indonesia)",
+      "CIMB Niaga",
+      "Bank Permata",
+    ];
+    let matchedBank = knownBanks.find((k) => k === acc.bankName);
+    if (!matchedBank) {
+      if (acc.bankName === "BCA") matchedBank = "BCA (Bank Central Asia)";
+      else if (acc.bankName === "Mandiri") matchedBank = "Bank Mandiri";
+      else if (acc.bankName === "BNI") matchedBank = "BNI (Bank Negara Indonesia)";
+      else if (acc.bankName === "BRI") matchedBank = "Bank BRI";
+      else if (acc.bankName === "BSI") matchedBank = "BSI (Bank Syariah Indonesia)";
+      else if (acc.bankName === "CIMB") matchedBank = "CIMB Niaga";
+      else if (acc.bankName === "Permata") matchedBank = "Bank Permata";
+    }
+    const isKnown = Boolean(matchedBank);
     setBankForm({
       label: acc.label || "",
-      bankName: acc.bankName || "BCA",
+      bankName: isKnown ? matchedBank! : "Other",
+      customBankName: isKnown ? "" : acc.bankName,
       accountNumber: acc.accountNumber || "",
       accountHolder: acc.accountHolder || "",
       branch: acc.branch || "",
@@ -634,12 +713,25 @@ export default function AdminEventsPage() {
 
   const handleSubmitBankForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (bankForm.bankName === "Other" && !bankForm.customBankName?.trim()) {
+      notify.error("Validasi gagal", "Nama bank kustom wajib diisi.");
+      return;
+    }
     try {
       setIsSavingSettings(true);
       const isEdit = Boolean(editingBank);
       const url = "/api/events/admin/settings/banks";
       const method = isEdit ? "PATCH" : "POST";
-      const body = isEdit ? { id: editingBank.id, ...bankForm } : bankForm;
+      const effectiveBankName =
+        bankForm.bankName === "Other" && bankForm.customBankName?.trim()
+          ? bankForm.customBankName.trim()
+          : bankForm.bankName;
+      const normalizedBankForm: any = {
+        ...bankForm,
+        bankName: effectiveBankName,
+      };
+      delete normalizedBankForm.customBankName;
+      const body = isEdit ? { id: editingBank.id, ...normalizedBankForm } : normalizedBankForm;
 
       const res = await fetch(url, {
         method,
@@ -651,7 +743,7 @@ export default function AdminEventsPage() {
         throw new Error(data.error || "Gagal menyimpan rekening bank.");
       }
 
-      setActionSuccessMessage(`Rekening ${bankForm.bankName} berhasil ${isEdit ? "diperbarui" : "ditambahkan"}!`);
+      setActionSuccessMessage(`Rekening ${effectiveBankName} berhasil ${isEdit ? "diperbarui" : "ditambahkan"}!`);
       setIsAddBankModalOpen(false);
       setEditingBank(null);
       await loadBusinessSettings();
@@ -775,6 +867,41 @@ export default function AdminEventsPage() {
       return;
     }
 
+    if (adminSection === "REFUNDS") {
+      const headers = [
+        "Kode Tiket",
+        "Event",
+        "Nama Peserta",
+        "Email",
+        "Status Refund",
+        "Total Harga",
+        "Biaya Potongan",
+        "Nominal Refund",
+        "Bank",
+        "No Rekening",
+        "Atas Nama",
+        "Alasan",
+        "Waktu Pengajuan",
+      ];
+      const rows = allRefunds.map((r) => [
+        r.ticketCode,
+        r.eventTitle || "—",
+        r.guestName,
+        r.guestEmail,
+        r.refundStatus || "—",
+        r.totalPrice,
+        r.refundRequest?.feeDeducted || 0,
+        r.refundRequest?.refundAmount || 0,
+        r.refundRequest?.bankName || "—",
+        r.refundRequest?.accountNumber || "—",
+        r.refundRequest?.accountHolder || "—",
+        r.refundRequest?.reason || "—",
+        r.refundRequest?.requestedAt || r.createdAt,
+      ]);
+      downloadCSV(`Events_Refunds_${todayIso}.csv`, headers, rows);
+      return;
+    }
+
     const headers = [
       "ID",
       "Judul",
@@ -855,6 +982,7 @@ export default function AdminEventsPage() {
         pendingReviewsCount={kpi.pendingReviewsCount}
         pendingPaymentsCount={kpi.pendingPaymentsCount}
         pendingPayoutsCount={pendingPayoutsCount}
+        pendingRefundsCount={pendingRefundsCount}
       />
 
       {adminSection === "MODERATION" && (
@@ -904,6 +1032,7 @@ export default function AdminEventsPage() {
             onRequestRevision={(e) => openModerationDialog(e, "REVISION")}
             onReject={(e) => openModerationDialog(e, "REJECT")}
             onArchive={(e) => openModerationDialog(e, "ARCHIVE")}
+            onDelete={handleDeleteEvent}
             searchQuery={searchQuery}
           />
         </div>
@@ -941,6 +1070,7 @@ export default function AdminEventsPage() {
             setRejectPaymentCancelBooking(false);
           }}
           onPreviewProof={(b) => setSelectedProofBooking(b)}
+          onDeleteBooking={handleDeleteBooking}
           isProcessing={isProcessingPaymentAction}
         />
       )}
@@ -978,6 +1108,17 @@ export default function AdminEventsPage() {
         />
       )}
 
+      {adminSection === "REFUNDS" && (
+        <EventsRefundsTable
+          refunds={allRefunds}
+          userRole={user?.role?.slug}
+          onRefresh={() => {
+            loadAdminRefunds();
+            loadAdminEvents();
+          }}
+        />
+      )}
+
       {adminSection === "SETTINGS" && (
         <EventsSettingsView
           businessPolicy={businessPolicy}
@@ -1008,8 +1149,16 @@ export default function AdminEventsPage() {
           setSelectedEventForAttendees(e);
           setIsAttendeesModalOpen(true);
         }}
+        onManagePromos={(e) => setPromoEvent(e)}
         onDelete={handleDeleteEvent}
         isProcessing={isProcessingModeration}
+      />
+
+      <EventPromosDialog
+        open={Boolean(promoEvent)}
+        onOpenChange={(open) => !open && setPromoEvent(null)}
+        event={promoEvent}
+        onPromoUpdated={loadAdminEvents}
       />
 
       <EventAttendeesModal
@@ -1018,6 +1167,8 @@ export default function AdminEventsPage() {
         event={selectedEventForAttendees}
         bookings={allBookings}
         onToggleCheckIn={handleCheckInToggle}
+        onDeleteBooking={handleDeleteBooking}
+        onInvitationIssued={loadAdminEvents}
         isUpdatingCheckInId={isUpdatingCheckInId}
       />
 
@@ -1088,6 +1239,7 @@ export default function AdminEventsPage() {
         onGuidelinesTextChange={setEditGuidelinesText}
         onSave={handleSaveEdit}
         isSaving={isSavingEdit}
+        hasPaidTickets={allBookings.some((b) => b.eventId === selectedEvent?.id && b.paymentStatus === "PAID")}
       />
     </div>
   );

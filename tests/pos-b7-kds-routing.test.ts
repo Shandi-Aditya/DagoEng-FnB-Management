@@ -7,6 +7,7 @@ describe("B7: KDS Routing and Station Notes (POS-38, POS-39, TC-F01, TC-K09, TC-
   const sampleOrder: OrderRecord = {
     id: "ord-test-kds-1",
     orderNumber: "ORD-KDS-001",
+    organizationId: "org-dago-hub",
     outletId: "outlet-sgr",
     outletName: "Singaraja",
     tableNumber: "T-02",
@@ -14,6 +15,8 @@ describe("B7: KDS Routing and Station Notes (POS-38, POS-39, TC-F01, TC-K09, TC-
     orderType: "DINE_IN",
     status: "CONFIRMED",
     paymentStatus: "PAID",
+    targetServiceMinutes: 15,
+    statusHistory: [],
     subtotal: 54000,
     tax: 5400,
     serviceCharge: 2700,

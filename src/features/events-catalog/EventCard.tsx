@@ -10,8 +10,9 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import type { PublicCommunityEvent } from "@/types/event";
 import {
   eventCategoryLabel,
-  eventPriceLabel,
+  formatEventPriceSummary,
   formatEventSchedule,
+  isEventPaidEffective,
   parseEventDateBadge,
 } from "./events-catalog-domain";
 
@@ -23,7 +24,7 @@ interface EventCardProps {
 export function EventCard({ event, isPast }: EventCardProps) {
   const dateBadge = parseEventDateBadge(event.startDate);
   const scheduleFormatted = formatEventSchedule(event.startDate, event.endDate);
-  const priceDisplay = eventPriceLabel(event.isPaid, event.price, event.ticketTiers);
+  const priceDisplay = formatEventPriceSummary(event);
 
   return (
     <Card className={`group flex flex-col justify-between overflow-hidden pt-0 transition-colors ${
@@ -113,7 +114,7 @@ export function EventCard({ event, isPast }: EventCardProps) {
           render={<Link href={`/events/${event.id}`} />}
           nativeButton={false}
         >
-          <span>{isPast ? "Lihat detail" : (event.isPaid ? "Pesan tiket" : "Daftar")}</span>
+          <span>{isPast ? "Lihat detail" : (isEventPaidEffective(event) ? "Pesan tiket" : "Daftar")}</span>
           <ArrowRight className="size-3.5" />
         </Button>
       </CardFooter>

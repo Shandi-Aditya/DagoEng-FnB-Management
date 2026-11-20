@@ -1,5 +1,7 @@
 /** Static copy for the public landing page. Kept apart from markup so sections stay small. */
 
+import { OFFICIAL_CS_DISPLAY_PHONE, OFFICIAL_HUB_ADDRESS } from "@/lib/contact-config";
+
 export interface LandingNavItem {
   id: string;
   label: string;
@@ -84,9 +86,9 @@ export const LOYALTY = {
 } as const;
 
 export const CONTACT = {
-  address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
+  address: OFFICIAL_HUB_ADDRESS,
   hours: "Senin sampai Jumat, 09.00 sampai 18.00 WITA",
-  phone: "+62 821-1550-1995",
+  phone: OFFICIAL_CS_DISPLAY_PHONE,
   email: "info@dagoeng.com",
   instagram: { label: "@dagocreativehub", href: "https://www.instagram.com/dagocreativehub/" },
 } as const;

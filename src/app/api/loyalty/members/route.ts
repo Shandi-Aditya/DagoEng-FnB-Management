@@ -8,18 +8,16 @@ import {
   savePersistentLoyaltyMember,
 } from "@/lib/persistent-storage";
 import { normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
-import { LoyaltyMember, LoyaltyPointTransaction, LoyaltyTier } from "@/types/loyalty";
+import { LoyaltyMember, LoyaltyPointTransaction } from "@/types/loyalty";
 import { DEFAULT_PLATFORM_SETTINGS, PlatformSettings } from "@/types/settings";
+import { getRequestAuthUser } from "@/lib/server-auth";
+import {
+  canUserViewFullCustomerContacts,
+  resolveAuthoritativeMemberTier,
+  sanitizeMemberForRole,
+} from "@/lib/loyalty-policy";
 
 export const dynamic = "force-dynamic";
-
-function resolveTierForPoints(points: number, settings: PlatformSettings): LoyaltyTier {
-  const tiers = settings.loyaltyTiers || DEFAULT_PLATFORM_SETTINGS.loyaltyTiers;
-  if (points >= tiers.platinumMin) return "Platinum";
-  if (points >= tiers.goldMin) return "Gold";
-  if (points >= tiers.silverMin) return "Silver";
-  return "Bronze";
-}
 
 async function reconcileMembersWithServerLoyaltyPoints(
   members: LoyaltyMember[]
@@ -33,8 +31,8 @@ async function reconcileMembersWithServerLoyaltyPoints(
     ),
   ]);
 
-  if (pointsRecords.length === 0 || members.length === 0) {
-    return members;
+  if (members.length === 0) {
+    return [];
   }
 
   const ordersById = new Map(orders.map((o) => [o.id, o]));
@@ -54,7 +52,17 @@ async function reconcileMembersWithServerLoyaltyPoints(
     });
 
     if (matchedRecords.length === 0) {
-      result.push(member);
+      const normalizedTier = resolveAuthoritativeMemberTier(
+        member,
+        platformSettings.loyaltyTiers
+      );
+      if (member.tier !== normalizedTier) {
+        const normalizedMember: LoyaltyMember = { ...member, tier: normalizedTier };
+        await savePersistentLoyaltyMember(normalizedMember, platformSettings.loyaltyTiers);
+        result.push(normalizedMember);
+      } else {
+        result.push(member);
+      }
       continue;
     }
 
@@ -151,15 +159,21 @@ async function reconcileMembersWithServerLoyaltyPoints(
       }
     }
 
-    if (!mutated) {
+    const nextTier = resolveAuthoritativeMemberTier(
+      {
+        tier: member.tier,
+        points: currentPoints,
+        tierHistory: member.tierHistory,
+      },
+      platformSettings.loyaltyTiers
+    );
+
+    const hasTierChange = member.tier !== nextTier;
+
+    if (!mutated && !hasTierChange) {
       result.push(member);
       continue;
     }
-
-    const hasManualOverride = member.tierHistory?.some((th) => th.isManualOverride);
-    const nextTier = hasManualOverride
-      ? member.tier
-      : resolveTierForPoints(currentPoints, platformSettings);
 
     const reconciled: LoyaltyMember = {
       ...member,
@@ -170,7 +184,7 @@ async function reconcileMembersWithServerLoyaltyPoints(
       pointHistory: history,
     };
 
-    const saved = await savePersistentLoyaltyMember(reconciled);
+    const saved = await savePersistentLoyaltyMember(reconciled, platformSettings.loyaltyTiers);
     result.push(saved);
   }
 
@@ -179,16 +193,39 @@ async function reconcileMembersWithServerLoyaltyPoints(
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const phone = searchParams.get("phone");
     const outletId = searchParams.get("outletId");
     const tier = searchParams.get("tier");
     const status = searchParams.get("status");
 
-    const storedMembers = await getPersistentLoyaltyMembers();
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
+    const storedMembers = await getPersistentLoyaltyMembers(platformSettings.loyaltyTiers);
     let members = await reconcileMembersWithServerLoyaltyPoints(storedMembers);
 
     if (phone) {
+      // Query raw phone number is strictly restricted to managerial roles
+      if (!canUserViewFullCustomerContacts(auth.role)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Akses ditolak: Pencarian langsung berdasarkan nomor telepon hanya diizinkan untuk Manager, Owner, atau Super Admin.",
+          },
+          { status: 403 }
+        );
+      }
       const norm = normalizeLoyaltyPhone(phone);
       members = members.filter((m) => normalizeLoyaltyPhone(m.phone) === norm);
     }
@@ -206,9 +243,25 @@ export async function GET(req: NextRequest) {
       members = members.filter((m) => (m.status || "").toUpperCase() === targetStatus);
     }
 
+    // Role-based visibility
+    if (auth.role === "CUSTOMER") {
+      const sessionEmail = auth.email?.toLowerCase().trim();
+      members = members.filter((m) => {
+        if (sessionEmail && m.email && m.email.toLowerCase().trim() === sessionEmail) {
+          return true;
+        }
+        return false;
+      });
+    }
+
+    const sanitizedMembers =
+      auth.role === "CUSTOMER"
+        ? members.map((m) => ({ ...m, identityNo: "" }))
+        : members.map((m) => sanitizeMemberForRole(m, auth.role));
+
     return NextResponse.json({
       success: true,
-      members,
+      members: sanitizedMembers,
     });
   } catch (error: unknown) {
     const message =
@@ -219,43 +272,114 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    const allowedPostRoles = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+    if (!allowedPostRoles.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak: Pendaftaran member loyalty hanya dapat dilakukan oleh Staf Kasir atau Manajemen.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const memberData = body.member || body;
 
-    if (!memberData || !memberData.name || !memberData.phone) {
+    if (
+      !memberData ||
+      typeof memberData.name !== "string" ||
+      !memberData.name.trim() ||
+      typeof memberData.phone !== "string" ||
+      !memberData.phone.trim()
+    ) {
       return NextResponse.json(
         { success: false, error: "Nama dan nomor telepon member wajib diisi." },
         { status: 400 }
       );
     }
 
+    if (memberData.phone.includes("*")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Nomor telepon tidak valid atau mengandung karakter tersamarkan (*).",
+        },
+        { status: 400 }
+      );
+    }
+
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
+
     const normPhone = normalizeLoyaltyPhone(memberData.phone);
-    const existingList = await getPersistentLoyaltyMembers();
+    const existingList = await getPersistentLoyaltyMembers(platformSettings.loyaltyTiers);
     const existing = existingList.find(
       (m) => normalizeLoyaltyPhone(m.phone) === normPhone
     );
 
-    if (existing && !memberData.allowUpdate) {
+    const isManagerial = canUserViewFullCustomerContacts(auth.role);
+
+    // If existing member found:
+    // CASHIER is strictly forbidden from overwriting points, tier, or using allowUpdate
+    if (existing && (auth.role === "CASHIER" || !memberData.allowUpdate)) {
       return NextResponse.json({
         success: true,
-        member: existing,
+        member: sanitizeMemberForRole(existing, auth.role),
         isExisting: true,
       });
     }
 
     const nowIso = new Date().toISOString();
-    const points =
-      typeof memberData.points === "number"
-        ? memberData.points
-        : memberData.initialPoints || 0;
+
+    // Set points = 0 and tierHistory = [] for non-managerial callers
+    const points = isManagerial
+      ? (typeof memberData.points === "number" ? memberData.points : memberData.initialPoints || 0)
+      : 0;
+
+    const tierHistory = isManagerial
+      ? (memberData.tierHistory || existing?.tierHistory || [])
+      : [];
+
+    // Jangan pernah menimpa kontak asli dengan data yang disamarkan (*)
+    const effectivePhone =
+      memberData.phone.includes("*") && existing ? existing.phone : memberData.phone.trim();
+    const effectiveEmail =
+      memberData.email && memberData.email.includes("*") && existing
+        ? existing.email
+        : memberData.email || existing?.email || "";
+    const effectiveIdentityNo =
+      memberData.identityNo && memberData.identityNo.includes("*") && existing
+        ? existing.identityNo
+        : memberData.identityNo || existing?.identityNo || "";
+
+    const calculatedTier = resolveAuthoritativeMemberTier(
+      {
+        tier: isManagerial ? memberData.tier : undefined,
+        points,
+        tierHistory,
+      },
+      platformSettings.loyaltyTiers
+    );
 
     const member: LoyaltyMember = {
       id: memberData.id || existing?.id || `mem-${Date.now()}`,
       name: memberData.name.trim(),
-      phone: memberData.phone.trim(),
-      email: memberData.email || existing?.email || "",
-      identityNo: memberData.identityNo || existing?.identityNo || "",
-      tier: (memberData.tier as LoyaltyTier) || existing?.tier || "Bronze",
+      phone: effectivePhone,
+      email: effectiveEmail,
+      identityNo: effectiveIdentityNo,
+      tier: calculatedTier,
       points,
       totalSpend:
         typeof memberData.totalSpend === "number"
@@ -273,15 +397,15 @@ export async function POST(req: NextRequest) {
       status: memberData.status || existing?.status || "ACTIVE",
       joinedDate: memberData.joinedDate || existing?.joinedDate || nowIso,
       lastVisit: memberData.lastVisit || existing?.lastVisit || nowIso,
-      pointHistory: memberData.pointHistory || existing?.pointHistory || [],
-      tierHistory: memberData.tierHistory || existing?.tierHistory || [],
+      pointHistory: isManagerial ? (memberData.pointHistory || existing?.pointHistory || []) : [],
+      tierHistory,
     };
 
-    const saved = await savePersistentLoyaltyMember(member);
+    const saved = await savePersistentLoyaltyMember(member, platformSettings.loyaltyTiers);
 
     return NextResponse.json({
       success: true,
-      member: saved,
+      member: sanitizeMemberForRole(saved, auth.role),
       isExisting: Boolean(existing),
     });
   } catch (error: unknown) {
@@ -293,9 +417,29 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    const allowedPutRoles = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+    if (!allowedPutRoles.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak: Pembaruan data member loyalty hanya dapat dilakukan oleh Staf Kasir atau Manajemen.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const id = body.id || body.member?.id;
-    const updates = body.updates || body.member || body;
+    const updates = { ...(body.updates || body.member || body) };
 
     if (!id) {
       return NextResponse.json(
@@ -304,7 +448,12 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const existingList = await getPersistentLoyaltyMembers();
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
+
+    const existingList = await getPersistentLoyaltyMembers(platformSettings.loyaltyTiers);
     const target = existingList.find((m) => m.id === id);
 
     if (!target) {
@@ -314,17 +463,160 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    if (updates.points !== undefined) {
+      if (
+        typeof updates.points !== "number" ||
+        !Number.isFinite(updates.points) ||
+        updates.points < 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Nilai poin tidak valid. Harus berupa angka non-negatif yang valid.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const isManagerial = canUserViewFullCustomerContacts(auth.role);
+    const nextPoints =
+      updates.points !== undefined ? updates.points : target.points;
+
+    const expectedCurrentTier = resolveAuthoritativeMemberTier(
+      target,
+      platformSettings.loyaltyTiers
+    );
+    const expectedNextTier = resolveAuthoritativeMemberTier(
+      {
+        tier: target.tier,
+        points: nextPoints,
+        tierHistory: target.tierHistory,
+      },
+      platformSettings.loyaltyTiers
+    );
+    const isLatestManualOverride =
+      target.tierHistory?.[0]?.isManualOverride === true;
+
+    // Validate updates.tierHistory for non-managerial callers (CASHIER)
+    let hasTierHistoryTampering = false;
+    if (!isManagerial && updates.tierHistory !== undefined) {
+      const existingHistory = Array.isArray(target.tierHistory) ? target.tierHistory : [];
+      if (!Array.isArray(updates.tierHistory)) {
+        hasTierHistoryTampering = true;
+      } else if (updates.tierHistory.length < existingHistory.length) {
+        hasTierHistoryTampering = true;
+      } else {
+        const addedCount = updates.tierHistory.length - existingHistory.length;
+        const addedEntries = updates.tierHistory.slice(0, addedCount);
+        const suffixEntries = updates.tierHistory.slice(addedCount);
+        const existingIds = new Set(existingHistory.map((e) => e.id));
+
+        const invalidAdded = addedEntries.some(
+          (entry: any) =>
+            !entry ||
+            typeof entry !== "object" ||
+            entry.isManualOverride === true ||
+            (typeof entry.id === "string" && existingIds.has(entry.id))
+        );
+
+        const tamperedExisting = existingHistory.some((orig, idx) => {
+          const cand = suffixEntries[idx];
+          if (!cand || typeof cand !== "object") return true;
+          return (
+            cand.id !== orig.id ||
+            cand.memberId !== orig.memberId ||
+            cand.previousTier !== orig.previousTier ||
+            cand.newTier !== orig.newTier ||
+            cand.pointsAtChange !== orig.pointsAtChange ||
+            Boolean(cand.isManualOverride) !== Boolean(orig.isManualOverride) ||
+            cand.reason !== orig.reason ||
+            cand.actorName !== orig.actorName ||
+            cand.timestamp !== orig.timestamp
+          );
+        });
+
+        hasTierHistoryTampering = invalidAdded || tamperedExisting;
+      }
+    }
+
+    const isExplicitTierDrift =
+      Boolean(updates.tier) &&
+      updates.tier !== expectedNextTier &&
+      updates.tier !== expectedCurrentTier &&
+      updates.tier !== target.tier;
+
+    if ((hasTierHistoryTampering || isExplicitTierDrift) && !isManagerial) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak: Hanya Owner, Super Admin, dan Manager yang dapat mengubah tier secara manual.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Jangan pernah menimpa kontak asli di penyimpanan dengan teks yang mengandung *
+    if (typeof updates.phone === "string" && updates.phone.includes("*")) {
+      delete updates.phone;
+    }
+    if (typeof updates.email === "string" && updates.email.includes("*")) {
+      delete updates.email;
+    }
+    if (typeof updates.identityNo === "string" && updates.identityNo.includes("*")) {
+      delete updates.identityNo;
+    }
+
+    if (!isManagerial) {
+      delete updates.identityNo;
+      if (
+        updates.phone === null ||
+        (typeof updates.phone === "string" && updates.phone.trim() === "") ||
+        (updates.phone !== undefined && typeof updates.phone !== "string")
+      ) {
+        delete updates.phone;
+      }
+      if (
+        updates.email === null ||
+        (typeof updates.email === "string" && updates.email.trim() === "") ||
+        (updates.email !== undefined && typeof updates.email !== "string")
+      ) {
+        delete updates.email;
+      }
+    }
+
+    const mergedTierHistory = updates.tierHistory || target.tierHistory || [];
+
+    const calculatedTier = resolveAuthoritativeMemberTier(
+      {
+        tier: isManagerial
+          ? updates.tier || target.tier
+          : isLatestManualOverride
+          ? target.tier
+          : expectedNextTier,
+        points: nextPoints,
+        tierHistory: mergedTierHistory,
+      },
+      platformSettings.loyaltyTiers
+    );
+
     const merged: LoyaltyMember = {
       ...target,
       ...updates,
+      points: nextPoints,
+      tier: calculatedTier,
       id,
     };
 
-    const saved = await savePersistentLoyaltyMember(merged);
+    const saved = await savePersistentLoyaltyMember(
+      merged,
+      platformSettings.loyaltyTiers
+    );
 
     return NextResponse.json({
       success: true,
-      member: saved,
+      member: sanitizeMemberForRole(saved, auth.role),
     });
   } catch (error: unknown) {
     const message =
@@ -335,6 +627,26 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    // Batasi DELETE hanya untuk SUPER_ADMIN | OWNER | MANAGER
+    if (!canUserViewFullCustomerContacts(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak: Hanya Owner, Super Admin, dan Manager yang dapat menghapus member.",
+        },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const idFromQuery = searchParams.get("id");
     let id = idFromQuery;

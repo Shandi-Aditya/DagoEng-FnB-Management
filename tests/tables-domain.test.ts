@@ -20,6 +20,9 @@ function makeTable(id: string, status: TableItem["status"] = "AVAILABLE", cap = 
     number: `T-${id}`,
     cap,
     status,
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
+
   };
 }
 
@@ -27,6 +30,9 @@ function makeArea(id: string, name: string, tables: TableItem[]): AreaItem {
   return {
     id,
     name,
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
+
     tables,
   };
 }
@@ -39,6 +45,7 @@ function makeReservation(id: string, overrides: Partial<ScheduledReservation> = 
     tableId: "T-01",
     areaName: "Indoor AC",
     outletId: "outlet-sgr",
+    outletName: "Singaraja",
     dateTime: "Hari ini, 19:00 WITA",
     pax: 4,
     downPayment: 100000,

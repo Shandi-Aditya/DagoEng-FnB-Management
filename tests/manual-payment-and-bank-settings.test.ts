@@ -525,7 +525,7 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
   it("19. Konfigurasi rekening tidak valid mencegah checkout secara aman", async () => {
     // Disable all bank accounts temporarily
     const policy = getEventRevenuePolicy();
-    const allDisabled = policy.bankAccounts.map((b) => ({ ...b, isActive: false, isDefault: false }));
+    const allDisabled = (policy.bankAccounts || []).map((b) => ({ ...b, isActive: false, isDefault: false }));
     updateEventRevenuePolicy({ bankAccounts: allDisabled });
 
     await expect(
@@ -539,7 +539,7 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
     ).rejects.toThrow(/rekening pembayaran aktif/i);
 
     // Restore active bank accounts with platform default active
-    const restored = policy.bankAccounts.map((b) => {
+    const restored = (policy.bankAccounts || []).map((b) => {
       if (b.bankName.includes("BCA") && b.accountType === "PLATFORM") {
         return { ...b, isActive: true, isDefault: true };
       }
@@ -635,14 +635,14 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
     await updateBookingPaymentProof(booking.id, "https://storage.dagoeng.com/proofs/fake.jpg");
 
     // Reject with empty reason must fail
-    await expect(adminRejectBookingPayment(booking.id, "   ", "Admin Finance")).rejects.toThrow(/alasan penolakan/i);
+    await expect(adminRejectBookingPayment(booking.id, "   ", { cancelBooking: false }, "Admin Finance")).rejects.toThrow(/alasan penolakan/i);
 
     // Reject with valid reason
     const rejected = await adminRejectBookingPayment(
       booking.id,
       "Nominal transfer tidak sesuai (hanya Rp 10.000, seharusnya Rp 50.000)",
-      "Admin Finance",
-      false
+      { cancelBooking: false },
+      "Admin Finance"
     );
     expect(rejected?.paymentRejectionReason).toContain("Nominal transfer tidak sesuai");
     expect(rejected?.paymentStatus).toBe("PENDING"); // Allowed to re-upload while pending
@@ -655,7 +655,7 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
       body: JSON.stringify({ action: "APPROVE_PAYMENT" }),
     });
 
-    const res = await handleBookingPatchRoute(req, { params: { id: existingBookingForAuthTest.id } });
+    const res = await handleBookingPatchRoute(req, { params: Promise.resolve({ id: existingBookingForAuthTest.id }) });
     expect([401, 403]).toContain(res.status);
   });
 
@@ -761,8 +761,8 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
 
     const policy = getEventRevenuePolicy();
     expect(policy.bankHistory).toBeDefined();
-    expect(policy.bankHistory.length).toBeGreaterThan(0);
-    const newestEntry = policy.bankHistory[0];
+    expect((policy.bankHistory || []).length).toBeGreaterThan(0);
+    const newestEntry = (policy.bankHistory || [])[0];
     expect(newestEntry.changedBy).toBe("Admin Auditor");
     expect(newestEntry.action).toBe("UPDATE");
   });
@@ -791,14 +791,14 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
     await adminApproveBookingPayment(booking.id, "Admin", "Lunas");
 
     // Change global commission policy to 25%
-    updateEventRevenuePolicy({ defaultPlatformFeePercent: 25, defaultOrganizerSharePercent: 75 });
+    updateEventRevenuePolicy({ defaultPlatformFeePercent: 25 });
 
     // Ensure calculation for booking with original 20% still holds
     const splitOld = calculateEventRevenueSplit(50000, 20);
     expect(splitOld.platformFeeAmount).toBe(10000);
 
     // Reset policy back to 20/80
-    updateEventRevenuePolicy({ defaultPlatformFeePercent: 20, defaultOrganizerSharePercent: 80 });
+    updateEventRevenuePolicy({ defaultPlatformFeePercent: 20 });
   });
 
   it("36. Laporan keuangan membedakan pendapatan kotor, komisi platform, dan hak penyelenggara", async () => {

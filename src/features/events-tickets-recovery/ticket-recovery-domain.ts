@@ -3,6 +3,7 @@
  * Handles input normalization, validation, WhatsApp link generation, and status mapping.
  */
 import { CONTACT } from "@/features/landing/landing-content";
+import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 
 export interface TicketRecoveryCodeValidation {
   valid: boolean;
@@ -49,7 +50,7 @@ export function normalizePhoneNumber(phone: string): string {
 /**
  * Default Customer Service WhatsApp number derived from central contact configuration.
  */
-export const DEFAULT_CS_WHATSAPP_NUMBER = normalizePhoneNumber(CONTACT.phone);
+export const DEFAULT_CS_WHATSAPP_NUMBER = OFFICIAL_CS_WHATSAPP_NUMBER;
 
 /**
  * Validates email format.

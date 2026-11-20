@@ -1,9 +1,9 @@
 import { POSProductItem, LoyaltyMemberProfile, LoyaltyVoucher } from "./types";
 
 export const LOYALTY_MEMBERS: LoyaltyMemberProfile[] = [
-  { id: "mem-1", name: "Ketut Dian", phone: "+62 819-1122-3344", tier: "Gold", points: 340 },
-  { id: "mem-2", name: "Ahmad Faisal", phone: "+62 812-7766-5544", tier: "Silver", points: 180 },
-  { id: "mem-3", name: "Siti Rahma", phone: "+62 818-4455-6677", tier: "Silver", points: 120 },
+  { id: "mem-1", name: "Ketut Dian", phone: "+62 819-1122-3344", tier: "Bronze", points: 340 },
+  { id: "mem-2", name: "Ahmad Faisal", phone: "+62 812-7766-5544", tier: "Bronze", points: 180 },
+  { id: "mem-3", name: "Siti Rahma", phone: "+62 818-4455-6677", tier: "Bronze", points: 120 },
   { id: "mem-4", name: "Dewi Lestari", phone: "+62 813-2233-4455", tier: "Bronze", points: 75 },
   { id: "mem-5", name: "Budi Santoso", phone: "+62 857-9988-7766", tier: "Bronze", points: 40 },
 ];

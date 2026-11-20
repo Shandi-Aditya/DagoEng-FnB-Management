@@ -11,14 +11,13 @@ describe("ai-insight-domain", () => {
     {
       id: "ing-1",
       name: "Biji Kopi",
-      category: "Bahan",
+      category: "Coffee Beans",
       stockNumber: 2,
       min: 5,
       unit: "kg",
       costPerUnit: 100000,
-      reorderAmount: 10,
       supplier: "Supplier A",
-      sku: "BK-01",
+      status: "CRITICAL",
       lastUpdated: "2026-11-10",
     },
   ];

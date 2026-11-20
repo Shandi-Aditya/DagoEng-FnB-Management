@@ -10,7 +10,9 @@ export function formatCurrencyIDR(amount: number): string {
     currency: "IDR",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount);
+  })
+    .format(amount)
+    .replace(/\u00A0/g, " ");
 }
 
 /**

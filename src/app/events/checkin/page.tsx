@@ -234,6 +234,7 @@ export default function EventCheckInDashboardPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Gagal memproses check-in.";
       notify.error("Gagal memproses check-in", msg);
+      throw err;
     } finally {
       setIsProcessingId(null);
     }
@@ -294,6 +295,9 @@ export default function EventCheckInDashboardPage() {
         seatNumber,
         incrementQty: 1,
       });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal memproses check-in.";
+      notify.error("Gagal memproses check-in", msg);
     } finally {
       setIsQuickScanning(false);
       setQuickBarcodeInput("");
@@ -401,10 +405,10 @@ export default function EventCheckInDashboardPage() {
                       if ((t.ticketCount || 1) > 1) {
                         setGroupCheckInBooking(t);
                       } else {
-                        handleCheckIn(t, "CHECKED_IN");
+                        handleCheckIn(t, "CHECKED_IN").catch(() => {});
                       }
                     }}
-                    onReset={(t) => handleCheckIn(t, "REGISTERED", { reset: true })}
+                    onReset={(t) => handleCheckIn(t, "REGISTERED", { reset: true }).catch(() => {})}
                     onViewQR={(t) => setViewQRBooking(t)}
                   />
                 ))
@@ -427,10 +431,10 @@ export default function EventCheckInDashboardPage() {
                   if ((ticket.ticketCount || 1) > 1) {
                     setGroupCheckInBooking(ticket);
                   } else {
-                    handleCheckIn(ticket, "CHECKED_IN");
+                    handleCheckIn(ticket, "CHECKED_IN").catch(() => {});
                   }
                 }}
-                onReset={(ticket) => handleCheckIn(ticket, "REGISTERED", { reset: true })}
+                onReset={(ticket) => handleCheckIn(ticket, "REGISTERED", { reset: true }).catch(() => {})}
                 onViewQR={(ticket) => setViewQRBooking(ticket)}
                 onSwitchToCheckedTab={() => setActiveTab("CHECKED")}
                 activeTab={activeTab}
@@ -457,7 +461,7 @@ export default function EventCheckInDashboardPage() {
           if ((booking.ticketCount || 1) > 1) {
             setGroupCheckInBooking(booking);
           } else {
-            handleCheckIn(booking, "CHECKED_IN");
+            handleCheckIn(booking, "CHECKED_IN").catch(() => {});
           }
         }}
       />
@@ -470,22 +474,34 @@ export default function EventCheckInDashboardPage() {
           const count = booking.ticketCount || 1;
           const currentChecked = booking.checkedInQty || 0;
           const isComplete = currentChecked + 1 >= count;
-          await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
-            incrementQty: 1,
-          });
-          if (isComplete) {
-            setGroupCheckInBooking(null);
+          try {
+            await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
+              incrementQty: 1,
+            });
+            if (isComplete) {
+              setGroupCheckInBooking(null);
+            }
+          } catch {
+            // Handled in handleCheckIn
           }
         }}
         onCheckInAll={async (booking) => {
-          await handleCheckIn(booking, "CHECKED_IN", {
-            targetQty: booking.ticketCount || 1,
-          });
-          setGroupCheckInBooking(null);
+          try {
+            await handleCheckIn(booking, "CHECKED_IN", {
+              targetQty: booking.ticketCount || 1,
+            });
+            setGroupCheckInBooking(null);
+          } catch {
+            // Handled in handleCheckIn
+          }
         }}
         onReset={async (booking) => {
-          await handleCheckIn(booking, "REGISTERED", { reset: true });
-          setGroupCheckInBooking(null);
+          try {
+            await handleCheckIn(booking, "REGISTERED", { reset: true });
+            setGroupCheckInBooking(null);
+          } catch {
+            // Handled in handleCheckIn
+          }
         }}
       />
 

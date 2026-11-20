@@ -180,6 +180,19 @@ describe("Task V-06: Migrasi Data Inti ke Server (Employees, Products, Loyalty C
         ...INITIAL_MEMBERS[0],
         points: 150,
         tier: "Gold",
+        tierHistory: [
+          {
+            id: "th-override-v06",
+            memberId: INITIAL_MEMBERS[0].id,
+            previousTier: "Bronze",
+            newTier: "Gold",
+            pointsAtChange: 150,
+            reason: "Manual override testing",
+            isManualOverride: true,
+            actorName: "Super Admin",
+            timestamp: new Date().toISOString(),
+          },
+        ],
       };
 
       await savePersistentLoyaltyMember(updatedDian);

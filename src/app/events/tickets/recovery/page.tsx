@@ -7,7 +7,6 @@ import {
   AlertCircle,
   RefreshCw,
   MessageCircle,
-  Mail,
   Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,9 +25,9 @@ import {
   formatTicketCodeInput,
   normalizePhoneNumber,
   buildSupportWhatsAppUrl,
-  DEFAULT_CS_WHATSAPP_NUMBER,
   type RecoveryChannel,
 } from "@/features/events-tickets-recovery";
+import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 
 interface RecoverySuccessState {
   channel: RecoveryChannel;
@@ -43,8 +42,6 @@ export default function TicketRecoveryPage() {
 
   // Tab 1 (Cari dengan Kode Booking) states
   const [ticketCode, setTicketCode] = useState("");
-  const [tab1Channel, setTab1Channel] = useState<RecoveryChannel>("whatsapp");
-  const [tab1Phone, setTab1Phone] = useState("");
   const [tab1Email, setTab1Email] = useState("");
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -53,14 +50,12 @@ export default function TicketRecoveryPage() {
   // Tab 2 (Lupa Kode Booking) states
   const [tab2Email, setTab2Email] = useState("");
   const [tab2Phone, setTab2Phone] = useState("");
-  const [tab2Channel, setTab2Channel] = useState<RecoveryChannel>("whatsapp");
   const [isSubmittingPhone, setIsSubmittingPhone] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneSuccess, setPhoneSuccess] = useState<RecoverySuccessState | null>(null);
 
-  // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP, fallback to central contact)
-  const csWhatsappNumber =
-    process.env.NEXT_PUBLIC_CS_WHATSAPP || DEFAULT_CS_WHATSAPP_NUMBER;
+  // CS WhatsApp Contact (central contact configuration)
+  const csWhatsappNumber = OFFICIAL_CS_WHATSAPP_NUMBER;
 
   // Handler for Tab 1: Cari dengan Kode Booking
   const handleRecoverWithCode = async (e: React.FormEvent) => {
@@ -72,17 +67,9 @@ export default function TicketRecoveryPage() {
       return;
     }
 
-    if (tab1Channel === "whatsapp") {
-      const cleanPhone = normalizePhoneNumber(tab1Phone);
-      if (!cleanPhone || cleanPhone.length < 9) {
-        setCodeError("Nomor WhatsApp pemesan wajib diisi (minimal 9 digit).");
-        return;
-      }
-    } else {
-      if (!tab1Email.trim()) {
-        setCodeError("Alamat email pemesan wajib diisi.");
-        return;
-      }
+    if (!tab1Email.trim()) {
+      setCodeError("Alamat email pemesan wajib diisi.");
+      return;
     }
 
     try {
@@ -92,10 +79,9 @@ export default function TicketRecoveryPage() {
 
       const payload = {
         mode: "code",
-        channel: tab1Channel,
+        channel: "email",
         ticketCode: cleanCode,
-        phone: tab1Channel === "whatsapp" ? normalizePhoneNumber(tab1Phone) : undefined,
-        email: tab1Channel === "email" ? tab1Email.trim().toLowerCase() : undefined,
+        email: tab1Email.trim().toLowerCase(),
       };
 
       const res = await fetch("/api/events/bookings/recover", {
@@ -109,13 +95,13 @@ export default function TicketRecoveryPage() {
       if (!res.ok || !json.success) {
         setCodeError(
           json.error ||
-            "Tiket tidak ditemukan atau kontak tidak sesuai. Pastikan kode booking dan kontak sama dengan data saat pemesanan."
+            "Tiket tidak ditemukan atau kontak tidak sesuai. Pastikan kode booking dan alamat email sama dengan data saat pemesanan."
         );
         return;
       }
 
       setCodeSuccess({
-        channel: json.channel || tab1Channel,
+        channel: "email",
         target: json.target,
         configured: json.configured ?? json.emailConfigured ?? true,
         message: json.message,
@@ -132,13 +118,13 @@ export default function TicketRecoveryPage() {
     e.preventDefault();
 
     if (!tab2Email.trim() || !tab2Phone.trim()) {
-      setPhoneError("Alamat email dan nomor WhatsApp/HP terdaftar wajib diisi.");
+      setPhoneError("Alamat email dan nomor telepon terdaftar wajib diisi.");
       return;
     }
 
     const cleanPhone = normalizePhoneNumber(tab2Phone);
     if (cleanPhone.length < 9) {
-      setPhoneError("Nomor WhatsApp minimal 9 digit angka.");
+      setPhoneError("Nomor telepon minimal 9 digit angka.");
       return;
     }
 
@@ -149,7 +135,7 @@ export default function TicketRecoveryPage() {
 
       const payload = {
         mode: "forgot_code",
-        channel: tab2Channel,
+        channel: "email",
         email: tab2Email.trim().toLowerCase(),
         phone: cleanPhone,
       };
@@ -168,7 +154,7 @@ export default function TicketRecoveryPage() {
       }
 
       setPhoneSuccess({
-        channel: json.channel || tab2Channel,
+        channel: "email",
         target: json.target,
         configured: json.configured ?? json.emailConfigured ?? true,
         message: json.message,
@@ -209,16 +195,16 @@ export default function TicketRecoveryPage() {
               <TabsList className="w-full grid grid-cols-2">
                 <TabsTrigger value="code" className="gap-1.5">
                   <Ticket className="size-4" />
-                  <span>Kode Booking</span>
+                  <span>Kode booking</span>
                 </TabsTrigger>
                 <TabsTrigger value="phone" className="gap-1.5">
                   <Phone className="size-4" />
-                  <span>Lupa Kode Booking</span>
+                  <span>Lupa kode booking</span>
                 </TabsTrigger>
               </TabsList>
 
               {/* ========================================================= */}
-              {/* TAB 1: KODE BOOKING + PILIHAN CHANNEL                     */}
+              {/* TAB 1: KODE BOOKING + EMAIL                               */}
               {/* ========================================================= */}
               <TabsContent value="code" className="space-y-4 pt-1">
                 {codeSuccess ? (
@@ -235,10 +221,10 @@ export default function TicketRecoveryPage() {
                     <div className="space-y-1">
                       <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
                         <Ticket className="size-4 text-primary" />
-                        <span>Kirim Tautan E-Tiket via WhatsApp atau Email</span>
+                        <span>Kirim tautan e-tiket ke email</span>
                       </h2>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Masukkan kode booking dan pilih saluran pengiriman untuk menerima tautan akses privat e-tiket Anda.
+                        Masukkan kode booking dan alamat email pemesan untuk menerima tautan akses privat e-tiket Anda.
                       </p>
                     </div>
 
@@ -246,7 +232,7 @@ export default function TicketRecoveryPage() {
                       {/* Booking Code Input */}
                       <div className="space-y-1.5">
                         <Label htmlFor="ticketCode" className="text-xs">
-                          Kode Booking Tiket
+                          Kode booking tiket
                         </Label>
                         <Input
                           id="ticketCode"
@@ -259,75 +245,21 @@ export default function TicketRecoveryPage() {
                         />
                       </div>
 
-                      {/* Delivery Channel Selector */}
+                      {/* Email Input */}
                       <div className="space-y-1.5">
-                        <Label className="text-xs">Kirim Tautan Akses Melalui</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTab1Channel("whatsapp");
-                              setCodeError(null);
-                            }}
-                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
-                              tab1Channel === "whatsapp"
-                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
-                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
-                            }`}
-                          >
-                            <MessageCircle className="size-4 shrink-0" />
-                            <span>WhatsApp</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTab1Channel("email");
-                              setCodeError(null);
-                            }}
-                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
-                              tab1Channel === "email"
-                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
-                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
-                            }`}
-                          >
-                            <Mail className="size-4 shrink-0" />
-                            <span>Email</span>
-                          </button>
-                        </div>
+                        <Label htmlFor="tab1Email" className="text-xs">
+                          Alamat email pemesan (terdaftar saat checkout)
+                        </Label>
+                        <Input
+                          id="tab1Email"
+                          type="email"
+                          required
+                          value={tab1Email}
+                          onChange={(e) => setTab1Email(e.target.value)}
+                          placeholder="email.pemesan@example.com"
+                          className="text-xs"
+                        />
                       </div>
-
-                      {/* Dynamic Contact Input depending on selected channel */}
-                      {tab1Channel === "whatsapp" ? (
-                        <div className="space-y-1.5">
-                          <Label htmlFor="tab1Phone" className="text-xs">
-                            Nomor WhatsApp Pemesan (Terdaftar saat Checkout)
-                          </Label>
-                          <Input
-                            id="tab1Phone"
-                            type="tel"
-                            required
-                            value={tab1Phone}
-                            onChange={(e) => setTab1Phone(e.target.value)}
-                            placeholder="Contoh: 08123456789 atau 628123456789"
-                            className="text-xs"
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <Label htmlFor="tab1Email" className="text-xs">
-                            Alamat Email Pemesan (Terdaftar saat Checkout)
-                          </Label>
-                          <Input
-                            id="tab1Email"
-                            type="email"
-                            required
-                            value={tab1Email}
-                            onChange={(e) => setTab1Email(e.target.value)}
-                            placeholder="email.pemesan@example.com"
-                            className="text-xs"
-                          />
-                        </div>
-                      )}
 
                       {codeError && (
                         <Alert variant="destructive">
@@ -349,11 +281,7 @@ export default function TicketRecoveryPage() {
                         ) : (
                           <Send className="size-4" />
                         )}
-                        <span>
-                          {tab1Channel === "whatsapp"
-                            ? "Kirim Tautan ke WhatsApp"
-                            : "Kirim Tautan ke Email"}
-                        </span>
+                        <span>Kirim tautan ke email</span>
                       </Button>
                     </form>
                   </>
@@ -361,7 +289,7 @@ export default function TicketRecoveryPage() {
               </TabsContent>
 
               {/* ========================================================= */}
-              {/* TAB 2: LUPA KODE BOOKING + PILIHAN CHANNEL                 */}
+              {/* TAB 2: LUPA KODE BOOKING (EMAIL + TELEPON)                 */}
               {/* ========================================================= */}
               <TabsContent value="phone" className="space-y-4 pt-1">
                 {phoneSuccess ? (
@@ -378,17 +306,17 @@ export default function TicketRecoveryPage() {
                     <div className="space-y-1">
                       <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
                         <Phone className="size-4 text-primary" />
-                        <span>Pemulihan Tiket Tanpa Kode Booking</span>
+                        <span>Pemulihan tiket tanpa kode booking</span>
                       </h2>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Masukkan email dan nomor WhatsApp terdaftar. Kami akan memvalidasi data Anda dan mengirimkan tautan e-tiket ke saluran yang Anda pilih.
+                        Masukkan alamat email dan nomor telepon terdaftar. Kami akan memvalidasi data Anda dan mengirimkan tautan e-tiket ke email Anda.
                       </p>
                     </div>
 
                     <form onSubmit={handleRecoverWithPhone} className="space-y-4">
                       <div className="space-y-1.5">
                         <Label htmlFor="tab2Email" className="text-xs">
-                          Alamat Email Pemesan
+                          Alamat email pemesan
                         </Label>
                         <Input
                           id="tab2Email"
@@ -403,7 +331,7 @@ export default function TicketRecoveryPage() {
 
                       <div className="space-y-1.5">
                         <Label htmlFor="tab2Phone" className="text-xs">
-                          Nomor WhatsApp / HP Terdaftar
+                          Nomor telepon / WhatsApp terdaftar
                         </Label>
                         <Input
                           id="tab2Phone"
@@ -414,43 +342,6 @@ export default function TicketRecoveryPage() {
                           placeholder="Contoh: 08123456789 atau 628123456789"
                           className="text-xs"
                         />
-                      </div>
-
-                      {/* Delivery Channel Selector */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Kirim Tautan Akses Melalui</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTab2Channel("whatsapp");
-                              setPhoneError(null);
-                            }}
-                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
-                              tab2Channel === "whatsapp"
-                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
-                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
-                            }`}
-                          >
-                            <MessageCircle className="size-4 shrink-0" />
-                            <span>WhatsApp</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTab2Channel("email");
-                              setPhoneError(null);
-                            }}
-                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
-                              tab2Channel === "email"
-                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
-                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
-                            }`}
-                          >
-                            <Mail className="size-4 shrink-0" />
-                            <span>Email</span>
-                          </button>
-                        </div>
                       </div>
 
                       {phoneError && (
@@ -490,11 +381,7 @@ export default function TicketRecoveryPage() {
                         ) : (
                           <Send className="size-4" />
                         )}
-                        <span>
-                          {tab2Channel === "whatsapp"
-                            ? "Kirim Tautan ke WhatsApp"
-                            : "Kirim Tautan ke Email"}
-                        </span>
+                        <span>Kirim tautan ke email</span>
                       </Button>
                     </form>
                   </>
