@@ -8,7 +8,6 @@ export const NAV_LINKS: readonly { href: string; label: string }[] = [
   { href: "/#kerja", label: "Ruang kerja" },
   { href: "/#makan", label: "Makan" },
   { href: "/#event", label: "Event" },
-  { href: "/#mitra", label: "Untuk mitra" },
 ];
 
 export const HOURS = "Senin sampai Jumat, 09.00 sampai 18.00 WITA";
@@ -30,7 +29,7 @@ export const WORKSPACES: readonly { name: string; line: string; price: string }[
 export const KITCHENS: readonly string[] = ["Kopi Senja", "Dapur Mama", "Manis Bakery", "Warung Bu Narti"];
 
 export const SAMPLE_PRICES: readonly { name: string; price: string }[] = [
-  { name: "Kopi Senja", price: "Rp 24.000" },
+  { name: "Es kopi susu", price: "Rp 24.000" },
   { name: "Beef bowl", price: "Rp 45.000" },
   { name: "Croissant", price: "Rp 20.000" },
 ];
@@ -47,14 +46,19 @@ export const WORK_FEATURES: readonly string[] = [
 ];
 
 export const FOOD_FEATURES: readonly string[] = [
-  "Sistem POS",
-  "Menu digital",
-  "4 mitra aktif",
-  "Struk digital",
-  "Poin member",
+  "Kopi Senja",
+  "Dapur Mama",
+  "Manis Bakery",
+  "Warung Bu Narti",
 ];
 
-export const EVENT_FEATURES: readonly string[] = ["Workshop", "Meetup", "Tiket online", "Check-in QR", "Ajukan event"];
+export const EVENT_FEATURES: readonly string[] = [
+  "Tiket online",
+  "Kelola pembayaran",
+  "Check-in QR",
+  "Kelola event",
+  "Ajukan event",
+];
 
 export type PartnerRoleId = "kitchen" | "tenant" | "organizer" | "staff";
 

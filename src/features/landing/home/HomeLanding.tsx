@@ -1,26 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Building2,
   CalendarDays,
-  ChefHat,
   Clock,
   Laptop,
   Mail,
   MapPin,
-  MonitorSmartphone,
-  Ticket,
   UtensilsCrossed,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 import {
   ADDRESS,
@@ -31,9 +21,7 @@ import {
   INSTAGRAM,
   KITCHENS,
   MAP_URL,
-  PARTNER_ROLES,
   WORK_FEATURES,
-  type PartnerRoleId,
 } from "./home-content";
 import { AmbientUnitFrame, type UnitTheme } from "./AmbientCanvas";
 import { BrandRings } from "./BrandRings";
@@ -75,22 +63,6 @@ const SUMMARY: readonly {
     line: "Workshop dan meetup dari komunitas sekitar, dengan tiket online.",
   },
 ];
-
-const ROLE_ICON: Record<
-  PartnerRoleId,
-  { icon: React.ReactNode; tile: string }
-> = {
-  kitchen: { icon: <ChefHat />, tile: "bg-unit-fnb/15 text-unit-fnb" },
-  tenant: {
-    icon: <Building2 />,
-    tile: "bg-unit-coworking/15 text-unit-coworking",
-  },
-  organizer: { icon: <Ticket />, tile: "bg-unit-event/15 text-unit-event" },
-  staff: {
-    icon: <MonitorSmartphone />,
-    tile: "bg-unit-loyalty/20 text-unit-loyalty",
-  },
-};
 
 const KITCHEN_DOT: readonly string[] = [
   "bg-unit-fnb",
@@ -216,77 +188,23 @@ function FeatureSplit({
         </Reveal>
 
         <Reveal delay={240} duration={950}>
-          <Button size="lg" render={<Link href={action.href} />} nativeButton={false}>
+          <Button
+            size="lg"
+            render={<Link href={action.href} />}
+            nativeButton={false}
+          >
             {action.label}
           </Button>
         </Reveal>
       </div>
 
-      <Reveal delay={120} duration={1050} className="relative isolate min-w-0 w-full">
-        <AmbientUnitFrame unit={unit}>
-          {children}
-        </AmbientUnitFrame>
+      <Reveal
+        delay={120}
+        duration={1050}
+        className="relative isolate min-w-0 w-full"
+      >
+        <AmbientUnitFrame unit={unit}>{children}</AmbientUnitFrame>
       </Reveal>
-    </section>
-  );
-}
-
-function PartnerRoles() {
-  return (
-    <section
-      id="mitra"
-      className={`${SECTION} flex scroll-mt-20 flex-col items-center gap-12 py-16 lg:py-24`}
-      aria-labelledby="mitra-title"
-    >
-      <div className="flex max-w-2xl flex-col items-center gap-4 text-center">
-        <Reveal delay={60} duration={950}>
-          <h2
-            id="mitra-title"
-            className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
-          >
-            Satu sistem untuk semua yang bekerja di sini
-          </h2>
-        </Reveal>
-        <Reveal delay={140} duration={950}>
-          <p className="text-base text-pretty text-muted-foreground sm:text-lg">
-            Dapur mitra, tenant, penyelenggara event, dan kasir memakai aplikasi
-            yang sama, jadi pesanan dan penjualan tidak dicatat dua kali.
-          </p>
-        </Reveal>
-        <Reveal delay={220} duration={950}>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" render={<Link href="/login" />} nativeButton={false}>
-              Masuk sebagai mitra
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              render={<Link href="/events/portal" />}
-              nativeButton={false}
-            >
-              Portal event
-            </Button>
-          </div>
-        </Reveal>
-      </div>
-
-      <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PARTNER_ROLES.map((role, index) => (
-          <Reveal key={role.id} delay={index * STAGGER} className="h-full">
-            <Card className={`h-full ${LIFT}`}>
-              <CardHeader>
-                <span
-                  className={`mb-2 flex size-10 items-center justify-center rounded-lg [&_svg]:size-5 ${ROLE_ICON[role.id].tile}`}
-                >
-                  {ROLE_ICON[role.id].icon}
-                </span>
-                <CardTitle>{role.title}</CardTitle>
-                <CardDescription>{role.line}</CardDescription>
-              </CardHeader>
-            </Card>
-          </Reveal>
-        ))}
-      </div>
     </section>
   );
 }
@@ -472,8 +390,16 @@ function Footer() {
           className={`${SECTION} grid gap-10 pb-12 sm:pb-16 md:grid-cols-[2fr_1fr_1fr_1fr]`}
         >
           <div className="flex flex-col gap-4">
-            <Link href="/" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight">
-              <Image src="/logo-dagoeng.svg" alt="DagoEng Logo" width={22} height={28} />
+            <Link
+              href="/"
+              className="flex items-center gap-2.5 font-semibold text-lg tracking-tight"
+            >
+              <Image
+                src="/logo-dagoeng.svg"
+                alt="DagoEng Logo"
+                width={22}
+                height={28}
+              />
               Dago Creative Hub
             </Link>
             <p className="max-w-xs text-sm text-muted-foreground leading-relaxed">
@@ -491,13 +417,19 @@ function Footer() {
               aria-labelledby={`foot-${column.title}`}
               className="flex flex-col gap-3"
             >
-              <h2 id={`foot-${column.title}`} className="text-sm font-semibold text-foreground">
+              <h2
+                id={`foot-${column.title}`}
+                className="text-sm font-semibold text-foreground"
+              >
                 {column.title}
               </h2>
               <ul className="flex flex-col gap-2.5 text-sm text-muted-foreground">
                 {column.links.map((link) => (
                   <li key={link.href}>
-                    <Link href={link.href} className="transition-colors hover:text-foreground">
+                    <Link
+                      href={link.href}
+                      className="transition-colors hover:text-foreground"
+                    >
                       {link.label}
                     </Link>
                   </li>
@@ -562,8 +494,8 @@ export function HomeLanding() {
         <FeatureSplit
           id="makan"
           unit="food"
-          title="Satu sistem POS untuk 4 mitra"
-          line="Empat mitra mengelola kasir dan menu di sistem ini. Pesan langsung, transaksi tercatat otomatis."
+          title="Empat dapur mitra di satu meja"
+          line="Nikmati beragam pilihan makanan dan minuman. Pesan dengan mudah langsung dari ponsel kamu"
           features={FOOD_FEATURES}
           action={{ href: "/customer?tab=MENU", label: "Lihat menu" }}
         >
@@ -572,14 +504,13 @@ export function HomeLanding() {
         <FeatureSplit
           id="event"
           unit="events"
-          title="Ikut event, atau buat sendiri"
-          line="Komunitas sekitar mengadakan workshop dan meetup di sini. Tiket dibeli online, check-in pakai QR."
+          title="Ikuti event atau kelola event"
+          line="Platform event komunitas di Singaraja. Peserta bisa pesan tiket online, sementara penyelenggara mengelola penjualan tiket, pembayaran, hingga check-in QR."
           features={EVENT_FEATURES}
           action={{ href: "/events", label: "Lihat event" }}
         >
           <EventsPanel className={SPLIT_STAGE} noPhoto />
         </FeatureSplit>
-        <PartnerRoles />
         <Visit />
         <ClosingCta />
       </main>
