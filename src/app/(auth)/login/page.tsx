@@ -38,10 +38,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
-import {
-  HERO_PHOTO,
-  PARTNER_ROLES,
-} from "@/features/landing/home/home-content";
+import { HERO_PHOTO } from "@/features/landing/home/home-content";
 import { BrandLink } from "@/features/landing/home/HomeNav";
 import { ModeToggle } from "@/features/layout/ModeToggle";
 import { resolvePostLoginDestination } from "@/features/auth/login-redirect";
@@ -106,7 +103,22 @@ function sanitizeReturnTo(url: string | null | undefined): string | null {
   return null;
 }
 
-/** Right-hand stage: the hub's photo with a card naming who signs in here, like the landing page's product frames. */
+const LOGIN_HIGHLIGHTS: readonly { title: string; line: string }[] = [
+  {
+    title: "Ruang kerja",
+    line: "Pesan hot desk, audio pod, dan meeting room per jam.",
+  },
+  {
+    title: "Dapur mitra",
+    line: "Pesan makanan dan minuman dari empat dapur mitra langsung dari ponsel.",
+  },
+  {
+    title: "Event di Singaraja",
+    line: "Beli tiket event komunitas atau kelola event melalui portal penyelenggara.",
+  },
+];
+
+/** Right-hand stage: the hub's photo with a card summarizing what visitors and partners access here. */
 function LoginStage() {
   return (
     <div className="hidden p-4 lg:flex lg:p-6">
@@ -124,21 +136,22 @@ function LoginStage() {
         />
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader>
-            <CardTitle>Satu akun untuk semua yang bekerja di sini</CardTitle>
+            <CardTitle>Ruang kerja, kuliner, dan event di Singaraja</CardTitle>
             <CardDescription>
-              Setelah masuk, Anda diarahkan ke halaman sesuai peran.
+              Masuk sebagai member untuk memesan layanan, atau sebagai mitra dan
+              penyelenggara event.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col divide-y">
-              {PARTNER_ROLES.map((role) => (
+              {LOGIN_HIGHLIGHTS.map((item) => (
                 <li
-                  key={role.id}
+                  key={item.title}
                   className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0"
                 >
-                  <span className="text-sm font-medium">{role.title}</span>
+                  <span className="text-sm font-medium">{item.title}</span>
                   <span className="text-xs text-muted-foreground">
-                    {role.line}
+                    {item.line}
                   </span>
                 </li>
               ))}
@@ -349,7 +362,7 @@ function LoginContent() {
               <p className="text-sm text-balance text-muted-foreground">
                 {isRegisterMode
                   ? "Gratis, dan langsung dapat 50 poin."
-                  : "Satu akun untuk staf, mitra, penyelenggara, dan member."}
+                  : "Masuk dengan akun member, mitra, penyelenggara event, atau staf."}
               </p>
             </div>
 
