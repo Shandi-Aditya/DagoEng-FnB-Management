@@ -676,25 +676,42 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       let totalMarginPctSum = 0;
       let totalSoldAll = 0;
 
-      // Pre-aggregate product sales from settled paid orders
-      const salesMap = new Map<string, { qty: number; revenue: number }>();
+      // Index catalog products by normalized ID and normalized name
+      const productById = new Map<string, (typeof products)[number]>();
+      const productByName = new Map<string, (typeof products)[number]>();
+      const salesByProductId = new Map<string, { qty: number; revenue: number }>();
+
+      for (const p of products) {
+        if (p.id) {
+          productById.set(p.id.trim().toLowerCase(), p);
+        }
+        if (p.name) {
+          productByName.set(p.name.trim().toLowerCase(), p);
+        }
+        salesByProductId.set(p.id, { qty: 0, revenue: 0 });
+      }
+
+      // Pre-aggregate product sales from settled paid orders matching the catalog
       for (const order of orders) {
         if (!isSettledPaidOrder(order)) continue;
         for (const item of order.items) {
-          const itemRev = (item.unitPrice || 0) * (item.quantity || 0);
-          totalSoldAll += item.quantity;
-          if (item.productId) {
-            const current = salesMap.get(item.productId) || { qty: 0, revenue: 0 };
-            salesMap.set(item.productId, {
-              qty: current.qty + item.quantity,
-              revenue: current.revenue + itemRev,
-            });
-          }
-          const nameKey = item.productName.trim().toLowerCase();
-          const currentByName = salesMap.get(nameKey) || { qty: 0, revenue: 0 };
-          salesMap.set(nameKey, {
-            qty: currentByName.qty + item.quantity,
-            revenue: currentByName.revenue + itemRev,
+          const normItemId = item.productId ? item.productId.trim().toLowerCase() : "";
+          const normItemName = item.productName ? item.productName.trim().toLowerCase() : "";
+
+          const matchedProduct =
+            (normItemId ? productById.get(normItemId) : undefined) ||
+            (normItemName ? productByName.get(normItemName) : undefined);
+
+          if (!matchedProduct) continue;
+
+          const itemQty = item.quantity || 0;
+          const itemRev = (item.unitPrice || 0) * itemQty;
+          totalSoldAll += itemQty;
+
+          const current = salesByProductId.get(matchedProduct.id) || { qty: 0, revenue: 0 };
+          salesByProductId.set(matchedProduct.id, {
+            qty: current.qty + itemQty,
+            revenue: current.revenue + itemRev,
           });
         }
       }
@@ -708,7 +725,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         const marginPct = p.basePrice > 0 ? (marginRp / p.basePrice) * 100 : 0;
         totalMarginPctSum += marginPct;
 
-        const pSales = salesMap.get(p.id) || salesMap.get(p.name.trim().toLowerCase()) || {
+        const pSales = salesByProductId.get(p.id) || {
           qty: 0,
           revenue: 0,
         };

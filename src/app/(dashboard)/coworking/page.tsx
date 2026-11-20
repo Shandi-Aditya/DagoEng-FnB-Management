@@ -204,6 +204,14 @@ export default function CoworkingPage() {
     const isQris = bookingData.paymentMethod === "QRIS";
     const nowIso = new Date().toISOString();
     const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
+    const cwTaxConfig = settings?.categoryTax?.coworking;
+    const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+    const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
+    const cwTaxType = cwTaxConfig?.taxType || (cwTaxRatePercent > 0 ? "PPN" : "NON_TAX");
+    const basePrice = bookingData.totalAmount;
+    const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
+    const finalTotal = basePrice + taxAmount;
+
     const createdBooking = bookSpace({
       guestName: bookingData.guestName,
       guestPhone: bookingData.guestPhone,
@@ -218,16 +226,16 @@ export default function CoworkingPage() {
       startTime: bookingData.startTime,
       endTime: bookingData.endTime,
       duration: bookingData.duration,
-      price: bookingData.totalAmount,
+      price: basePrice,
       discount: 0,
-      tax: 0,
-      taxType: "NON_TAX",
-      taxRatePercent: 0,
+      tax: taxAmount,
+      taxType: cwTaxType,
+      taxRatePercent: cwTaxRatePercent,
       outletId: targetOutletId,
       createdAt: nowIso,
-      totalAmount: bookingData.totalAmount,
-      paidAmount: isQris ? 0 : bookingData.totalAmount,
-      remainingAmount: isQris ? bookingData.totalAmount : 0,
+      totalAmount: finalTotal,
+      paidAmount: isQris ? 0 : finalTotal,
+      remainingAmount: isQris ? finalTotal : 0,
       paymentStatus: isQris ? "PENDING" : "PAID",
       paymentMethod: bookingData.paymentMethod,
       paymentRef: isQris ? undefined : `PAY-CWK-${Date.now().toString().slice(-6)}`,
@@ -313,9 +321,11 @@ export default function CoworkingPage() {
     const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
     const storedTax = b.tax ?? 0;
 
+    const cleanStartTime = (b.startTime || "09:00").replace(/\s*WITA$/i, "").trim();
+
     setSelectedBookingForReceipt({
       bookingCode: b.bookingCode || b.id,
-      transactionDate: `${b.date}, ${b.startTime || "09:00"} WITA`,
+      transactionDate: `${b.date}, ${cleanStartTime} WITA`,
       guestName: b.guestName,
       guestPhone: b.guestPhone,
       guestEmail: b.guestEmail,

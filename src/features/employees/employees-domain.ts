@@ -461,7 +461,7 @@ export function buildClosingReportData(
     outletAddress: OFFICIAL_HUB_ADDRESS,
     outletPhone: OFFICIAL_CS_DISPLAY_PHONE,
     cashierName: shift?.assignedCashierName || cashierName || "Kasir",
-    closingDateTime: new Date().toLocaleString("id-ID"),
+    closingDateTime: new Date().toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
     shiftName: shift?.shiftName || "Shift Pagi",
     initialCash,
     totalCashSales,

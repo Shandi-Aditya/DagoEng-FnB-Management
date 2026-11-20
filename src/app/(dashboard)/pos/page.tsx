@@ -698,6 +698,7 @@ export default function POSPage() {
       setIsPaymentModalOpen(false);
 
       const nowFormatted = new Date().toLocaleString("id-ID", {
+        timeZone: "Asia/Makassar",
         dateStyle: "medium",
         timeStyle: "short",
       });
@@ -783,7 +784,7 @@ export default function POSPage() {
           tenantName: getTenantName(c.tenantId),
         })),
         cashierName: user?.name || "Kasir Bertugas",
-        timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
+        timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" }) + " WITA",
         kitchenNotes: orderNotes.trim() || undefined,
         isSilent: true,
       };
@@ -1308,7 +1309,8 @@ export default function POSPage() {
       verifiedBooking.id ? `cw-${verifiedBooking.id}` : undefined
     );
 
-    const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
+    const cleanStartTime = verifiedBooking.startTime.replace(/\s*WITA$/i, "").trim();
+    const endTimeFormatted = verifiedBooking.endTime || calculateEndTime(cleanStartTime, verifiedBooking.duration);
     const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
     const coworkReceipt: CoworkingReceiptData = {
       bookingCode: verifiedBooking.bookingCode,
@@ -1331,8 +1333,8 @@ export default function POSPage() {
       outletAddress: cwPublisher.outletAddress,
       outletPhone: cwPublisher.outletPhone,
       bookingDate: verifiedBooking.date,
-      startTime: verifiedBooking.startTime.replace(/\s*WITA$/i, ""),
-      endTime: endTimeFormatted.replace(/\s*WITA$/i, ""),
+      startTime: cleanStartTime,
+      endTime: endTimeFormatted.replace(/\s*WITA$/i, "").trim(),
       duration: verifiedBooking.duration,
       bookingType: "HOURLY",
       basePrice: verifiedBooking.price ?? verifiedBooking.totalAmount,

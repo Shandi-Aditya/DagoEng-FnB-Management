@@ -66,7 +66,10 @@ export function EventAttendeesModal({
 
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
   const activeEventBookings = eventBookings.filter(
-    (b) => b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
+    (b) =>
+      b.paymentStatus !== "CANCELLED" &&
+      b.paymentStatus !== "EXPIRED" &&
+      b.paymentStatus !== "REFUNDED"
   );
 
   const needle = searchQuery.trim().toLowerCase();

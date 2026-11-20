@@ -268,7 +268,7 @@ export default function ReportsPage() {
     try {
       const needle = searchQuery.trim().toLowerCase();
       const paidOrders = filteredOrders.filter((o) => {
-        if (o.paymentStatus !== "PAID" || o.status === "CANCELLED") return false;
+        if (!isSettledPaidOrder(o)) return false;
         if (!needle) return true;
         const fields = [
           o.orderNumber,

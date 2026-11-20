@@ -273,9 +273,185 @@ describe("organizer-sales-dashboard (Task S-15)", () => {
     expect(summary.totalRevenue).toBe(0);
     expect(summary.isSoldOut).toBe(false);
     expect(summary.tierBreakdown).toHaveLength(1);
-    expect(summary.tierBreakdown[0].tierName).toBe("Tiket Masuk (Gratis)");
+    expect(summary.tierBreakdown[0].tierName).toBe("Tiket masuk (gratis)");
     expect(summary.tierBreakdown[0].price).toBe(0);
     expect(summary.tierBreakdown[0].soldCount).toBe(2);
+  });
+
+  it("deducts active PENDING reservations from remainingCapacity and sets isSoldOut", () => {
+    const limitedEvent: CommunityEvent = {
+      id: "evt-pending-1",
+      title: "Exclusive Masterclass",
+      description: "Masterclass terbatas",
+      category: "WORKSHOP",
+      startDate: "2026-12-20T10:00:00Z",
+      endDate: "2026-12-20T13:00:00Z",
+      location: "VIP Lounge",
+      maxCapacity: 10,
+      isPaid: true,
+      price: 100000,
+      posterUrl: "https://example.com/poster.jpg",
+      status: "APPROVED",
+      organizerName: "Tech Community",
+      organizerEmail: "tech@dago.id",
+      organizerPhone: "081234567890",
+      createdAt: "2026-11-01T00:00:00Z",
+      updatedAt: "2026-11-01T00:00:00Z",
+    };
+
+    const nowIso = new Date().toISOString();
+    const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const bookingsWithPending: EventTicketOrder[] = [
+      {
+        id: "ord-paid-1",
+        eventId: "evt-pending-1",
+        eventTitle: "Exclusive Masterclass",
+        ticketCode: "MC-001",
+        guestName: "Paid Guest",
+        guestEmail: "paid@example.com",
+        ticketCount: 4,
+        unitPrice: 100000,
+        totalPrice: 400000,
+        paymentStatus: "PAID",
+        paymentMethod: "MANUAL_TRANSFER",
+        createdAt: nowIso,
+      },
+      {
+        id: "ord-pending-1",
+        eventId: "evt-pending-1",
+        eventTitle: "Exclusive Masterclass",
+        ticketCode: "MC-002",
+        guestName: "Pending Guest",
+        guestEmail: "pending@example.com",
+        ticketCount: 6,
+        unitPrice: 100000,
+        totalPrice: 600000,
+        paymentStatus: "PENDING",
+        paymentMethod: "MANUAL_TRANSFER",
+        expiresAt: futureDate,
+        createdAt: nowIso,
+      },
+    ];
+
+    const summary = calculateEventSalesSummary(limitedEvent, bookingsWithPending);
+    expect(summary.totalCapacity).toBe(10);
+    expect(summary.totalTicketsSold).toBe(4); // only PAID is sold
+    expect(summary.remainingCapacity).toBe(0); // 10 - (4 + 6) = 0
+    expect(summary.isSoldOut).toBe(true);
+  });
+
+  it("separates invitation tickets from soldCount on non-tier events with isSoldOut false", () => {
+    const nonTierEvent: CommunityEvent = {
+      id: "evt-inv-1",
+      title: "Community Concert",
+      description: "Konser komunitas",
+      category: "CREATIVE",
+      startDate: "2026-12-25T19:00:00Z",
+      endDate: "2026-12-25T22:00:00Z",
+      location: "Main Stage",
+      maxCapacity: 100,
+      isPaid: true,
+      price: 50000,
+      posterUrl: "https://example.com/poster.jpg",
+      status: "APPROVED",
+      organizerName: "Art Community",
+      organizerEmail: "art@dago.id",
+      organizerPhone: "081234567890",
+      createdAt: "2026-11-01T00:00:00Z",
+      updatedAt: "2026-11-01T00:00:00Z",
+    };
+
+    const bookingsWithInv: EventTicketOrder[] = [
+      {
+        id: "ord-reg-1",
+        eventId: "evt-inv-1",
+        eventTitle: "Community Concert",
+        ticketCode: "CC-REG-001",
+        guestName: "Regular Buyer",
+        guestEmail: "buyer@example.com",
+        ticketCount: 10,
+        unitPrice: 50000,
+        totalPrice: 500000,
+        paymentStatus: "PAID",
+        paymentMethod: "MANUAL_TRANSFER",
+        createdAt: "2026-11-02T10:00:00Z",
+      },
+      {
+        id: "ord-inv-1",
+        eventId: "evt-inv-1",
+        eventTitle: "Community Concert",
+        ticketCode: "CC-INV-001",
+        guestName: "VIP Guest",
+        guestEmail: "vip@example.com",
+        ticketCount: 5,
+        unitPrice: 0,
+        totalPrice: 0,
+        isInvitation: true,
+        paymentMethod: "INVITATION",
+        paymentStatus: "PAID",
+        createdAt: "2026-11-02T10:00:00Z",
+      },
+    ];
+
+    const summary = calculateEventSalesSummary(nonTierEvent, bookingsWithInv);
+    expect(summary.totalTicketsSold).toBe(15);
+    expect(summary.tierBreakdown).toHaveLength(2);
+
+    const regularRow = summary.tierBreakdown.find((t) => t.tierId === "default")!;
+    expect(regularRow.tierName).toBe("Tiket masuk (reguler)");
+    expect(regularRow.soldCount).toBe(10); // regular buyers only
+    expect(regularRow.revenue).toBe(500000);
+
+    const invRow = summary.tierBreakdown.find((t) => t.tierId === "invitation")!;
+    expect(invRow.tierName).toBe("Tiket undangan");
+    expect(invRow.soldCount).toBe(5);
+    expect(invRow.revenue).toBe(0);
+    expect(invRow.isSoldOut).toBe(false);
+  });
+
+  it("calculates organizer revenue using custom resolveOrganizerSharePercent", () => {
+    const customSplitEvent: CommunityEvent = {
+      id: "evt-split-1",
+      title: "Shared Art Show",
+      description: "Pameran seni",
+      category: "CREATIVE",
+      startDate: "2026-12-25T10:00:00Z",
+      endDate: "2026-12-25T18:00:00Z",
+      location: "Gallery Room",
+      maxCapacity: 50,
+      isPaid: true,
+      price: 200000,
+      posterUrl: "https://example.com/poster.jpg",
+      status: "APPROVED",
+      organizerName: "Gallery Guild",
+      organizerEmail: "gallery@dago.id",
+      organizerPhone: "081234567890",
+      customPlatformFeePercent: 10,
+      createdAt: "2026-11-01T00:00:00Z",
+      updatedAt: "2026-11-01T00:00:00Z",
+    };
+
+    const bookings: EventTicketOrder[] = [
+      {
+        id: "ord-split-1",
+        eventId: "evt-split-1",
+        eventTitle: "Shared Art Show",
+        ticketCode: "SAS-001",
+        guestName: "Art Fan",
+        guestEmail: "fan@example.com",
+        ticketCount: 1,
+        unitPrice: 200000,
+        totalPrice: 200000,
+        paymentStatus: "PAID",
+        paymentMethod: "MANUAL_TRANSFER",
+        createdAt: "2026-11-02T10:00:00Z",
+      },
+    ];
+
+    const summary = calculateEventSalesSummary(customSplitEvent, bookings);
+    expect(summary.totalRevenue).toBe(200000);
+    // 90% of 200,000 = 180,000
+    expect(summary.organizerEarnings).toBe(180000);
   });
 
   it("filters attendees by event ID for isolated organizer views", () => {

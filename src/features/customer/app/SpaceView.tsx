@@ -14,6 +14,7 @@ import { isRangeFree, slotAvailability } from "@/features/customer/space-slots";
 import { COWORKING_MAX_HOURS, isWithinCoworkingHours } from "@/lib/operating-hours";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import { useSettings } from "@/contexts/SettingsContext";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 
 const DAYS_AHEAD = 10;
@@ -67,6 +68,12 @@ interface Selection {
 
 /** Pick a day, see each room's free hours, tap one to book it. */
 export function SpaceView(props: SpaceViewProps) {
+  const { settings } = useSettings();
+  const cwTaxConfig = settings?.categoryTax?.coworking;
+  const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+  const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
+  const cwTaxType = cwTaxConfig?.taxType || (cwTaxRatePercent > 0 ? "PPN" : "NON_TAX");
+
   const days = useMemo(upcomingDays, []);
   const [date, setDate] = useState(
     () => days.find((d) => props.isDateOpen(d.value).isOpen)?.value ?? days[0].value
@@ -94,7 +101,9 @@ export function SpaceView(props: SpaceViewProps) {
     hours < COWORKING_MAX_HOURS &&
     isWithinCoworkingHours(selection.start, hours + 1) &&
     isRangeFree(props.bookings, selection.space.id, date, selection.start, hours + 1);
-  const total = selection ? selection.space.hourlyRate * hours : 0;
+  const basePrice = selection ? selection.space.hourlyRate * hours : 0;
+  const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
+  const total = basePrice + taxAmount;
   const canSubmit = selection !== null && name.trim() !== "" && phone.trim() !== "";
 
   return (
@@ -238,8 +247,8 @@ export function SpaceView(props: SpaceViewProps) {
                   </Field>
                 </FieldGroup>
                 <div className="flex justify-between text-xs text-muted-foreground px-1">
-                  <span>{formatCoworkingTaxLabel(0)}</span>
-                  <span className="font-mono tabular-nums">Rp 0</span>
+                  <span>{formatCoworkingTaxLabel(taxAmount, cwTaxType, cwTaxRatePercent)}</span>
+                  <span className="font-mono tabular-nums">{formatCurrencyIDR(taxAmount)}</span>
                 </div>
                 <div className="flex justify-between rounded-xl bg-muted/50 p-4 text-base font-medium">
                   <span>Total</span>

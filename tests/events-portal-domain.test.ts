@@ -242,6 +242,52 @@ describe("events-portal-domain", () => {
     expect(rows[0][8]).toBe("Hadir");
   });
 
+  it("exports 'Pengajuan refund' when refundStatus is REQUESTED even if paymentStatus is PAID, and 'Tiket undangan' for invitations", () => {
+    const refundAndInvBookings: EventTicketOrder[] = [
+      {
+        id: "bk-refund-1",
+        eventId: "evt-1",
+        eventTitle: "Latte Art Workshop",
+        ticketCode: "DAGO-EVT-REF",
+        guestName: "Dewi Lestari",
+        guestEmail: "dewi@example.com",
+        ticketCount: 1,
+        totalPrice: 50000,
+        paymentStatus: "PAID",
+        refundStatus: "REQUESTED",
+        checkInStatus: "REGISTERED",
+        createdAt: "2026-11-05T08:00:00Z",
+      },
+      {
+        id: "bk-inv-1",
+        eventId: "evt-1",
+        eventTitle: "Latte Art Workshop",
+        ticketCode: "DAGO-EVT-INV",
+        guestName: "VIP Ambassador",
+        guestEmail: "vip@example.com",
+        isInvitation: true,
+        paymentMethod: "INVITATION",
+        paymentStatus: "PAID",
+        ticketCount: 1,
+        totalPrice: 0,
+        checkInStatus: "REGISTERED",
+        createdAt: "2026-11-05T08:00:00Z",
+      },
+    ];
+
+    const rows = buildAttendeesExportRows(refundAndInvBookings);
+    expect(rows).toHaveLength(2);
+
+    // Row 1: Refund requested
+    expect(rows[0][0]).toBe("DAGO-EVT-REF");
+    expect(rows[0][7]).toBe("Pengajuan refund");
+
+    // Row 2: Invitation ticket
+    expect(rows[1][0]).toBe("DAGO-EVT-INV");
+    expect(rows[1][2]).toBe("Tiket undangan");
+    expect(rows[1][7]).toBe("Lunas");
+  });
+
   it("re-exports or maps status labels and tones consistently with events-admin", () => {
     expect(eventStatusLabel("APPROVED")).toBe("Disetujui");
     expect(eventStatusTone("APPROVED")).toBe("success");

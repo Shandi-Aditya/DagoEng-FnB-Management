@@ -242,6 +242,13 @@ function CustomerApp() {
     setIsBooking(true);
     try {
       const subtotal = request.space.hourlyRate * request.hours;
+      const cwTaxConfig = settings?.categoryTax?.coworking;
+      const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+      const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
+      const cwTaxType = cwTaxConfig?.taxType || (cwTaxRatePercent > 0 ? "PPN" : "NON_TAX");
+      const tax = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(subtotal * (cwTaxRatePercent / 100)) : 0;
+      const totalAmount = subtotal + tax;
+
       const booking = bookSpace({
         spaceId: request.space.id,
         spaceName: request.space.name,
@@ -256,9 +263,12 @@ function CustomerApp() {
         duration: request.hours,
         price: subtotal,
         discount: 0,
-        totalAmount: subtotal,
+        tax,
+        taxType: cwTaxType,
+        taxRatePercent: cwTaxRatePercent,
+        totalAmount,
         paidAmount: 0,
-        remainingAmount: subtotal,
+        remainingAmount: totalAmount,
         paymentMethod: request.payment,
         paymentStatus: "PENDING",
         notes: `Booking ${request.space.name}`,
@@ -267,7 +277,7 @@ function CustomerApp() {
       if (request.payment === "QRIS") {
         openPayment(null, booking);
       } else {
-        notify.success("Ruang dipesan", `${request.space.name}, bayar ${formatCurrencyIDR(subtotal)} di kasir.`);
+        notify.success("Ruang dipesan", `${request.space.name}, bayar ${formatCurrencyIDR(totalAmount)} di kasir.`);
         setView("activity");
       }
     } catch (err: unknown) {
@@ -376,12 +386,6 @@ function CustomerApp() {
       progress: Math.min(100, Math.round(((points - next.from) / (next.min - next.from)) * 100)),
     };
   }, [currentMember, settings.loyaltyTiers]);
-
-  const outlet = activeOutlet || {
-    name: "Singaraja",
-    address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
-    phone: "",
-  };
 
   return (
     <>
