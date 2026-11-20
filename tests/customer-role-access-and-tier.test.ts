@@ -241,7 +241,12 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
       expect(Array.isArray(json.members)).toBe(true);
     });
 
-    it("normalizes Ketut Dian with 55 points to Bronze on GET", async () => {
+    it("normalizes Ketut Dian with stale Silver tier and 55 points to Bronze on GET", async () => {
+      const staleMembers = INITIAL_MEMBERS.map((m) =>
+        m.id === "mem-001" ? { ...m, tier: "Silver" as const, points: 55, tierHistory: [] } : m
+      );
+      await writePersistentData("loyalty_members.json", staleMembers);
+
       vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
         isAuthenticated: true,
         userId: "user-mgr",
@@ -379,6 +384,290 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
 
       expect(storedKetut.phone).toBe("+62 819-1122-3344");
       expect(storedKetut.identityNo).not.toBe("");
+    });
+
+    it("rejects PUT with string points ('5000') or negative points with HTTP 400 so CASHIER cannot escalate to Platinum", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "user-cashier",
+        name: "Kasir Test",
+        role: "CASHIER",
+        scopeLevel: "OUTLET",
+      } as any);
+
+      const strReq = new NextRequest("http://localhost:3000/api/loyalty/members", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "mem-001",
+          updates: { points: "5000" },
+        }),
+      });
+      const strRes = await PUT(strReq);
+      expect(strRes.status).toBe(400);
+
+      const negReq = new NextRequest("http://localhost:3000/api/loyalty/members", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "mem-001",
+          updates: { points: -10 },
+        }),
+      });
+      const negRes = await PUT(negReq);
+      expect(negRes.status).toBe(400);
+    });
+
+    it("preserves Owner manual tier override when CASHIER updates member with same tier or omitted tier", async () => {
+      const overriddenMembers = INITIAL_MEMBERS.map((m) =>
+        m.id === "mem-001"
+          ? {
+              ...m,
+              tier: "Gold" as const,
+              points: 55,
+              tierHistory: [
+                {
+                  id: "th-owner-gold",
+                  memberId: "mem-001",
+                  previousTier: "Bronze" as const,
+                  newTier: "Gold" as const,
+                  pointsAtChange: 55,
+                  reason: "VIP Tamu Owner",
+                  isManualOverride: true,
+                  actorName: "Owner Hub",
+                  timestamp: "2026-11-01T00:00:00.000Z",
+                },
+              ],
+            }
+          : m
+      );
+      await writePersistentData("loyalty_members.json", overriddenMembers);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "user-cashier",
+        name: "Kasir Test",
+        role: "CASHIER",
+        scopeLevel: "OUTLET",
+      } as any);
+
+      // Case 1: CASHIER sends updates.tier === "Gold" (existing overridden tier)
+      const resSame = await PUT(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: { favoriteItem: "Americano", tier: "Gold" },
+          }),
+        })
+      );
+      expect(resSame.status).toBe(200);
+      const jsonSame = await resSame.json();
+      expect(jsonSame.member.tier).toBe("Gold");
+
+      // Case 2: CASHIER omits updates.tier
+      const resOmit = await PUT(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: { favoriteItem: "Matcha Latte" },
+          }),
+        })
+      );
+      expect(resOmit.status).toBe(200);
+      const jsonOmit = await resOmit.json();
+      expect(jsonOmit.member.tier).toBe("Gold");
+    });
+
+    it("blocks CASHIER from mutating existing tierHistory entries or wiping email/phone/identityNo", async () => {
+      const seededMembers = INITIAL_MEMBERS.map((m) =>
+        m.id === "mem-001"
+          ? {
+              ...m,
+              tierHistory: [
+                {
+                  id: "th-auto-old",
+                  memberId: "mem-001",
+                  previousTier: "Bronze" as const,
+                  newTier: "Bronze" as const,
+                  pointsAtChange: 55,
+                  reason: "Sync awal",
+                  isManualOverride: false,
+                  actorName: "Sistem",
+                  timestamp: "2026-11-01T00:00:00.000Z",
+                },
+              ],
+            }
+          : m
+      );
+      await writePersistentData("loyalty_members.json", seededMembers);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "user-cashier",
+        name: "Kasir Test",
+        role: "CASHIER",
+        scopeLevel: "OUTLET",
+      } as any);
+
+      // Reusing old id with isManualOverride: true must fail with 403
+      const tamperRes = await PUT(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              tierHistory: [
+                {
+                  id: "th-auto-old",
+                  memberId: "mem-001",
+                  previousTier: "Bronze",
+                  newTier: "Platinum",
+                  pointsAtChange: 55,
+                  reason: "Hijack",
+                  isManualOverride: true,
+                  actorName: "Kasir",
+                  timestamp: "2026-11-01T00:00:00.000Z",
+                },
+              ],
+            },
+          }),
+        })
+      );
+      expect(tamperRes.status).toBe(403);
+
+      // Attempting to wipe phone, email, and overwrite identityNo must preserve original PII
+      const wipeRes = await PUT(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              phone: "",
+              email: "   ",
+              identityNo: "9999999999",
+            },
+          }),
+        })
+      );
+      expect(wipeRes.status).toBe(200);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "user-mgr",
+        name: "Manager Test",
+        role: "MANAGER",
+        scopeLevel: "OUTLET",
+      } as any);
+      const checkRes = await GET(new NextRequest("http://localhost:3000/api/loyalty/members"));
+      const checkJson = await checkRes.json();
+      const ketut = checkJson.members.find((m: LoyaltyMember) => m.id === "mem-001");
+      expect(ketut.phone).toBe("+62 819-1122-3344");
+      expect(ketut.email).toBe("ketut.dian@gmail.com");
+      expect(ketut.identityNo).toBe("NIK-510801990001");
+    });
+
+    it("enforces POST /api/loyalty/members role, forced 0 points, allowUpdate block, PII masking, and * phone guard", async () => {
+      // CUSTOMER cannot POST
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "usr-cust-1",
+        name: "Ketut Dian",
+        email: "ketut.dian@gmail.com",
+        role: "CUSTOMER",
+        scopeLevel: "OUTLET",
+      } as any);
+      const custRes = await POST(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Baru", phone: "081200009999" }),
+        })
+      );
+      expect(custRes.status).toBe(403);
+
+      // CASHIER cannot create member with masked phone (*)
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "user-cashier",
+        name: "Kasir Test",
+        role: "CASHIER",
+        scopeLevel: "OUTLET",
+      } as any);
+      const maskedPhoneRes = await POST(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Baru", phone: "0812****9999" }),
+        })
+      );
+      expect(maskedPhoneRes.status).toBe(400);
+
+      // CASHIER creating new member gets forced points = 0 and masked response PII
+      const createRes = await POST(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Member Baru Kasir",
+            phone: "081277778888",
+            email: "baru.kasir@gmail.com",
+            identityNo: "5108011122334455",
+            points: 5000,
+            tier: "Platinum",
+          }),
+        })
+      );
+      expect(createRes.status).toBe(200);
+      const createJson = await createRes.json();
+      expect(createJson.member.points).toBe(0);
+      expect(createJson.member.tier).toBe("Bronze");
+      expect(createJson.member.phone).toContain("****");
+      expect(createJson.member.identityNo).toBe("");
+
+      // CASHIER allowUpdate on existing member is blocked (returns existing without overwriting)
+      const dupRes = await POST(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Ketut Dian Hacked",
+            phone: "+62 819-1122-3344",
+            points: 9999,
+            allowUpdate: true,
+          }),
+        })
+      );
+      expect(dupRes.status).toBe(200);
+      const dupJson = await dupRes.json();
+      expect(dupJson.isExisting).toBe(true);
+      expect(dupJson.member.points).toBe(55);
+      expect(dupJson.member.tier).toBe("Bronze");
+    });
+
+    it("returns unmasked own email and phone (with blank identityNo) for CUSTOMER on GET", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "usr-ketut-1",
+        name: "Ketut Dian",
+        email: "ketut.dian@gmail.com",
+        role: "CUSTOMER",
+        scopeLevel: "OUTLET",
+      } as any);
+
+      const res = await GET(new NextRequest("http://localhost:3000/api/loyalty/members"));
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.members).toHaveLength(1);
+      expect(json.members[0].id).toBe("mem-001");
+      expect(json.members[0].email).toBe("ketut.dian@gmail.com");
+      expect(json.members[0].phone).toBe("+62 819-1122-3344");
+      expect(json.members[0].identityNo).toBe("");
     });
   });
 });

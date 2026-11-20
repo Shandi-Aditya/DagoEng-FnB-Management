@@ -13,9 +13,6 @@ import { DEFAULT_PLATFORM_SETTINGS, PlatformSettings } from "@/types/settings";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import {
   canUserViewFullCustomerContacts,
-  calculateTierFromPoints,
-  maskCustomerEmail,
-  maskCustomerPhone,
   resolveAuthoritativeMemberTier,
   sanitizeMemberForRole,
 } from "@/lib/loyalty-policy";
@@ -61,7 +58,7 @@ async function reconcileMembersWithServerLoyaltyPoints(
       );
       if (member.tier !== normalizedTier) {
         const normalizedMember: LoyaltyMember = { ...member, tier: normalizedTier };
-        await savePersistentLoyaltyMember(normalizedMember);
+        await savePersistentLoyaltyMember(normalizedMember, platformSettings.loyaltyTiers);
         result.push(normalizedMember);
       } else {
         result.push(member);
@@ -187,7 +184,7 @@ async function reconcileMembersWithServerLoyaltyPoints(
       pointHistory: history,
     };
 
-    const saved = await savePersistentLoyaltyMember(reconciled);
+    const saved = await savePersistentLoyaltyMember(reconciled, platformSettings.loyaltyTiers);
     result.push(saved);
   }
 
@@ -210,7 +207,11 @@ export async function GET(req: NextRequest) {
     const tier = searchParams.get("tier");
     const status = searchParams.get("status");
 
-    const storedMembers = await getPersistentLoyaltyMembers();
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
+    const storedMembers = await getPersistentLoyaltyMembers(platformSettings.loyaltyTiers);
     let members = await reconcileMembersWithServerLoyaltyPoints(storedMembers);
 
     if (phone) {
@@ -253,7 +254,10 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const sanitizedMembers = members.map((m) => sanitizeMemberForRole(m, auth.role));
+    const sanitizedMembers =
+      auth.role === "CUSTOMER"
+        ? members.map((m) => ({ ...m, identityNo: "" }))
+        : members.map((m) => sanitizeMemberForRole(m, auth.role));
 
     return NextResponse.json({
       success: true,
@@ -291,15 +295,36 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const memberData = body.member || body;
 
-    if (!memberData || !memberData.name || !memberData.phone) {
+    if (
+      !memberData ||
+      typeof memberData.name !== "string" ||
+      !memberData.name.trim() ||
+      typeof memberData.phone !== "string" ||
+      !memberData.phone.trim()
+    ) {
       return NextResponse.json(
         { success: false, error: "Nama dan nomor telepon member wajib diisi." },
         { status: 400 }
       );
     }
 
+    if (memberData.phone.includes("*")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Nomor telepon tidak valid atau mengandung karakter tersamarkan (*).",
+        },
+        { status: 400 }
+      );
+    }
+
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
+
     const normPhone = normalizeLoyaltyPhone(memberData.phone);
-    const existingList = await getPersistentLoyaltyMembers();
+    const existingList = await getPersistentLoyaltyMembers(platformSettings.loyaltyTiers);
     const existing = existingList.find(
       (m) => normalizeLoyaltyPhone(m.phone) === normPhone
     );
@@ -315,11 +340,6 @@ export async function POST(req: NextRequest) {
         isExisting: true,
       });
     }
-
-    const platformSettings = await readSeededPersistentData<PlatformSettings>(
-      "platform_settings.json",
-      () => DEFAULT_PLATFORM_SETTINGS
-    );
 
     const nowIso = new Date().toISOString();
 
@@ -381,7 +401,7 @@ export async function POST(req: NextRequest) {
       tierHistory,
     };
 
-    const saved = await savePersistentLoyaltyMember(member);
+    const saved = await savePersistentLoyaltyMember(member, platformSettings.loyaltyTiers);
 
     return NextResponse.json({
       success: true,
@@ -428,7 +448,12 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const existingList = await getPersistentLoyaltyMembers();
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
+
+    const existingList = await getPersistentLoyaltyMembers(platformSettings.loyaltyTiers);
     const target = existingList.find((m) => m.id === id);
 
     if (!target) {
@@ -438,40 +463,90 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const platformSettings = await readSeededPersistentData<PlatformSettings>(
-      "platform_settings.json",
-      () => DEFAULT_PLATFORM_SETTINGS
-    );
+    if (updates.points !== undefined) {
+      if (
+        typeof updates.points !== "number" ||
+        !Number.isFinite(updates.points) ||
+        updates.points < 0
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Nilai poin tidak valid. Harus berupa angka non-negatif yang valid.",
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const isManagerial = canUserViewFullCustomerContacts(auth.role);
     const nextPoints =
-      typeof updates.points === "number" ? updates.points : target.points;
+      updates.points !== undefined ? updates.points : target.points;
 
-    // Expected natural tier from point calculation
-    const calculatedNaturalTier = calculateTierFromPoints(
-      nextPoints,
+    const expectedCurrentTier = resolveAuthoritativeMemberTier(
+      target,
       platformSettings.loyaltyTiers
     );
+    const expectedNextTier = resolveAuthoritativeMemberTier(
+      {
+        tier: target.tier,
+        points: nextPoints,
+        tierHistory: target.tierHistory,
+      },
+      platformSettings.loyaltyTiers
+    );
+    const isLatestManualOverride =
+      target.tierHistory?.[0]?.isManualOverride === true;
 
-    // Bedakan auto-tier dari poin vs manual override
-    // Periksa manual override hanya jika:
-    // 1. updates.tierHistory menambah entri baru dengan isManualOverride === true
-    // 2. updates.tier yang dikirim eksplisit berbeda dari tier hasil perhitungan poin (calculatedNaturalTier)
-    const hasNewManualOverrideEntry =
-      Array.isArray(updates.tierHistory) &&
-      updates.tierHistory.some(
-        (th: any) =>
-          th.isManualOverride === true &&
-          !target.tierHistory?.some((tth) => tth.id === th.id)
-      );
+    // Validate updates.tierHistory for non-managerial callers (CASHIER)
+    let hasTierHistoryTampering = false;
+    if (!isManagerial && updates.tierHistory !== undefined) {
+      const existingHistory = Array.isArray(target.tierHistory) ? target.tierHistory : [];
+      if (!Array.isArray(updates.tierHistory)) {
+        hasTierHistoryTampering = true;
+      } else if (updates.tierHistory.length < existingHistory.length) {
+        hasTierHistoryTampering = true;
+      } else {
+        const addedCount = updates.tierHistory.length - existingHistory.length;
+        const addedEntries = updates.tierHistory.slice(0, addedCount);
+        const suffixEntries = updates.tierHistory.slice(addedCount);
+        const existingIds = new Set(existingHistory.map((e) => e.id));
+
+        const invalidAdded = addedEntries.some(
+          (entry: any) =>
+            !entry ||
+            typeof entry !== "object" ||
+            entry.isManualOverride === true ||
+            (typeof entry.id === "string" && existingIds.has(entry.id))
+        );
+
+        const tamperedExisting = existingHistory.some((orig, idx) => {
+          const cand = suffixEntries[idx];
+          if (!cand || typeof cand !== "object") return true;
+          return (
+            cand.id !== orig.id ||
+            cand.memberId !== orig.memberId ||
+            cand.previousTier !== orig.previousTier ||
+            cand.newTier !== orig.newTier ||
+            cand.pointsAtChange !== orig.pointsAtChange ||
+            Boolean(cand.isManualOverride) !== Boolean(orig.isManualOverride) ||
+            cand.reason !== orig.reason ||
+            cand.actorName !== orig.actorName ||
+            cand.timestamp !== orig.timestamp
+          );
+        });
+
+        hasTierHistoryTampering = invalidAdded || tamperedExisting;
+      }
+    }
 
     const isExplicitTierDrift =
-      Boolean(updates.tier) && updates.tier !== calculatedNaturalTier;
+      Boolean(updates.tier) &&
+      updates.tier !== expectedNextTier &&
+      updates.tier !== expectedCurrentTier &&
+      updates.tier !== target.tier;
 
-    const isManualOverrideAttempt =
-      hasNewManualOverrideEntry || isExplicitTierDrift;
-
-    if (isManualOverrideAttempt && !isManagerial) {
+    if ((hasTierHistoryTampering || isExplicitTierDrift) && !isManagerial) {
       return NextResponse.json(
         {
           success: false,
@@ -493,16 +568,33 @@ export async function PUT(req: NextRequest) {
       delete updates.identityNo;
     }
 
-    // Jangan pernah menimpa identityNo tersimpan dengan string kosong "" apabila bukan SUPER_ADMIN | OWNER | MANAGER
-    if (!isManagerial && (updates.identityNo === "" || updates.identityNo === undefined)) {
-      updates.identityNo = target.identityNo;
+    if (!isManagerial) {
+      delete updates.identityNo;
+      if (
+        updates.phone === null ||
+        (typeof updates.phone === "string" && updates.phone.trim() === "") ||
+        (updates.phone !== undefined && typeof updates.phone !== "string")
+      ) {
+        delete updates.phone;
+      }
+      if (
+        updates.email === null ||
+        (typeof updates.email === "string" && updates.email.trim() === "") ||
+        (updates.email !== undefined && typeof updates.email !== "string")
+      ) {
+        delete updates.email;
+      }
     }
 
     const mergedTierHistory = updates.tierHistory || target.tierHistory || [];
 
     const calculatedTier = resolveAuthoritativeMemberTier(
       {
-        tier: isManagerial ? (updates.tier || target.tier) : calculatedNaturalTier,
+        tier: isManagerial
+          ? updates.tier || target.tier
+          : isLatestManualOverride
+          ? target.tier
+          : expectedNextTier,
         points: nextPoints,
         tierHistory: mergedTierHistory,
       },
@@ -512,11 +604,15 @@ export async function PUT(req: NextRequest) {
     const merged: LoyaltyMember = {
       ...target,
       ...updates,
+      points: nextPoints,
       tier: calculatedTier,
       id,
     };
 
-    const saved = await savePersistentLoyaltyMember(merged);
+    const saved = await savePersistentLoyaltyMember(
+      merged,
+      platformSettings.loyaltyTiers
+    );
 
     return NextResponse.json({
       success: true,

@@ -12,7 +12,7 @@ import { OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
 import { LoyaltyMember } from "@/types/loyalty";
 import { resolveAuthoritativeMemberTier } from "@/lib/loyalty-policy";
-import { DEFAULT_PLATFORM_SETTINGS } from "@/types/settings";
+import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from "@/types/settings";
 import {
   INITIAL_EMPLOYEES,
   INITIAL_PRODUCTS,
@@ -619,21 +619,28 @@ export async function savePersistentCustomCategory(category: string): Promise<st
   return updatedCats;
 }
 
-export async function getPersistentLoyaltyMembers(): Promise<LoyaltyMember[]> {
+export async function getPersistentLoyaltyMembers(
+  tierConfig?: PlatformSettings["loyaltyTiers"]
+): Promise<LoyaltyMember[]> {
+  const effectiveTierConfig = tierConfig ?? DEFAULT_PLATFORM_SETTINGS.loyaltyTiers;
   const members = await readSeededPersistentData<LoyaltyMember[]>(
     FILE_LOYALTY_MEMBERS,
     () => [...INITIAL_MEMBERS]
   );
   return (Array.isArray(members) ? members : []).map((m) => ({
     ...m,
-    tier: resolveAuthoritativeMemberTier(m, DEFAULT_PLATFORM_SETTINGS.loyaltyTiers),
+    tier: resolveAuthoritativeMemberTier(m, effectiveTierConfig),
   }));
 }
 
-export async function savePersistentLoyaltyMember(member: LoyaltyMember): Promise<LoyaltyMember> {
+export async function savePersistentLoyaltyMember(
+  member: LoyaltyMember,
+  tierConfig?: PlatformSettings["loyaltyTiers"]
+): Promise<LoyaltyMember> {
+  const effectiveTierConfig = tierConfig ?? DEFAULT_PLATFORM_SETTINGS.loyaltyTiers;
   const normalizedMember: LoyaltyMember = {
     ...member,
-    tier: resolveAuthoritativeMemberTier(member, DEFAULT_PLATFORM_SETTINGS.loyaltyTiers),
+    tier: resolveAuthoritativeMemberTier(member, effectiveTierConfig),
   };
   let saved: LoyaltyMember = normalizedMember;
   await mutateSeededPersistentData<LoyaltyMember[]>(
