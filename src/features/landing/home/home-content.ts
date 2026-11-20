@@ -9,7 +9,6 @@ export const NAV_LINKS: readonly { href: string; label: string }[] = [
   { href: "/#kerja", label: "Ruang kerja" },
   { href: "/#makan", label: "Makan" },
   { href: "/#event", label: "Event" },
-  { href: "/#mitra", label: "Untuk mitra" },
 ];
 
 export const HOURS = "Senin sampai Jumat, 09.00 sampai 18.00 WITA";
@@ -33,7 +32,7 @@ export const WORKSPACES: readonly { name: string; line: string; price: string }[
 export const KITCHENS: readonly string[] = ["Kopi Senja", "Dapur Mama", "Manis Bakery", "Warung Bu Narti"];
 
 export const SAMPLE_PRICES: readonly { name: string; price: string }[] = [
-  { name: "Kopi Senja", price: "Rp 24.000" },
+  { name: "Es kopi susu", price: "Rp 24.000" },
   { name: "Beef bowl", price: "Rp 45.000" },
   { name: "Croissant", price: "Rp 20.000" },
 ];
@@ -50,14 +49,19 @@ export const WORK_FEATURES: readonly string[] = [
 ];
 
 export const FOOD_FEATURES: readonly string[] = [
-  "Sistem POS",
-  "Menu digital",
-  "4 mitra aktif",
-  "Struk digital",
-  "Poin member",
+  "Kopi Senja",
+  "Dapur Mama",
+  "Manis Bakery",
+  "Warung Bu Narti",
 ];
 
-export const EVENT_FEATURES: readonly string[] = ["Workshop", "Meetup", "Tiket online", "Check-in QR", "Ajukan event"];
+export const EVENT_FEATURES: readonly string[] = [
+  "Tiket online",
+  "Kelola pembayaran",
+  "Check-in QR",
+  "Kelola event",
+  "Ajukan event",
+];
 
 export type PartnerRoleId = "kitchen" | "tenant" | "organizer" | "staff";
 
@@ -80,8 +84,6 @@ export interface LibraryPhoto {
   credit: { author: string; href: string; license: string };
 }
 
-const COMMONS = "https://upload.wikimedia.org/wikipedia/commons/thumb";
-
 export const HERO_PHOTO: LibraryPhoto = {
   src: "/images/events/coworking1.jpeg",
   srcSet: "/images/events/coworking1.jpeg",
@@ -93,15 +95,13 @@ export const HERO_PHOTO: LibraryPhoto = {
 };
 
 export const FOOD_PHOTO: LibraryPhoto = {
-  src: `${COMMONS}/5/52/Espresso_coffee_pouring_from_retro_espresso_machine.jpg/1280px-Espresso_coffee_pouring_from_retro_espresso_machine.jpg`,
-  srcSet: [960, 1280, 1920]
-    .map((w) => `${COMMONS}/5/52/Espresso_coffee_pouring_from_retro_espresso_machine.jpg/${w}px-Espresso_coffee_pouring_from_retro_espresso_machine.jpg ${w}w`)
-    .join(", "),
-  width: 4016,
-  height: 6016,
-  alt: "Espresso mengalir dari mesin ke dua gelas",
+  src: "/images/fnb.jpg",
+  srcSet: "/images/fnb.jpg",
+  width: 1000,
+  height: 667,
+  alt: "Area kuliner dan dapur mitra Dago Creative Hub",
   wanted: "Bar Kopi Senja atau satu hidangan dari dapur mitra, difoto dekat",
-  credit: { author: "Shixart1985", href: "https://commons.wikimedia.org/wiki/File:Espresso_coffee_pouring_from_retro_espresso_machine.jpg", license: "CC BY 2.0" },
+  credit: { author: "Dago Creative Hub", href: "", license: "Dokumentasi internal" },
 };
 
 export const EVENT_PHOTO: LibraryPhoto = {

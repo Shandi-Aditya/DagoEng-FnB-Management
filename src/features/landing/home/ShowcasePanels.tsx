@@ -14,7 +14,7 @@ import { useUpcomingEvents } from "@/features/landing/use-upcoming-events";
 import { cn } from "@/lib/utils";
 
 import { BrandRings } from "./BrandRings";
-import { EVENT_PHOTO, FOOD_PHOTO, HERO_PHOTO, KITCHENS, PARTNER_ROLES, SAMPLE_PRICES, WORKSPACES, type LibraryPhoto } from "./home-content";
+import { EVENT_PHOTO, FOOD_PHOTO, HERO_PHOTO, KITCHENS, PARTNER_ROLES, WORKSPACES, type LibraryPhoto } from "./home-content";
 
 type StageTint = "event" | "loyalty";
 
@@ -131,27 +131,25 @@ export function WorkspacePanel({
 }) {
   if (compact) {
     return (
-      <div className={cn("relative flex items-center justify-center p-3 sm:p-6", className)}>
-        <div className="relative w-full max-w-xl sm:min-w-[506px] h-[365.5px] rounded-2xl overflow-hidden bg-muted">
-          <Image
-            src={HERO_PHOTO.src}
-            alt={HERO_PHOTO.alt}
-            fill
-            sizes="(min-width: 64rem) 1100px, 100vw"
-            priority={priority}
-            className="object-cover saturate-85"
-          />
-          <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
-            <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
-              <CardHeader className="p-0 gap-0.5">
-                <CardTitle className="text-sm font-semibold">Tarif ruang kerja</CardTitle>
-                <CardDescription className="text-xs">Per jam, dipesan dari ponsel</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <PriceList items={WORKSPACES} compact />
-              </CardContent>
-            </Card>
-          </div>
+      <div className={cn("relative w-full overflow-hidden rounded-2xl bg-muted", className)}>
+        <Image
+          src={HERO_PHOTO.src}
+          alt={HERO_PHOTO.alt}
+          fill
+          sizes="(min-width: 64rem) 560px, 100vw"
+          priority={priority}
+          className="object-cover saturate-85"
+        />
+        <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
+          <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
+            <CardHeader className="p-0 gap-0.5">
+              <CardTitle className="text-sm font-semibold">Tarif ruang kerja</CardTitle>
+              <CardDescription className="text-xs">Per jam, dipesan dari ponsel</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <PriceList items={WORKSPACES} compact />
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -178,6 +176,24 @@ export function WorkspacePanel({
   );
 }
 
+function KitchenList({ compact = false }: { compact?: boolean }) {
+  return (
+    <ul className="flex flex-col divide-y divide-border/60">
+      {KITCHENS.map((kitchen) => (
+        <li
+          key={kitchen}
+          className={cn(
+            "first:pt-0 last:pb-0",
+            compact ? "py-1.5" : "py-2.5",
+          )}
+        >
+          <span className={cn("font-medium", compact ? "text-xs" : "text-sm")}>{kitchen}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function FoodPanel({
   className,
   compact = false,
@@ -189,26 +205,24 @@ export function FoodPanel({
 }) {
   if (compact) {
     return (
-      <div className={cn("relative flex items-center justify-center p-3 sm:p-6", className)}>
-        <div className="relative w-full max-w-xl sm:min-w-[506px] h-[365.5px] rounded-2xl overflow-hidden bg-muted">
-          <Image
-            src={FOOD_PHOTO.src}
-            alt={FOOD_PHOTO.alt}
-            fill
-            sizes="(min-width: 64rem) 1100px, 100vw"
-            className="object-cover saturate-85"
-          />
-          <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
-            <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
-              <CardHeader className="p-0 gap-0.5">
-                <CardTitle className="text-sm font-semibold">Menu mitra POS</CardTitle>
-                <CardDescription className="truncate text-xs">Pesan online, masuk ke kasir</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <PriceList items={SAMPLE_PRICES} compact />
-              </CardContent>
-            </Card>
-          </div>
+      <div className={cn("relative w-full overflow-hidden rounded-2xl bg-muted", className)}>
+        <Image
+          src={FOOD_PHOTO.src}
+          alt={FOOD_PHOTO.alt}
+          fill
+          sizes="(min-width: 64rem) 560px, 100vw"
+          className="object-cover saturate-85"
+        />
+        <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
+          <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
+            <CardHeader className="p-0 gap-0.5">
+              <CardTitle className="text-sm font-semibold">Daftar dapur mitra</CardTitle>
+              <CardDescription className="truncate text-xs">Pesan dari meja, diantar langsung</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <KitchenList compact />
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -223,11 +237,11 @@ export function FoodPanel({
     >
       <Card className="w-full max-w-sm py-3 px-4 gap-2.5 rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md">
         <CardHeader className="p-0 gap-0.5">
-          <CardTitle className="text-base font-semibold">Menu mitra POS</CardTitle>
-          <CardDescription className="truncate text-xs">Pesan online, masuk ke kasir</CardDescription>
+          <CardTitle className="text-base font-semibold">Daftar dapur mitra</CardTitle>
+          <CardDescription className="truncate text-xs">Pesan dari meja, diantar langsung</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <PriceList items={SAMPLE_PRICES} />
+          <KitchenList />
         </CardContent>
       </Card>
     </PhotoStage>
@@ -305,8 +319,8 @@ export function EventsPanel({
   const card = (
     <Card className="w-full max-w-xl rounded-2xl border border-border/60 bg-background/95 shadow-none backdrop-blur-md p-3.5 sm:p-6">
       <CardHeader className="p-0 pb-2.5 sm:pb-4">
-        <CardTitle className="text-base sm:text-lg">Event berikutnya</CardTitle>
-        <CardDescription className="text-xs sm:text-sm">Langsung dari jadwal Dago Creative Hub</CardDescription>
+        <CardTitle className="text-base sm:text-lg">Event di Singaraja</CardTitle>
+        <CardDescription className="text-xs sm:text-sm">Jadwal event terbaru yang bisa kamu ikuti</CardDescription>
       </CardHeader>
       <CardContent className="p-0 flex flex-col gap-3 sm:gap-4">
         <EventList />
@@ -319,7 +333,7 @@ export function EventsPanel({
 
   if (noPhoto) {
     return (
-      <div className={cn("relative flex items-center justify-center p-1 sm:p-6 w-full", className)}>
+      <div className={cn("relative flex items-center justify-center w-full", className)}>
         {card}
       </div>
     );
@@ -353,8 +367,8 @@ export function PartnerPanel({
     >
       <Card className="w-full max-w-xl shadow-lg">
         <CardHeader>
-          <CardTitle>Satu sistem untuk semua yang bekerja di sini</CardTitle>
-          <CardDescription>Kasir, dapur, tenant, dan penyelenggara memakai data yang sama</CardDescription>
+          <CardTitle>Ekosistem F&amp;B, coworking, dan event</CardTitle>
+          <CardDescription>Dapur mitra, tenant, penyelenggara event, dan tim operasional dalam satu ekosistem</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col divide-y">
