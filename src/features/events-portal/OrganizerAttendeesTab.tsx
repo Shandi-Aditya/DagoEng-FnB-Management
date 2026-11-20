@@ -54,6 +54,7 @@ interface OrganizerAttendeesTabProps {
   dateRange: DateRange | null;
   onDateRangeChange: (range: DateRange | null) => void;
   onExportCSV: (rows: EventTicketOrder[]) => void;
+  onInvitationIssued?: () => void;
 }
 
 export function OrganizerAttendeesTab({
@@ -66,6 +67,7 @@ export function OrganizerAttendeesTab({
   dateRange,
   onDateRangeChange,
   onExportCSV,
+  onInvitationIssued,
 }: OrganizerAttendeesTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -73,6 +75,12 @@ export function OrganizerAttendeesTab({
   const [checkInStatusFilter, setCheckInStatusFilter] = useState("ALL");
   const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
   const [isIssueInviteOpen, setIsIssueInviteOpen] = useState(false);
+  const [inviteApprovedEventId, setInviteApprovedEventId] = useState<string>("");
+
+  const approvedEvents = useMemo(
+    () => events.filter((e) => e.status === "APPROVED"),
+    [events]
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -104,6 +112,15 @@ export function OrganizerAttendeesTab({
   }, [filteredAttendees, currentPage, pageSize]);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
+  const targetInviteEvent = useMemo(() => {
+    if (selectedEventId !== "ALL") {
+      return selectedEvent || null;
+    }
+    return (
+      approvedEvents.find((e) => e.id === (inviteApprovedEventId || approvedEvents[0]?.id)) ||
+      null
+    );
+  }, [selectedEventId, selectedEvent, approvedEvents, inviteApprovedEventId]);
   const paidSeats = bookings
     .filter((b) => b.eventId === selectedEventId && b.paymentStatus === "PAID")
     .reduce((sum, b) => sum + (b.ticketCount || 1), 0);
@@ -219,10 +236,25 @@ export function OrganizerAttendeesTab({
               <span>Reset</span>
             </Button>
           ) : null}
+          {selectedEventId === "ALL" && approvedEvents.length > 0 && (
+            <div className="w-full sm:w-48">
+              <NativeSelect
+                value={inviteApprovedEventId || approvedEvents[0]?.id || ""}
+                onChange={(e) => setInviteApprovedEventId(e.target.value)}
+                aria-label="Pilih event untuk undangan"
+              >
+                {approvedEvents.map((e) => (
+                  <NativeSelectOption key={e.id} value={e.id}>
+                    {e.title}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
           <Button
             size="sm"
             onClick={() => setIsIssueInviteOpen(true)}
-            disabled={!selectedEvent && events.length === 0}
+            disabled={!targetInviteEvent}
           >
             <Mail className="size-4" />
             <span>Terbitkan tiket undangan</span>
@@ -445,7 +477,10 @@ export function OrganizerAttendeesTab({
       <IssueInvitationDialog
         open={isIssueInviteOpen}
         onOpenChange={setIsIssueInviteOpen}
-        event={selectedEvent || events[0] || null}
+        event={targetInviteEvent}
+        onInvitationIssued={() => {
+          onInvitationIssued?.();
+        }}
       />
     </div>
   );

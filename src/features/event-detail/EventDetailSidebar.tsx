@@ -241,15 +241,15 @@ export function EventDetailSidebar({
             <span>QR code check-in resmi Dago Creative Hub</span>
           </div>
           <div className="pt-2 border-t text-xs space-y-1">
-            <span className="font-medium text-foreground block">Ketentuan Refund:</span>
+            <span className="font-medium text-foreground block">Ketentuan refund:</span>
             {event.refundPolicy?.policyType === "REFUNDABLE_UNTIL_H_MINUS" ? (
               <span className="text-muted-foreground block leading-relaxed">
-                Dapat dibatalkan hingga H-{event.refundPolicy.hMinusDays ?? 0} sebelum event dimulai
+                Bisa refund sampai H-{event.refundPolicy.hMinusDays ?? 0} sebelum acara
                 {Boolean(event.refundPolicy.refundFeePercent) && ` (potongan biaya ${event.refundPolicy.refundFeePercent}%)`}.
               </span>
             ) : (
               <span className="text-muted-foreground block leading-relaxed">
-                Event ini memberlakukan kebijakan tidak dapat dibatalkan atau di-refund (No Refund).
+                Event ini memberlakukan kebijakan tanpa refund (tiket tidak dapat dibatalkan).
               </span>
             )}
           </div>

@@ -4,7 +4,7 @@ import React from "react";
 import { RotateCcw, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { EventRefundPolicy, EventRefundPolicyType } from "@/types/event";
 
 interface EventRefundPolicyEditorProps {
@@ -95,8 +95,8 @@ export function EventRefundPolicyEditor({
             onChange={(e) => handlePolicyTypeChange(e.target.value as EventRefundPolicyType)}
             className="text-xs"
           >
-            <option value="NO_REFUND">Tidak bisa refund (tiket tidak dapat dibatalkan)</option>
-            <option value="REFUNDABLE_UNTIL_H_MINUS">Bisa refund sampai H-x sebelum acara</option>
+            <NativeSelectOption value="NO_REFUND">Tidak bisa refund (tiket tidak dapat dibatalkan)</NativeSelectOption>
+            <NativeSelectOption value="REFUNDABLE_UNTIL_H_MINUS">Bisa refund sampai H-x sebelum acara</NativeSelectOption>
           </NativeSelect>
         </div>
 
@@ -109,8 +109,8 @@ export function EventRefundPolicyEditor({
               <Input
                 id="refund-h-minus"
                 type="number"
-                min={1}
-                max={30}
+                min={0}
+                max={60}
                 disabled={isLocked}
                 value={hMinusDays}
                 onChange={(e) => handleHMinusDaysChange(Number(e.target.value))}

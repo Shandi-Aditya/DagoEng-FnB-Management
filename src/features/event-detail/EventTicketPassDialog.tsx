@@ -94,9 +94,9 @@ export function EventTicketPassDialog({
               {ticket.paymentStatus === "REFUNDED"
                 ? "Di-refund"
                 : ticket.refundStatus === "REQUESTED"
-                ? "Pengajuan Refund"
+                ? "Pengajuan refund"
                 : ticket.isInvitation || ticket.paymentMethod === "INVITATION"
-                ? "Tiket Undangan"
+                ? "Tiket undangan"
                 : isPaid
                 ? "Lunas"
                 : (ticket.paymentProofUrl ? "Menunggu verifikasi" : "Menunggu bayar")}
@@ -170,7 +170,7 @@ export function EventTicketPassDialog({
           {/* Refund Notice */}
           {ticket.refundStatus === "REQUESTED" && (
             <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning space-y-0.5">
-              <span className="font-medium block">Pengajuan Refund Sedang Diproses</span>
+              <span className="font-medium block">Pengajuan refund sedang diproses</span>
               <p className="text-muted-foreground leading-relaxed">
                 Pengembalian dana sebesar {formatCurrencyIDR(ticket.refundRequest?.refundAmount || ticket.totalPrice)} sedang menunggu proses oleh admin.
               </p>
@@ -179,7 +179,7 @@ export function EventTicketPassDialog({
 
           {ticket.paymentStatus === "REFUNDED" && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-0.5">
-              <span className="font-medium block">Tiket Telah Di-refund</span>
+              <span className="font-medium block">Tiket telah di-refund</span>
               <p className="text-muted-foreground leading-relaxed">
                 Tiket ini telah dibatalkan dan dananya telah disetujui untuk dikembalikan. Tiket tidak dapat digunakan untuk check-in.
               </p>

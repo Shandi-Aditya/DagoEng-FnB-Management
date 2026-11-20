@@ -775,6 +775,7 @@ export default function CommunityOrganizerPortalPage() {
                 dateRange={attendeeDateRange}
                 onDateRangeChange={setAttendeeDateRange}
                 onExportCSV={handleExportCSV}
+                onInvitationIssued={() => loadPortalData(activeEmail)}
               />
             )}
 

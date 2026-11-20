@@ -96,6 +96,7 @@ import {
   MIN_EVENT_CAPACITY,
   MAX_EVENT_CAPACITY,
   resolveEffectivePlatformFeePercent,
+  resolveOrganizerSharePercent,
   validateEventTicketTiers,
   validateEventRefundPolicy,
   CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
@@ -2597,18 +2598,19 @@ export async function updateEventDetails(
   id: string,
   updates: Partial<Omit<CommunityEvent, "id" | "createdAt" | "status">>
 ): Promise<CommunityEvent> {
-  const hasCapacityChange =
+  const requiresBookingsCheck =
     (updates.maxCapacity !== undefined &&
       updates.maxCapacity !== null &&
       (updates.maxCapacity as unknown) !== "") ||
-    updates.ticketTiers !== undefined;
+    updates.ticketTiers !== undefined ||
+    updates.refundPolicy !== undefined;
 
   let updatedAllEvents: CommunityEvent[] | null = null;
 
   const executeUpdate = async (tx?: any) => {
     return withEventLock(async () => {
       let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
-      let allBookings: EventTicketOrder[] = hasCapacityChange
+      let allBookings: EventTicketOrder[] = requiresBookingsCheck
         ? await loadBookingsFromTxOrDisk(tx)
         : [];
 
@@ -2759,7 +2761,30 @@ export async function updateEventDetails(
         if (!refVal.valid || !refVal.value) {
           throw new Error(refVal.error || "Kebijakan refund tidak valid.");
         }
-        sanitizedUpdates.refundPolicy = refVal.value;
+        const newPolicy = refVal.value;
+
+        // Server guard: Tolak pelemahan refundPolicy apabila event sudah memiliki booking PAID aktif
+        const activePaidBookingsCount = allBookings.filter(
+          (b) => b.eventId === existing.id && b.paymentStatus === "PAID"
+        ).length;
+
+        if (activePaidBookingsCount > 0 && existing.refundPolicy) {
+          const oldPolicy = existing.refundPolicy;
+          const wasRefundable = oldPolicy.policyType === "REFUNDABLE_UNTIL_H_MINUS";
+          const isNowNonRefundable = newPolicy.policyType === "NO_REFUND";
+          const oldHMinus = oldPolicy.hMinusDays ?? 0;
+          const newHMinus = newPolicy.hMinusDays ?? 0;
+          const oldFee = oldPolicy.refundFeePercent ?? 0;
+          const newFee = newPolicy.refundFeePercent ?? 0;
+
+          if (wasRefundable && (isNowNonRefundable || newHMinus > oldHMinus || newFee > oldFee)) {
+            throw new Error(
+              "Kebijakan refund tidak dapat diperketat atau diubah menjadi non-refundable karena sudah ada tiket yang lunas terjual."
+            );
+          }
+        }
+
+        sanitizedUpdates.refundPolicy = newPolicy;
       }
       if (updates.customPlatformFeePercent !== undefined) {
         if (isEventRevenueSplitLocked(id)) {
@@ -2802,7 +2827,7 @@ export async function updateEventDetails(
   return withBookingLock(async () => {
     let committedEventsList: CommunityEvent[] | null = null;
     const result = await runWithDistributedEventsStorageLock(async (tx) => {
-      if (hasCapacityChange && tx) {
+      if (requiresBookingsCheck && tx) {
         const eventLockKey = getEventAdvisoryLockKey(id);
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(${eventLockKey})::text AS lock_status`;
       }
@@ -3446,7 +3471,8 @@ export async function createEventPromoCode(
   eventId: string,
   payload: Omit<EventPromoCode, "id" | "eventId" | "usedCount" | "createdAt" | "updatedAt"> & {
     id?: string;
-  }
+  },
+  actor?: { name?: string; role?: string }
 ): Promise<EventPromoCode> {
   return withEventLock(async () => {
     let committedPromo: EventPromoCode | null = null;
@@ -3505,7 +3531,7 @@ export async function createEventPromoCode(
           discountValue: Number(payload.discountValue),
           maxDiscountAmount: payload.maxDiscountAmount ? Number(payload.maxDiscountAmount) : undefined,
           minOrderAmount: payload.minOrderAmount ? Number(payload.minOrderAmount) : undefined,
-          quota: Math.max(existing.usedCount, effectiveQuota),
+          quota: effectiveQuota === 0 ? 0 : Math.max(existing.usedCount, effectiveQuota),
           validFrom: normValidFrom,
           validUntil: normValidUntil,
           isActive: payload.isActive !== false,
@@ -3550,8 +3576,8 @@ export async function createEventPromoCode(
           category: "CONFIGURATION",
           severity: "MEDIUM",
           status: "SUCCESS",
-          actorName: event.organizerName || "Organizer",
-          actorRole: "ORGANIZER",
+          actorName: actor?.name || event.organizerName || "Organizer",
+          actorRole: (actor?.role?.toUpperCase() === "ADMIN" || actor?.role?.toUpperCase() === "SUPER_ADMIN") ? (actor.role.toUpperCase() as any) : "ORGANIZER",
           recordId: promoRecord.id,
           description: `Membuat atau memperbarui kode promo [${promoRecord.code}] untuk event [${event.title}] (${event.id}).`,
           newValue: JSON.stringify(promoRecord),
@@ -3967,6 +3993,7 @@ export async function requestTicketRefund(
         accountNumber: sanitizeHtmlText(payload.accountNumber.trim()),
         accountHolder: sanitizeHtmlText(payload.accountHolder.trim()),
         refundAmount: eligibility.calculatedRefundAmount,
+        feeDeducted: eligibility.feeDeducted,
         status: "REQUESTED",
       };
 
@@ -4082,7 +4109,10 @@ export async function adminProcessTicketRefund(
             (b) => b.eventId === event.id && b.id !== booking.id && b.paymentStatus === "PAID"
           );
           const projectedOrganizerRevenue = remainingPaidBookings.reduce(
-            (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round(b.totalPrice * 0.8)),
+            (sum, b) =>
+              sum +
+              (b.organizerRevenueAmount ??
+                Math.round(b.totalPrice * (resolveOrganizerSharePercent(event) / 100))),
             0
           );
           const projectedBalance = projectedOrganizerRevenue - totalPaidAndProcessingPayouts;
@@ -4319,6 +4349,8 @@ export async function createEventBooking(
       }
 
       await expirePendingBookings();
+      allEvents = await loadEventsFromTxOrDisk(tx);
+      allBookings = await loadBookingsFromTxOrDisk(tx);
       const activeBookings = allBookings.filter(
         (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
       );
@@ -4414,6 +4446,7 @@ export async function createEventBooking(
             if (eventIndex !== -1) {
               allEvents[eventIndex] = event;
               await saveEventsToDisk(allEvents, { tx });
+              syncEventsToLocalDiskAndCache(allEvents, Date.now());
             }
           }
         }
@@ -5128,6 +5161,14 @@ export async function updateBookingPaymentStatus(
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
 
+      if (status === "CANCELLED" || status === "EXPIRED") {
+        const allEvents = loadEventsFromDisk();
+        if (recalculateAllPromoUsageCounts(allEvents, committedBookingsList)) {
+          await saveEventsToDisk(allEvents);
+          syncEventsToLocalDiskAndCache(allEvents, Date.now());
+        }
+      }
+
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket berbayar diverifikasi (PAID)
       if (previousStatus !== "PAID" && status === "PAID") {
         try {
@@ -5658,11 +5699,12 @@ export async function organizerResubmitEvent(
   updates: Partial<EventSubmissionPayload>,
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
-  const hasCapacityChange =
+  const requiresBookingsCheck =
     (updates.maxCapacity !== undefined &&
       updates.maxCapacity !== null &&
       (updates.maxCapacity as unknown) !== "") ||
-    updates.ticketTiers !== undefined;
+    updates.ticketTiers !== undefined ||
+    updates.refundPolicy !== undefined;
 
   let updatedAllEvents: CommunityEvent[] | null = null;
 
@@ -5670,7 +5712,7 @@ export async function organizerResubmitEvent(
     return withEventLock(async () => {
       const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
       let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
-      let allBookings: EventTicketOrder[] = hasCapacityChange
+      let allBookings: EventTicketOrder[] = requiresBookingsCheck
         ? await loadBookingsFromTxOrDisk(tx)
         : [];
 
@@ -5830,7 +5872,30 @@ export async function organizerResubmitEvent(
         if (!refVal.valid || !refVal.value) {
           throw new Error(refVal.error || "Kebijakan refund tidak valid.");
         }
-        newRefundPolicy = refVal.value;
+        const candidatePolicy = refVal.value;
+
+        // Server guard: Tolak pelemahan refundPolicy apabila event sudah memiliki booking PAID aktif
+        const activePaidBookingsCount = allBookings.filter(
+          (b) => b.eventId === existing.id && b.paymentStatus === "PAID"
+        ).length;
+
+        if (activePaidBookingsCount > 0 && existing.refundPolicy) {
+          const oldPolicy = existing.refundPolicy;
+          const wasRefundable = oldPolicy.policyType === "REFUNDABLE_UNTIL_H_MINUS";
+          const isNowNonRefundable = candidatePolicy.policyType === "NO_REFUND";
+          const oldHMinus = oldPolicy.hMinusDays ?? 0;
+          const newHMinus = candidatePolicy.hMinusDays ?? 0;
+          const oldFee = oldPolicy.refundFeePercent ?? 0;
+          const newFee = candidatePolicy.refundFeePercent ?? 0;
+
+          if (wasRefundable && (isNowNonRefundable || newHMinus > oldHMinus || newFee > oldFee)) {
+            throw new Error(
+              "Kebijakan refund tidak dapat diperketat atau diubah menjadi non-refundable karena sudah ada tiket yang lunas terjual."
+            );
+          }
+        }
+
+        newRefundPolicy = candidatePolicy;
       }
 
       const updated: CommunityEvent = {
@@ -5869,7 +5934,7 @@ export async function organizerResubmitEvent(
   return withBookingLock(async () => {
     let committedEventsList: CommunityEvent[] | null = null;
     const result = await runWithDistributedEventsStorageLock(async (tx) => {
-      if (hasCapacityChange && tx) {
+      if (requiresBookingsCheck && tx) {
         const eventLockKey = getEventAdvisoryLockKey(eventId);
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(${eventLockKey})::text AS lock_status`;
       }
@@ -6342,7 +6407,10 @@ export async function processOrganizerPayout(
           (b) => b.eventId === event.id && b.paymentStatus === "PAID"
         );
         const totalNetPaidRevenue = paidBookings.reduce(
-          (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round(b.totalPrice * 0.8)),
+          (sum, b) =>
+            sum +
+            (b.organizerRevenueAmount ??
+              Math.round(b.totalPrice * (resolveOrganizerSharePercent(event) / 100))),
           0
         );
         const otherPaidPayouts = (event.payoutHistory || [])

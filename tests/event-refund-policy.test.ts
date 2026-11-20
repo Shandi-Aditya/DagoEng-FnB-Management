@@ -5,6 +5,9 @@ import {
   createEventSubmission,
   updateEventStatus,
   createEventBooking,
+  updateBookingPaymentStatus,
+  updateEventDetails,
+  organizerResubmitEvent,
   validateTicketRefundEligibility,
   requestTicketRefund,
   adminProcessTicketRefund,
@@ -303,6 +306,119 @@ describe("Event Refund Policy & Cancellation - Task S-14", () => {
       await expect(
         organizerCheckInAttendee("kitchen@dagoeng.com", testBooking.id, "CHECKED_IN")
       ).rejects.toThrow(/status REFUNDED tidak dapat digunakan untuk check-in/i);
+    });
+  });
+
+  describe("3. Refund Policy Server Hardening Guards (S-14)", () => {
+    let guardEventId: string;
+    let guardPaidBooking: EventTicketOrder;
+
+    beforeAll(async () => {
+      const submission = await createEventSubmission({
+        title: "Bali Tech Policy Guard Test",
+        category: "WORKSHOP",
+        description: "Uji coba proteksi pelemahan kebijakan refund.",
+        startDate: new Date(Date.now() + 10 * 86400000).toISOString(),
+        endDate: new Date(Date.now() + 10 * 86400000 + 7200000).toISOString(),
+        location: "Lab Dago",
+        maxCapacity: 50,
+        organizerName: "Tech Policy Lab",
+        organizerEmail: "policy@dagotech.id",
+        organizerPhone: "081299887766",
+        isPaid: true,
+        price: 150000,
+        posterUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87",
+        refundPolicy: {
+          policyType: "REFUNDABLE_UNTIL_H_MINUS",
+          hMinusDays: 3,
+          refundFeePercent: 10,
+        },
+      });
+
+      guardEventId = submission.id;
+      await updateEventStatus(guardEventId, "APPROVED", {
+        adminNotes: "Disetujui untuk uji coba refund policy guard.",
+      });
+
+      const booking = await createEventBooking({
+        eventId: guardEventId,
+        guestName: "Doni Pratama",
+        guestEmail: "doni.guard@example.com",
+        guestPhone: "081298765432",
+        ticketCount: 1,
+      });
+
+      guardPaidBooking = await updateBookingPaymentStatus(booking.id, "PAID", {
+        actorName: "Admin",
+      });
+    });
+
+    it("3.1 rejects updateEventDetails weakening refundPolicy to NO_REFUND when event has PAID bookings", async () => {
+      await expect(
+        updateEventDetails(guardEventId, {
+          refundPolicy: {
+            policyType: "NO_REFUND",
+          },
+        })
+      ).rejects.toThrow(/tidak dapat diperketat atau diubah menjadi non-refundable/i);
+    });
+
+    it("3.2 rejects updateEventDetails increasing hMinusDays or refundFeePercent when event has PAID bookings", async () => {
+      await expect(
+        updateEventDetails(guardEventId, {
+          refundPolicy: {
+            policyType: "REFUNDABLE_UNTIL_H_MINUS",
+            hMinusDays: 7, // weakened from 3 to 7
+            refundFeePercent: 10,
+          },
+        })
+      ).rejects.toThrow(/tidak dapat diperketat atau diubah menjadi non-refundable/i);
+
+      await expect(
+        updateEventDetails(guardEventId, {
+          refundPolicy: {
+            policyType: "REFUNDABLE_UNTIL_H_MINUS",
+            hMinusDays: 3,
+            refundFeePercent: 25, // weakened fee from 10 to 25
+          },
+        })
+      ).rejects.toThrow(/tidak dapat diperketat atau diubah menjadi non-refundable/i);
+    });
+
+    it("3.3 rejects organizerResubmitEvent weakening refundPolicy when event has PAID bookings", async () => {
+      await expect(
+        organizerResubmitEvent("policy@dagotech.id", guardEventId, {
+          refundPolicy: {
+            policyType: "NO_REFUND",
+          },
+        })
+      ).rejects.toThrow(/tidak dapat diperketat atau diubah menjadi non-refundable/i);
+    });
+
+    it("3.4 allows refundPolicy improvement (e.g. reducing fee or reducing hMinusDays)", async () => {
+      const improved = await updateEventDetails(guardEventId, {
+        refundPolicy: {
+          policyType: "REFUNDABLE_UNTIL_H_MINUS",
+          hMinusDays: 2, // better for customer: 2 days before
+          refundFeePercent: 5, // better for customer: 5% fee
+        },
+      });
+
+      expect(improved.refundPolicy?.hMinusDays).toBe(2);
+      expect(improved.refundPolicy?.refundFeePercent).toBe(5);
+    });
+
+    it("3.5 stores feeDeducted on refundRequest object when attendee requests refund", async () => {
+      const refundOrder = await requestTicketRefund(guardPaidBooking.id, {
+        reason: "Ada keperluan mendadak",
+        bankName: "BCA",
+        accountNumber: "1234567890",
+        accountHolder: "Doni Pratama",
+      });
+
+      expect(refundOrder.refundRequest?.feeDeducted).toBeDefined();
+      expect(refundOrder.refundRequest?.feeDeducted).toBe(7500); // 5% of 150000
+      expect(refundOrder.refundRequest?.refundAmount).toBe(142500); // 150000 - 7500
     });
   });
 });

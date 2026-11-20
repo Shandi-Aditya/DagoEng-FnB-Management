@@ -163,6 +163,26 @@ export function TicketRefundSection({
   const netRefund = refundEligibility?.calculatedRefundAmount ?? totalPrice;
   const feeDeducted = refundEligibility?.feeDeducted ?? 0;
 
+  const deadlineWita = React.useMemo(() => {
+    if (!refundEligibility?.deadlineDate) return null;
+    try {
+      const d = new Date(refundEligibility.deadlineDate);
+      if (isNaN(d.getTime())) return null;
+      return (
+        new Intl.DateTimeFormat("id-ID", {
+          timeZone: "Asia/Makassar",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(d) + " WITA"
+      );
+    } catch {
+      return null;
+    }
+  }, [refundEligibility?.deadlineDate]);
+
   return (
     <>
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -198,6 +218,12 @@ export function TicketRefundSection({
                 <div className="flex justify-between text-muted-foreground">
                   <span>Potongan biaya:</span>
                   <span className="font-mono tabular-nums">-{formatCurrencyIDR(feeDeducted)}</span>
+                </div>
+              )}
+              {deadlineWita && (
+                <div className="flex justify-between text-muted-foreground pt-1 border-t border-border/40">
+                  <span>Batas pengajuan:</span>
+                  <span className="font-medium text-foreground">{deadlineWita}</span>
                 </div>
               )}
             </div>

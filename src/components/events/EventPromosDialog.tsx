@@ -89,7 +89,7 @@ export function EventPromosDialog({
         discountValue: Number(discountValue),
         maxDiscountAmount: maxDiscountAmount ? Number(maxDiscountAmount) : undefined,
         minOrderAmount: minOrderAmount ? Number(minOrderAmount) : undefined,
-        quota: Number(quota) || 100,
+        quota: Number(quota),
         validFrom: validFrom ? `${validFrom}:00+08:00` : undefined,
         validUntil: validUntil ? `${validUntil}:00+08:00` : undefined,
         applicableTierIds: selectedTierId !== "ALL" ? [selectedTierId] : undefined,

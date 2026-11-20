@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       decision,
       adminNotes,
       rejectionReason,
-      forceApproveDeficit: Boolean(forceApproveDeficit),
+      forceApproveDeficit: Boolean(forceApproveDeficit) && auth.role === "SUPER_ADMIN",
     };
 
     const adminEmail = auth.email || auth.name || "admin";

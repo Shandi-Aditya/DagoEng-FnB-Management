@@ -24,6 +24,7 @@ export interface EventsRefundsTableProps {
   refunds: EventTicketOrder[];
   onRefresh: () => void;
   isProcessing?: boolean;
+  userRole?: string;
 }
 
 function formatRefundDate(isoDate?: string | null): string {
@@ -48,6 +49,7 @@ export function EventsRefundsTable({
   refunds,
   onRefresh,
   isProcessing = false,
+  userRole,
 }: EventsRefundsTableProps) {
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -140,9 +142,9 @@ export function EventsRefundsTable({
             <TableHeader>
               <TableRow>
                 <TableHead>Tiket</TableHead>
-                <TableHead>Acara & Pemesan</TableHead>
-                <TableHead>Rekening Tujuan</TableHead>
-                <TableHead className="text-right">Nominal Refund</TableHead>
+                <TableHead>Acara & pemesan</TableHead>
+                <TableHead>Rekening tujuan</TableHead>
+                <TableHead className="text-right">Nominal refund</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
@@ -258,6 +260,7 @@ export function EventsRefundsTable({
           open={Boolean(selectedBooking)}
           onOpenChange={(open) => !open && setSelectedBooking(null)}
           booking={selectedBooking}
+          userRole={userRole}
           onSuccess={() => {
             setSelectedBooking(null);
             onRefresh();

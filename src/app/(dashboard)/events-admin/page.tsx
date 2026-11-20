@@ -1085,6 +1085,7 @@ export default function AdminEventsPage() {
       {adminSection === "REFUNDS" && (
         <EventsRefundsTable
           refunds={allRefunds}
+          userRole={user?.role?.slug}
           onRefresh={() => {
             loadAdminRefunds();
             loadAdminEvents();
@@ -1141,6 +1142,7 @@ export default function AdminEventsPage() {
         bookings={allBookings}
         onToggleCheckIn={handleCheckInToggle}
         onDeleteBooking={handleDeleteBooking}
+        onInvitationIssued={loadAdminEvents}
         isUpdatingCheckInId={isUpdatingCheckInId}
       />
 

@@ -21,13 +21,35 @@ interface RefundActionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   booking: EventTicketOrder | null;
+  userRole?: string;
   onSuccess: () => void;
+}
+
+function formatRefundDate(isoDate?: string | null): string {
+  if (!isoDate) return "-";
+  try {
+    const d = new Date(isoDate);
+    if (isNaN(d.getTime())) return isoDate;
+    return (
+      new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Makassar",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(d) + " WITA"
+    );
+  } catch {
+    return isoDate;
+  }
 }
 
 export function RefundActionDialog({
   open,
   onOpenChange,
   booking,
+  userRole,
   onSuccess,
 }: RefundActionDialogProps) {
   const [decision, setDecision] = useState<"APPROVE" | "REJECT">("APPROVE");
@@ -38,8 +60,11 @@ export function RefundActionDialog({
 
   if (!booking) return null;
 
+  const isSuperAdmin = userRole === "SUPER_ADMIN";
+  const isReadOnly = booking.refundStatus !== "REQUESTED";
   const refundReq = booking.refundRequest;
   const refundAmount = refundReq?.refundAmount ?? booking.totalPrice;
+  const feeDeducted = refundReq?.feeDeducted ?? Math.max(0, booking.totalPrice - refundAmount);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,12 +116,18 @@ export function RefundActionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <div className="space-y-4 pt-2">
           {/* Summary Box */}
           <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Kode tiket:</span>
               <span className="font-mono font-medium text-foreground">{booking.ticketCode}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Acara:</span>
+              <span className="font-medium text-foreground truncate max-w-[220px]" title={booking.eventTitle}>
+                {booking.eventTitle || "-"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Nama pemesan:</span>
@@ -105,6 +136,12 @@ export function RefundActionDialog({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total pembayaran:</span>
               <span className="font-mono text-foreground">{formatCurrencyIDR(booking.totalPrice)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Potongan biaya admin:</span>
+              <span className="font-mono text-muted-foreground tabular-nums">
+                {formatCurrencyIDR(feeDeducted)}
+              </span>
             </div>
             <div className="flex justify-between font-semibold text-primary pt-1 border-t border-border/60">
               <span>Nominal refund diajukan:</span>
@@ -122,99 +159,140 @@ export function RefundActionDialog({
                   <span className="text-muted-foreground">Alasan:</span>
                   <span className="font-medium text-foreground text-right">{refundReq.reason}</span>
                 </div>
+                {refundReq.processedBy && (
+                  <div className="flex justify-between pt-1 border-t border-border/60">
+                    <span className="text-muted-foreground">Diproses oleh:</span>
+                    <span className="font-medium text-foreground">{refundReq.processedBy}</span>
+                  </div>
+                )}
+                {refundReq.processedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Waktu proses:</span>
+                    <span className="font-medium text-foreground">{formatRefundDate(refundReq.processedAt)}</span>
+                  </div>
+                )}
+                {refundReq.adminNote && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Catatan admin:</span>
+                    <span className="font-medium text-foreground text-right">{refundReq.adminNote}</span>
+                  </div>
+                )}
+                {refundReq.rejectionReason && (
+                  <div className="flex justify-between text-destructive">
+                    <span>Alasan penolakan:</span>
+                    <span className="font-medium text-right">{refundReq.rejectionReason}</span>
+                  </div>
+                )}
               </>
             )}
           </div>
 
-          {/* Decision Selector */}
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Keputusan admin</Label>
-            <div className="grid grid-cols-2 gap-2">
+          {isReadOnly ? (
+            <DialogFooter className="pt-2 border-t">
               <Button
                 type="button"
-                variant={decision === "APPROVE" ? "default" : "outline"}
+                variant="outline"
                 size="default"
-                onClick={() => setDecision("APPROVE")}
+                onClick={() => onOpenChange(false)}
               >
-                Setujui refund
+                Tutup
               </Button>
-              <Button
-                type="button"
-                variant={decision === "REJECT" ? "destructive" : "outline"}
-                size="default"
-                onClick={() => setDecision("REJECT")}
-              >
-                Tolak refund
-              </Button>
-            </div>
-          </div>
-
-          {decision === "APPROVE" && (
-            <div className="space-y-3 pt-1">
-              <div className="space-y-1">
-                <Label htmlFor="admin-notes" className="text-xs">
-                  Catatan admin (opsional)
-                </Label>
-                <Input
-                  id="admin-notes"
-                  value={adminNotes}
-                  onChange={(e) => setAdminNotes(e.target.value)}
-                  placeholder="Contoh: Transfer BCA ref #123456"
-                  className="text-xs"
-                />
+            </DialogFooter>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Decision Selector */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Keputusan admin</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={decision === "APPROVE" ? "default" : "outline"}
+                    size="default"
+                    onClick={() => setDecision("APPROVE")}
+                  >
+                    Setujui refund
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={decision === "REJECT" ? "destructive" : "outline"}
+                    size="default"
+                    onClick={() => setDecision("REJECT")}
+                  >
+                    Tolak refund
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-                <input
-                  id="force-approve"
-                  type="checkbox"
-                  checked={forceApproveDeficit}
-                  onChange={(e) => setForceApproveDeficit(e.target.checked)}
-                  className="rounded border-border text-primary size-3.5"
-                />
-                <Label htmlFor="force-approve" className="text-xs cursor-pointer">
-                  Paksa setujui jika terjadi defisit saldo penyelenggara (Super Admin)
-                </Label>
-              </div>
-            </div>
-          )}
+              {decision === "APPROVE" && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1">
+                    <Label htmlFor="admin-notes" className="text-xs">
+                      Catatan admin (opsional)
+                    </Label>
+                    <Input
+                      id="admin-notes"
+                      value={adminNotes}
+                      onChange={(e) => setAdminNotes(e.target.value)}
+                      placeholder="Contoh: Transfer BCA ref #123456"
+                      className="text-xs"
+                    />
+                  </div>
 
-          {decision === "REJECT" && (
-            <div className="space-y-1 pt-1">
-              <Label htmlFor="rejection-reason" className="text-xs">
-                Alasan penolakan <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="rejection-reason"
-                required
-                rows={3}
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Tuliskan alasan penolakan agar peserta memahami penolakan ini (minimal 5 karakter)"
-                className="text-xs"
-              />
-            </div>
-          )}
+                  {isSuperAdmin && (
+                    <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+                      <input
+                        id="force-approve"
+                        type="checkbox"
+                        checked={forceApproveDeficit}
+                        onChange={(e) => setForceApproveDeficit(e.target.checked)}
+                        className="rounded border-border text-primary size-3.5"
+                      />
+                      <Label htmlFor="force-approve" className="text-xs cursor-pointer">
+                        Paksa setujui jika terjadi defisit saldo penyelenggara (Super Admin)
+                      </Label>
+                    </div>
+                  )}
+                </div>
+              )}
 
-          <DialogFooter className="pt-2 border-t gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="default"
-              onClick={() => onOpenChange(false)}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant={decision === "APPROVE" ? "default" : "destructive"}
-              size="default"
-              disabled={isSubmitting || (decision === "REJECT" && rejectionReason.trim().length < 5)}
-            >
-              {isSubmitting ? "Menyimpan..." : decision === "APPROVE" ? "Konfirmasi persetujuan" : "Konfirmasi penolakan"}
-            </Button>
-          </DialogFooter>
-        </form>
+              {decision === "REJECT" && (
+                <div className="space-y-1 pt-1">
+                  <Label htmlFor="rejection-reason" className="text-xs">
+                    Alasan penolakan <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="rejection-reason"
+                    required
+                    rows={3}
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Tuliskan alasan penolakan agar peserta memahami penolakan ini (minimal 5 karakter)"
+                    className="text-xs"
+                  />
+                </div>
+              )}
+
+              <DialogFooter className="pt-2 border-t gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="default"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  variant={decision === "APPROVE" ? "default" : "destructive"}
+                  size="default"
+                  disabled={isSubmitting || (decision === "REJECT" && rejectionReason.trim().length < 5)}
+                >
+                  {isSubmitting ? "Menyimpan..." : decision === "APPROVE" ? "Konfirmasi persetujuan" : "Konfirmasi penolakan"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

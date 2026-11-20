@@ -73,18 +73,11 @@ export async function GET(
   try {
     const { id } = await props.params;
     const booking = await getBookingById(id);
-    if (!booking) {
+    const ownership = booking ? await verifyTicketRefundOwnership(req, booking) : { authorized: false };
+    if (!booking || !ownership.authorized) {
       return NextResponse.json(
-        { success: false, error: "Pemesanan tiket tidak ditemukan." },
+        { success: false, error: "Pemesanan tiket tidak ditemukan atau akses ditolak." },
         { status: 404 }
-      );
-    }
-
-    const ownership = await verifyTicketRefundOwnership(req, booking);
-    if (!ownership.authorized) {
-      return NextResponse.json(
-        { success: false, error: ownership.error || "Akses ditolak." },
-        { status: 403 }
       );
     }
 
@@ -127,22 +120,14 @@ export async function POST(
 ) {
   try {
     const { id } = await props.params;
-    const booking = await getBookingById(id);
-    if (!booking) {
-      return NextResponse.json(
-        { success: false, error: "Pemesanan tiket tidak ditemukan." },
-        { status: 404 }
-      );
-    }
-
     const body = await req.json();
     const candidateToken = body.guestToken || body.token || null;
-
-    const ownership = await verifyTicketRefundOwnership(req, booking, candidateToken);
-    if (!ownership.authorized) {
+    const booking = await getBookingById(id);
+    const ownership = booking ? await verifyTicketRefundOwnership(req, booking, candidateToken) : { authorized: false };
+    if (!booking || !ownership.authorized) {
       return NextResponse.json(
-        { success: false, error: ownership.error || "Akses ditolak." },
-        { status: 403 }
+        { success: false, error: "Pemesanan tiket tidak ditemukan atau akses ditolak." },
+        { status: 404 }
       );
     }
 

@@ -259,6 +259,59 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
         })
       ).rejects.toThrow(/Kuota penggunaan kode promo "ROASTER20K" telah habis/);
     });
+
+    it("supports unlimited quota promo code (quota === 0) without clamping or exhaustion", async () => {
+      const unlimitedPromo = await createEventPromoCode(
+        testEventId,
+        {
+          code: "UNLIMITED10",
+          discountType: "PERCENT",
+          discountValue: 10,
+          quota: 0, // 0 = unlimited quota
+          isActive: true,
+        },
+        { name: "Super Admin", role: "SUPER_ADMIN" }
+      );
+
+      expect(unlimitedPromo.quota).toBe(0);
+
+      // Book with UNLIMITED10 multiple times
+      const b1 = await createEventBooking({
+        eventId: testEventId,
+        guestName: "Unlimited User 1",
+        guestEmail: "unlimited1@testmail.com",
+        guestPhone: "081234567888",
+        promoCode: "UNLIMITED10",
+        ticketCount: 1,
+      });
+
+      const b2 = await createEventBooking({
+        eventId: testEventId,
+        guestName: "Unlimited User 2",
+        guestEmail: "unlimited2@testmail.com",
+        guestPhone: "081234567889",
+        promoCode: "UNLIMITED10",
+        ticketCount: 1,
+      });
+
+      expect(b1.totalPrice).toBe(72000);
+      expect(b2.totalPrice).toBe(72000);
+
+      // Re-saving promo with quota 0 preserves quota 0 rather than clamping to usedCount
+      const updatedPromo = await createEventPromoCode(
+        testEventId,
+        {
+          code: "UNLIMITED10",
+          discountType: "PERCENT",
+          discountValue: 15,
+          quota: 0,
+        },
+        { name: "Organizer", role: "ORGANIZER" }
+      );
+
+      expect(updatedPromo.quota).toBe(0);
+      expect(updatedPromo.discountValue).toBe(15);
+    });
   });
 
   describe("Invitation Tickets (Tiket Undangan Gratis & Check-In Scan)", () => {

@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createEventBooking, loadBookingsFromDisk, saveBookingsToDisk, getEventRevenuePolicy } from "@/lib/events";
+import {
+  createEventBooking,
+  loadBookingsFromDisk,
+  saveBookingsToDisk,
+  loadEventsFromDisk,
+  saveEventsToDisk,
+  recalculateAllPromoUsageCounts,
+  syncBookingsToLocalDiskAndCache,
+  syncEventsToLocalDiskAndCache,
+  getEventRevenuePolicy,
+} from "@/lib/events";
 import { createDokuCheckoutSession, DokuCheckoutError } from "@/lib/doku";
 import { EventBookingPayload } from "@/types/event";
 
@@ -93,6 +103,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 updatedAt: new Date().toISOString(),
               };
               await saveBookingsToDisk(allBookings);
+              syncBookingsToLocalDiskAndCache(allBookings, Date.now());
+              const allEvents = loadEventsFromDisk();
+              if (recalculateAllPromoUsageCounts(allEvents, allBookings)) {
+                await saveEventsToDisk(allEvents);
+                syncEventsToLocalDiskAndCache(allEvents, Date.now());
+              }
             }
             return NextResponse.json(
               {
