@@ -82,11 +82,18 @@ describe("Task V-10: Export laporan transaksi sama persis dengan template", () =
         id: "prod-1",
         name: "Homebro's Special",
         category: "Coffee & Espresso",
-        price: 25000,
+        basePrice: 25000,
+        cogsEstimate: 10000,
+        grossMarginPercent: "60%",
+        status: "ACTIVE",
+        outletId: "outlet-1",
+        outletName: "Dago Creative Hub",
+        isAvailable: true,
         tenantId: "tenant-ks",
-        trackStock: false,
+        createdAt: "2025-06-01T00:00:00Z",
+        updatedAt: "2025-06-01T00:00:00Z",
       },
-    ] as any);
+    ]);
     expect(cat1).toBe("Coffee & Espresso");
 
     const cat2 = resolveProductCategory(undefined, "Air Mineral");

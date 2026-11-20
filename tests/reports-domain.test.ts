@@ -84,24 +84,19 @@ describe("reports-domain", () => {
     },
   ];
 
-  const mockProducts: any[] = [
+  const mockProducts: MasterProduct[] = [
     {
       id: "prod-1",
       name: "Espresso",
       category: "Coffee",
       basePrice: 25000,
-      costPrice: 7000,
+      cogsEstimate: 7000,
       tenantId: "DAGO_HUB",
       outletId: "out-1",
+      outletName: "Outlet Singaraja",
+      isAvailable: true,
       status: "ACTIVE",
-      sku: "CF-01",
-      recipeYield: 1,
-      stockNumber: 100,
-      minStockAlert: 10,
-      unit: "cup",
-      taxIncluded: true,
-      serviceChargeIncluded: false,
-      grossMarginPercent: 72 as any,
+      grossMarginPercent: "72%",
       createdAt: "2026-11-01T00:00:00Z",
       updatedAt: "2026-11-01T00:00:00Z",
     },
@@ -110,54 +105,50 @@ describe("reports-domain", () => {
       name: "Matcha Latte",
       category: "Non-Coffee",
       basePrice: 30000,
-      costPrice: 8400,
+      cogsEstimate: 8400,
       tenantId: "DAGO_HUB",
       outletId: "out-1",
+      outletName: "Outlet Singaraja",
+      isAvailable: true,
       status: "ACTIVE",
-      sku: "NC-01",
-      recipeYield: 1,
-      stockNumber: 100,
-      minStockAlert: 10,
-      unit: "cup",
-      taxIncluded: true,
-      serviceChargeIncluded: false,
-      grossMarginPercent: 72 as any,
+      grossMarginPercent: "72%",
       createdAt: "2026-11-01T00:00:00Z",
       updatedAt: "2026-11-01T00:00:00Z",
     },
   ];
 
-  const mockShifts: any[] = [
+  const mockShifts: ShiftRecord[] = [
     {
       id: "shift-1",
       shiftName: "Pagi",
+      assignedCashierId: "emp-1",
       assignedCashierName: "Ayu",
       openingCash: 100000,
       cashSales: 28000,
+      nonCashSales: 0,
+      refundAmount: 0,
       expectedCash: 128000,
       actualCash: 128000,
       cashVariance: 0,
       status: "CLOSED",
       startTime: "2026-11-10T08:00:00Z",
       endTime: "2026-11-10T16:00:00Z",
-      cashierId: "emp-1",
       outletId: "out-1",
       outletName: "Outlet Singaraja",
     },
   ];
 
-  const mockIngredients: any[] = [
+  const mockIngredients: IngredientItem[] = [
     {
       id: "ing-1",
       name: "Biji Kopi House Blend",
-      category: "Raw Material",
+      category: "Coffee Beans",
       stockNumber: 15,
       min: 5,
       unit: "kg",
       costPerUnit: 120000,
-      reorderAmount: 10,
       supplier: "Koperasi Kopi",
-      sku: "RM-01",
+      status: "SAFE",
       lastUpdated: "2026-11-10T00:00:00Z",
     },
   ];
@@ -176,21 +167,29 @@ describe("reports-domain", () => {
     },
   ];
 
-  const mockEvents: any[] = [
+  const mockEvents: EventTicketOrder[] = [
     {
       id: "evt-1",
+      eventId: "event-1",
       ticketCode: "TCK-001",
+      guestToken: "tok-1",
       eventTitle: "Workshop Kopi",
+      eventDate: "2026-11-10T12:00:00Z",
+      eventLocation: "Dago Creative Hub",
       guestName: "Doni",
+      guestEmail: "doni@test.com",
       guestPhone: "08123456789",
       ticketCount: 2,
+      unitPrice: 100000,
       totalPrice: 200000,
+      platformFeePercent: 20,
       platformFeeAmount: 40000,
       organizerRevenueAmount: 160000,
       paymentMethod: "QRIS",
       paymentStatus: "PAID",
       checkInStatus: "CHECKED_IN",
       createdAt: "2026-11-10T12:00:00Z",
+      updatedAt: "2026-11-10T12:00:00Z",
     },
   ];
 

@@ -31,7 +31,7 @@ describe("bom-recipe-domain", () => {
     {
       id: "ing-coffee",
       name: "Biji Kopi House Blend Arabica",
-      category: "Biji Kopi",
+      category: "Coffee Beans",
       stockNumber: 10,
       unit: "kg",
       min: 2,
@@ -43,7 +43,7 @@ describe("bom-recipe-domain", () => {
     {
       id: "ing-milk",
       name: "Susu Fresh Milk Greenfield",
-      category: "Susu",
+      category: "Dairy",
       stockNumber: 20,
       unit: "Liter",
       min: 5,
@@ -55,7 +55,7 @@ describe("bom-recipe-domain", () => {
     {
       id: "ing-tea",
       name: "Daun Teh Artisan Peach",
-      category: "Teh",
+      category: "Dry Goods",
       stockNumber: 5,
       unit: "Botol",
       min: 1,

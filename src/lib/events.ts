@@ -519,7 +519,6 @@ export const getEventBusinessSettings = getEventRevenuePolicy;
 export function updateEventRevenuePolicy(
   updates: {
     defaultPlatformFeePercent?: number;
-    defaultOrganizerSharePercent?: number;
     policyNotes?: string;
     effectiveDate?: string;
     maxTicketsPerBooking?: number;

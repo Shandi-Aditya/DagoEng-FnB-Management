@@ -505,7 +505,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         relatedModule: "LOYALTY",
         actionUrl: "/customers",
         outletId: target.registeredOutletId,
-        outletName: target.registeredOutletName || "",
+        outletName: target.registeredOutletName,
       });
 
       logActivity({
@@ -518,7 +518,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         reason: `Poin mencapai ${newPoints}`,
         status: "SUCCESS",
         outletId: target.registeredOutletId,
-        outletName: target.registeredOutletName || "",
+        outletName: target.registeredOutletName,
       });
     }
 

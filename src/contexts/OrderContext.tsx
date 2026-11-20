@@ -549,7 +549,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       ...target,
       status: resolvedOverallStatus,
       ...(nextTenantStatuses ? { tenantStatuses: nextTenantStatuses } : {}),
-      statusHistory: [...(target.statusHistory || []), historyItem],
+      statusHistory: [...target.statusHistory, historyItem],
     };
 
     if (nextStatus === "CONFIRMED" && !target.confirmedAt) updated.confirmedAt = nowIso;
@@ -685,7 +685,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       refundMethod: params.refundMethod || "CASH",
       supervisorPinVerified: Boolean(params.supervisorPin?.trim()) || target.supervisorPinVerified,
       statusHistory: [
-        ...(target.statusHistory || []),
+        ...target.statusHistory,
         {
           id: `hist-${Date.now()}`,
           orderId: target.id,
@@ -769,7 +769,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       voidedAt: nowIso,
       supervisorPinVerified: Boolean(params.supervisorPin?.trim()) || target.supervisorPinVerified,
       statusHistory: [
-        ...(target.statusHistory || []),
+        ...target.statusHistory,
         {
           id: `hist-${Date.now()}`,
           orderId: target.id,

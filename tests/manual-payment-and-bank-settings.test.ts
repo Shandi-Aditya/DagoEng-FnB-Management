@@ -791,14 +791,14 @@ describe("DAGOENG EVENT MARKETPLACE — TICKET QUOTA, MANUAL PAYMENT & BANK SETT
     await adminApproveBookingPayment(booking.id, "Admin", "Lunas");
 
     // Change global commission policy to 25%
-    updateEventRevenuePolicy({ defaultPlatformFeePercent: 25, defaultOrganizerSharePercent: 75 });
+    updateEventRevenuePolicy({ defaultPlatformFeePercent: 25 });
 
     // Ensure calculation for booking with original 20% still holds
     const splitOld = calculateEventRevenueSplit(50000, 20);
     expect(splitOld.platformFeeAmount).toBe(10000);
 
     // Reset policy back to 20/80
-    updateEventRevenuePolicy({ defaultPlatformFeePercent: 20, defaultOrganizerSharePercent: 80 });
+    updateEventRevenuePolicy({ defaultPlatformFeePercent: 20 });
   });
 
   it("36. Laporan keuangan membedakan pendapatan kotor, komisi platform, dan hak penyelenggara", async () => {

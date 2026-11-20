@@ -42,7 +42,7 @@ export function deliveryDateLabel(from: Date, days: number): string {
   return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Makassar" });
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
+const CATEGORY_LABEL: Record<IngredientItem["category"], string> = {
   Dairy: "Susu dan olahan",
   "Coffee Beans": "Biji kopi",
   "Syrup & Sweetener": "Sirup dan pemanis",

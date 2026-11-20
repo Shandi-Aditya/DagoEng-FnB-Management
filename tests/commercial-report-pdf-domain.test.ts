@@ -10,55 +10,76 @@ import {
 } from "@/features/commercial/commercial-report-pdf-domain";
 import type { CommercialLease } from "@/types/commercial";
 
-const MOCK_LEASES: CommercialLease[] = ([
+const MOCK_LEASES: CommercialLease[] = [
   {
     id: "lease-1",
     leaseNumber: "LSE-001",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
     tenantName: "Kopi Kenangan",
     tenantContact: "0811223344",
+    tenantEmail: "kopi@test.com",
     unitCode: "LOT-A1",
     areaSquareMeters: 45,
     startDate: "2026-01-01",
     endDate: "2026-12-31",
     monthlyRent: 15000000,
+    totalContractValue: 180000000,
     depositAmount: 30000000,
+    paymentSchedule: "MONTHLY",
     status: "ACTIVE",
     paymentHistory: [
-      { id: "pay-1", date: "2026-01-05", amount: 15000000, period: "Januari 2026", method: "TRANSFER" },
-      { id: "pay-2", date: "2026-02-05", amount: 15000000, period: "Februari 2026", method: "TRANSFER" },
+      { id: "pay-1", leaseId: "lease-1", dueDate: "2026-01-05", paidDate: "2026-01-05", amount: 15000000, periodLabel: "Januari 2026", paymentMethod: "TRANSFER", status: "PAID" },
+      { id: "pay-2", leaseId: "lease-1", dueDate: "2026-02-05", paidDate: "2026-02-05", amount: 15000000, periodLabel: "Februari 2026", paymentMethod: "TRANSFER", status: "PAID" },
     ],
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-02-05T00:00:00Z",
   },
   {
     id: "lease-2",
     leaseNumber: "LSE-002",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
     tenantName: "Sour Sally",
     tenantContact: "0819876543",
+    tenantEmail: "soursally@test.com",
     unitCode: "LOT-B2",
     areaSquareMeters: 30,
     startDate: "2026-02-01",
     endDate: "2026-04-30",
     monthlyRent: 10000000,
+    totalContractValue: 30000000,
     depositAmount: 20000000,
+    paymentSchedule: "MONTHLY",
     status: "EXPIRING_SOON",
     paymentHistory: [
-      { id: "pay-3", date: "2026-02-02", amount: 10000000, period: "Februari 2026", method: "TRANSFER" },
+      { id: "pay-3", leaseId: "lease-2", dueDate: "2026-02-02", paidDate: "2026-02-02", amount: 10000000, periodLabel: "Februari 2026", paymentMethod: "TRANSFER", status: "PAID" },
     ],
+    createdAt: "2026-02-01T00:00:00Z",
+    updatedAt: "2026-02-02T00:00:00Z",
   },
   {
     id: "lease-3",
     leaseNumber: "LSE-003",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja",
     tenantName: "Gramedia Kiosk",
     tenantContact: "0815556667",
+    tenantEmail: "gramedia@test.com",
     unitCode: "LOT-C3",
     areaSquareMeters: 25,
     startDate: "2025-01-01",
     endDate: "2025-12-31",
     monthlyRent: 8000000,
+    totalContractValue: 96000000,
     depositAmount: 16000000,
+    paymentSchedule: "MONTHLY",
     status: "TERMINATED",
     paymentHistory: [],
+    createdAt: "2025-01-01T00:00:00Z",
+    updatedAt: "2025-12-31T00:00:00Z",
   },
-] as any);
+];
 
 describe("commercial-report-pdf-domain", () => {
   it("computes executive commercial report metrics accurately without mutating input", () => {

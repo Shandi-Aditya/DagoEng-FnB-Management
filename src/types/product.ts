@@ -3,10 +3,6 @@ export interface MasterProduct {
   name: string;
   category: string;
   basePrice: number;
-  sku?: string;
-  price?: number;
-  costPrice?: number;
-  trackStock?: boolean;
   cogsEstimate: number;
   grossMarginPercent: string;
   status: "ACTIVE" | "INACTIVE";

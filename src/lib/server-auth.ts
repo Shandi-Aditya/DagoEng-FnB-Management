@@ -772,7 +772,6 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
   name?: string;
   email?: string;
   user?: any;
-  isAdmin?: boolean;
 }> {
   const auth = await getRequestAuthUser(req);
 

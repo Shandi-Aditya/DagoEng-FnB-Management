@@ -87,7 +87,6 @@ describe("payment-waiting domain logic", () => {
             productName: "Kopi Dago",
             quantity: 2,
             unitPrice: 20000,
-            subtotal: 40000,
           },
         ],
         subtotal: 40000,

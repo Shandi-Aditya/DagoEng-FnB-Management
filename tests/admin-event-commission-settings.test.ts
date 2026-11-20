@@ -67,7 +67,6 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
         user: { id: "admin-1", role: { name: "Super Admin", slug: "SUPER_ADMIN" } } as any,
         role: "SUPER_ADMIN",
         scopeLevel: "ORGANIZATION",
-        isAdmin: true,
         name: "Super Admin Dago",
       });
 
@@ -91,7 +90,6 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
         user: { id: "owner-1", role: { name: "Owner", slug: "OWNER" } } as any,
         role: "OWNER",
         scopeLevel: "ORGANIZATION",
-        isAdmin: true,
         name: "Pak Hendra Owner Platform",
       });
 
@@ -115,7 +113,6 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
         user: { id: "tenant-owner-1", role: { name: "Owner", slug: "OWNER" } } as any,
         role: "OWNER",
         scopeLevel: "TENANT",
-        isAdmin: false,
         name: "Owner Kopi Senja",
       });
 
@@ -140,7 +137,6 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
         user: { id: "manager-1", role: { name: "Manager", slug: "MANAGER" } } as any,
         role: "MANAGER",
         scopeLevel: "ORGANIZATION",
-        isAdmin: true,
         name: "Manager Operasional",
       });
 
@@ -169,7 +165,6 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
         user: { id: "admin-1", role: { name: "Super Admin", slug: "SUPER_ADMIN" } } as any,
         role: "SUPER_ADMIN",
         scopeLevel: "ORGANIZATION",
-        isAdmin: true,
         name: "Super Admin",
       });
     });
@@ -321,7 +316,6 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
         user: { id: "admin-1", role: { name: "Super Admin", slug: "SUPER_ADMIN" } } as any,
         role: "SUPER_ADMIN",
         scopeLevel: "ORGANIZATION",
-        isAdmin: true,
         name: "Super Admin",
       });
     });

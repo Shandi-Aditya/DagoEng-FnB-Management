@@ -36,13 +36,12 @@ export interface LoyaltyMember {
   points: number;
   totalSpend: number;
   totalVisits: number;
-  favoriteItem?: string;
+  favoriteItem: string;
   registeredOutletId: string;
-  registeredOutletName?: string;
+  registeredOutletName: string;
   status: "ACTIVE" | "INACTIVE";
   joinedDate: string;
-  joinDate?: string;
-  lastVisit?: string;
+  lastVisit: string;
   pointHistory: LoyaltyPointTransaction[];
   tierHistory: LoyaltyTierChangeLog[];
 }

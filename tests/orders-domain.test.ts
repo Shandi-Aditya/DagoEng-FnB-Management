@@ -104,7 +104,7 @@ describe("paymentStatusLabel and paymentStatusTone", () => {
   it("maps payment status to semantic tones", () => {
     expect(paymentStatusTone("PAID")).toBe("success");
     expect(paymentStatusTone("REFUNDED")).toBe("warning");
-    expect(paymentStatusTone("UNPAID")).toBe("destructive");
+    expect(paymentStatusTone("PENDING")).toBe("destructive");
   });
 });
 

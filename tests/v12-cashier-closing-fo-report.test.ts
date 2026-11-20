@@ -6,10 +6,14 @@ import type { ShiftRecord } from "@/types/shift";
 import type { OrderRecord } from "@/types/order";
 
 describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", () => {
-  const mockOrders: any[] = [
+  const mockOrders: OrderRecord[] = [
     {
       id: "ord-1",
       orderNumber: "ORD-001",
+      organizationId: "org-dago-hub",
+      outletId: "outlet-sgr",
+      outletName: "Outlet Singaraja",
+      tableNumber: "T-01",
       customerName: "Gede Widi",
       orderType: "DINE_IN",
       status: "COMPLETED",
@@ -20,11 +24,13 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
       total: 55000,
       discount: 0,
       serviceCharge: 0,
+      targetServiceMinutes: 15,
+      statusHistory: [],
       createdAt: "2026-11-15T09:00:00Z",
       items: [
         {
           id: "item-1",
-          menuItemId: "menu-1",
+          productId: "menu-1",
           productName: "Kopi Susu Gula Aren",
           quantity: 2,
           unitPrice: 25000,
@@ -35,6 +41,10 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
     {
       id: "ord-2",
       orderNumber: "ORD-002",
+      organizationId: "org-dago-hub",
+      outletId: "outlet-sgr",
+      outletName: "Outlet Singaraja",
+      tableNumber: "T-02",
       customerName: "Kadek Ayu",
       orderType: "DINE_IN",
       status: "COMPLETED",
@@ -45,11 +55,13 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
       total: 66000,
       discount: 0,
       serviceCharge: 0,
+      targetServiceMinutes: 15,
+      statusHistory: [],
       createdAt: "2026-11-15T10:00:00Z",
       items: [
         {
           id: "item-2",
-          menuItemId: "menu-2",
+          productId: "menu-2",
           productName: "Nasi Goreng Spesial",
           quantity: 2,
           unitPrice: 30000,
@@ -61,13 +73,18 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
 
   describe("1. CLOSING Report Domain (reports-domain.ts)", () => {
     it("reports NEEDS_RECONCILIATION shifts accurately instead of 0 shift and false Seimbang", () => {
-      const overdueShifts: any[] = [
+      const overdueShifts: ShiftRecord[] = [
         {
           id: "shf-overdue-1",
           shiftName: "Shift Pagi (Auto-reconciled)",
+          outletId: "outlet-sgr",
+          outletName: "Outlet Singaraja",
+          assignedCashierId: "emp-1",
           assignedCashierName: "Wayan Kasir",
           openingCash: 200000,
           cashSales: 150000,
+          nonCashSales: 0,
+          refundAmount: 0,
           expectedCash: 350000,
           actualCash: 300000,
           cashVariance: -50000,
@@ -103,13 +120,18 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
     });
 
     it("reports Seimbang only when all shifts are CLOSED and variance is 0", () => {
-      const balancedShifts: any[] = [
+      const balancedShifts: ShiftRecord[] = [
         {
           id: "shf-closed-1",
           shiftName: "Shift Pagi",
+          outletId: "outlet-sgr",
+          outletName: "Outlet Singaraja",
+          assignedCashierId: "emp-2",
           assignedCashierName: "Ketut Kasir",
           openingCash: 200000,
           cashSales: 100000,
+          nonCashSales: 0,
+          refundAmount: 0,
           expectedCash: 300000,
           actualCash: 300000,
           cashVariance: 0,
@@ -135,13 +157,18 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
     });
 
     it("reports Ada selisih when shifts are CLOSED but variance is non-zero", () => {
-      const varianceShifts: any[] = [
+      const varianceShifts: ShiftRecord[] = [
         {
           id: "shf-closed-2",
           shiftName: "Shift Sore",
+          outletId: "outlet-sgr",
+          outletName: "Outlet Singaraja",
+          assignedCashierId: "emp-3",
           assignedCashierName: "Komang Kasir",
           openingCash: 200000,
           cashSales: 100000,
+          nonCashSales: 0,
+          refundAmount: 0,
           expectedCash: 300000,
           actualCash: 290000,
           cashVariance: -10000,
@@ -168,13 +195,17 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
 
   describe("2. Front Office (FO) Closing Report Data Builder", () => {
     it("builds FO closing report with complete cash drawer reconciliation metrics", () => {
-      const sampleShift: any = {
+      const sampleShift: ShiftRecord = {
         id: "shf-fo-1",
         shiftName: "Shift 1 (Pagi)",
+        outletId: "outlet-sgr",
+        outletName: "Singaraja Hub",
+        assignedCashierId: "emp-4",
         assignedCashierName: "Made Suantara",
         openingCash: 300000,
         cashSales: 150000,
         nonCashSales: 200000,
+        refundAmount: 0,
         expectedCash: 450000,
         actualCash: 445000,
         cashVariance: -5000,
@@ -211,12 +242,17 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
 
   describe("3. PDF URL Generator & Server Rendering Integration", () => {
     it("includes FO cash reconciliation parameters in the closing PDF endpoint URL", () => {
-      const sampleShift: any = {
+      const sampleShift: ShiftRecord = {
         id: "shf-fo-2",
         shiftName: "Shift Malam",
+        outletId: "outlet-dps",
+        outletName: "Denpasar Hub",
+        assignedCashierId: "emp-5",
         assignedCashierName: "Budi",
         openingCash: 250000,
         cashSales: 120000,
+        nonCashSales: 0,
+        refundAmount: 0,
         expectedCash: 370000,
         actualCash: 370000,
         cashVariance: 0,

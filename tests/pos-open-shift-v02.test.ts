@@ -92,19 +92,21 @@ describe("Task V-02: Buka Shift - Cegah Request Ganda & Modal Awal Kosong", () =
 
   describe("3. Concurrency Guard: Satu Klik = Satu Request (Anti 409 Conflict)", () => {
     it("mendeteksi shift yang sedang aktif di outlet dan mencegah pembukaan shift duplikat", () => {
-      const activeShift: any = {
+      const activeShift: ShiftRecord = {
         id: "shift-act-001",
         shiftName: "Shift Pagi Aktif",
         assignedCashierId: "emp-001",
         assignedCashierName: "Kasir Aktif",
         outletId: "outlet-sgr",
+        outletName: "Singaraja",
         startTime: new Date().toISOString(),
         openingCash: 100000,
         expectedCash: 100000,
+        actualCash: 100000,
+        cashVariance: 0,
         cashSales: 0,
         nonCashSales: 0,
-        totalSales: 0,
-        transactionsCount: 0,
+        refundAmount: 0,
         status: "ACTIVE",
       };
 

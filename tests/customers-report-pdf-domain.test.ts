@@ -10,7 +10,7 @@ import {
 } from "@/features/customers/customers-report-pdf-domain";
 import type { LoyaltyMember } from "@/types/loyalty";
 
-const MOCK_MEMBERS: any[] = [
+const MOCK_MEMBERS: LoyaltyMember[] = [
   {
     id: "mem-1",
     name: "Ahmad Wijaya",
@@ -20,7 +20,14 @@ const MOCK_MEMBERS: any[] = [
     points: 1250,
     totalSpend: 4500000,
     totalVisits: 18,
+    favoriteItem: "Es Kopi Dago",
+    registeredOutletId: "outlet-sgr",
+    registeredOutletName: "Singaraja",
+    status: "ACTIVE",
     joinedDate: "2026-01-10",
+    lastVisit: "2026-11-10",
+    pointHistory: [],
+    tierHistory: [],
   },
   {
     id: "mem-2",
@@ -31,7 +38,14 @@ const MOCK_MEMBERS: any[] = [
     points: 600,
     totalSpend: 2200000,
     totalVisits: 9,
+    favoriteItem: "Matcha Latte",
+    registeredOutletId: "outlet-sgr",
+    registeredOutletName: "Singaraja",
+    status: "ACTIVE",
     joinedDate: "2026-02-14",
+    lastVisit: "2026-11-12",
+    pointHistory: [],
+    tierHistory: [],
   },
   {
     id: "mem-3",
@@ -42,7 +56,14 @@ const MOCK_MEMBERS: any[] = [
     points: 150,
     totalSpend: 750000,
     totalVisits: 3,
+    favoriteItem: "Americano",
+    registeredOutletId: "outlet-sgr",
+    registeredOutletName: "Singaraja",
+    status: "ACTIVE",
     joinedDate: "2026-03-01",
+    lastVisit: "2026-11-15",
+    pointHistory: [],
+    tierHistory: [],
   },
 ];
 

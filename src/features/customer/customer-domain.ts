@@ -136,7 +136,7 @@ export function filterCustomerProducts(
       const productTenant = normalizeTenantId(p.tenantId || "tenant-ks");
       if (productTenant !== normalizedPartner) return false;
     }
-    if (category !== "ALL" && category !== "Semua" && p.category !== category) return false;
+    if (category !== "ALL" && p.category !== category) return false;
     if (needle) {
       const matchName = p.name.toLowerCase().includes(needle);
       const matchCat = p.category.toLowerCase().includes(needle);

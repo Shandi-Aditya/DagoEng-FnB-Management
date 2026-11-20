@@ -662,7 +662,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         orderId: order.id,
         orderNumber: order.orderNumber,
         outletId: order.outletId,
-        outletName: order.outletName || "",
+        outletName: order.outletName,
         tableNumber: order.tableNumber,
         customerName: order.customerName,
         orderType: order.orderType,

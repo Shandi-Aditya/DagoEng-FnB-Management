@@ -6,38 +6,32 @@ import {
   formatReceiptOrderType,
   formatReceiptServiceChargeLabel,
   formatKitchenTicketPurpose,
+  type POSReceiptItem,
 } from "@/features/pos/pos-receipt";
-import type { POSReceiptItem } from "@/features/pos/types";
 
 describe("pos-receipt domain logic", () => {
   describe("calculateTenantReceiptGroups", () => {
     it("groups items by tenant correctly and calculates subtotal without mutating input", () => {
-      const items: readonly any[] = [
+      const items: readonly POSReceiptItem[] = [
         {
-          id: "item-1",
-          productId: "prod-1",
           name: "Kopi Senja Aren",
-          price: 20000,
+          unitPrice: 20000,
           quantity: 2,
           subtotal: 40000,
           tenantId: "tenant-ks",
           tenantName: "Kopi Senja",
         },
         {
-          id: "item-2",
-          productId: "prod-2",
           name: "Roti Bakar",
-          price: 15000,
+          unitPrice: 15000,
           quantity: 1,
           subtotal: 15000,
           tenantId: "tenant-roti",
           tenantName: "Roti Sedap",
         },
         {
-          id: "item-3",
-          productId: "prod-3",
           name: "Americano",
-          price: 18000,
+          unitPrice: 18000,
           quantity: 1,
           subtotal: 18000,
           tenantId: "tenant-ks",
@@ -71,12 +65,10 @@ describe("pos-receipt domain logic", () => {
     });
 
     it("falls back to default tenant name when tenant info is omitted", () => {
-      const items: readonly any[] = [
+      const items: readonly POSReceiptItem[] = [
         {
-          id: "item-x",
-          productId: "prod-x",
           name: "Menu Bebas",
-          price: 10000,
+          unitPrice: 10000,
           quantity: 1,
           subtotal: 10000,
         },

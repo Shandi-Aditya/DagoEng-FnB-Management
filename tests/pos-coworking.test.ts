@@ -34,16 +34,17 @@ describe("pos-coworking logic", () => {
   });
 
   describe("checkSlotAvailability", () => {
-    const spaces: any[] = [
+    const spaces: CoworkingSpaceItem[] = [
       {
         id: "space-1",
         name: "Private Office A",
         type: "MEETING_ROOM",
         capacity: 4,
         hourlyRate: 50000,
+        dailyRate: 250000,
+        status: "AVAILABLE",
         area: "Lantai 2",
         amenities: ["WiFi", "AC"],
-        isActive: true,
       },
       {
         id: "space-desk",
@@ -51,9 +52,10 @@ describe("pos-coworking logic", () => {
         type: "HOT_DESK",
         capacity: 4,
         hourlyRate: 15000,
+        dailyRate: 75000,
+        status: "AVAILABLE",
         area: "Lantai 1",
         amenities: ["WiFi", "Stopkontak"],
-        isActive: true,
       },
     ];
 
@@ -70,21 +72,24 @@ describe("pos-coworking logic", () => {
     });
 
     it("detects conflict when a single-capacity room is already booked", () => {
-      const bookings: any[] = [
+      const bookings: CoworkingBooking[] = [
         {
           id: "b-1",
           bookingCode: "BK-01",
           spaceId: "space-1",
           spaceName: "Private Office A",
-          customerName: "Alice",
-          customerContact: "0812345",
+          spaceType: "MEETING_ROOM",
+          bookingType: "HOURLY",
+          guestName: "Alice",
+          guestPhone: "0812345",
+          guestEmail: "alice@test.com",
           date: "2026-11-12",
           startTime: "10:00",
           duration: 2,
-          totalPrice: 100000,
+          totalAmount: 100000,
           paymentStatus: "PAID",
           paymentMethod: "QRIS",
-          checkInStatus: "CONFIRMED",
+          checkInStatus: "RESERVED",
           createdAt: new Date().toISOString(),
           notes: "",
         },
@@ -103,21 +108,24 @@ describe("pos-coworking logic", () => {
     });
 
     it("allows multiple bookings up to capacity on HOT_DESK", () => {
-      const bookings: any[] = [
+      const bookings: CoworkingBooking[] = [
         {
           id: "b-1",
           bookingCode: "BK-01",
           spaceId: "space-desk",
           spaceName: "Hot Desk Area",
-          customerName: "Alice",
-          customerContact: "0812345",
+          spaceType: "HOT_DESK",
+          bookingType: "HOURLY",
+          guestName: "Alice",
+          guestPhone: "0812345",
+          guestEmail: "alice@test.com",
           date: "2026-11-12",
           startTime: "10:00",
           duration: 2,
-          totalPrice: 30000,
+          totalAmount: 30000,
           paymentStatus: "PAID",
           paymentMethod: "QRIS",
-          checkInStatus: "CONFIRMED",
+          checkInStatus: "RESERVED",
           createdAt: new Date().toISOString(),
           notes: "",
         },
