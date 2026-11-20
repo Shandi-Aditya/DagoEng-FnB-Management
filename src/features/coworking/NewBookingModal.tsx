@@ -73,7 +73,7 @@ export function NewBookingModal({
   const cwTaxConfig = settings?.categoryTax?.coworking;
   const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
   const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
-  const cwTaxType = cwTaxConfig?.taxType || (cwTaxRatePercent > 0 ? "PPN" : "NON_TAX");
+  const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
 
   const todayStr = useMemo(
     () => getNextOpenCoworkingDate(getTodayWitaDateString(), coworkingHolidays),

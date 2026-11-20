@@ -210,7 +210,7 @@ export function EventsRefundsTable({
                       ) : booking.refundStatus === "REJECTED" ? (
                         <StatusBadge status="destructive">Ditolak</StatusBadge>
                       ) : (
-                        <StatusBadge status="neutral">{booking.refundStatus || "NONE"}</StatusBadge>
+                        <StatusBadge status="neutral">-</StatusBadge>
                       )}
                     </TableCell>
 

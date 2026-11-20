@@ -2787,6 +2787,11 @@ export async function updateEventDetails(
         }
         const newPolicy = refVal.value;
 
+        if (!tx) {
+          await syncBookingsStorageFailClosed();
+          allBookings = await loadBookingsFromTxOrDisk(tx);
+        }
+
         // Server guard: Tolak pelemahan refundPolicy apabila event sudah memiliki booking PAID aktif
         const activePaidBookingsCount = allBookings.filter(
           (b) => b.eventId === existing.id && b.paymentStatus === "PAID"
@@ -4084,7 +4089,8 @@ export async function requestTicketRefund(
 export async function adminProcessTicketRefund(
   bookingId: string,
   payload: ProcessRefundPayload,
-  adminEmail: string = "admin@dagoeng.com"
+  adminEmail: string = "admin@dagoeng.com",
+  actorRole: string = "SUPER_ADMIN"
 ): Promise<EventTicketOrder> {
   if (!bookingId || bookingId.trim() === "") {
     throw new Error("ID pemesanan tiket wajib disertakan.");
@@ -4185,7 +4191,7 @@ export async function adminProcessTicketRefund(
           severity: "HIGH",
           status: "SUCCESS",
           actorName: adminEmail,
-          actorRole: "SUPER_ADMIN",
+          actorRole: actorRole || "SUPER_ADMIN",
           recordId: booking.ticketCode,
           referenceId: booking.eventId,
           description: payload.decision === "APPROVE"
@@ -5922,6 +5928,11 @@ export async function organizerResubmitEvent(
           throw new Error(refVal.error || "Kebijakan refund tidak valid.");
         }
         const candidatePolicy = refVal.value;
+
+        if (!tx) {
+          await syncBookingsStorageFailClosed();
+          allBookings = await loadBookingsFromTxOrDisk(tx);
+        }
 
         // Server guard: Tolak pelemahan refundPolicy apabila event sudah memiliki booking PAID aktif
         const activePaidBookingsCount = allBookings.filter(

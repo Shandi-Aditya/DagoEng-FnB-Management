@@ -92,7 +92,7 @@ export function EventTicketPassDialog({
               className="text-xs"
             >
               {ticket.paymentStatus === "REFUNDED"
-                ? "Di-refund"
+                ? "Dikembalikan"
                 : ticket.refundStatus === "REQUESTED"
                 ? "Pengajuan refund"
                 : ticket.isInvitation || ticket.paymentMethod === "INVITATION"
@@ -179,7 +179,7 @@ export function EventTicketPassDialog({
 
           {ticket.paymentStatus === "REFUNDED" && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-0.5">
-              <span className="font-medium block">Tiket telah di-refund</span>
+              <span className="font-medium block">Tiket telah dikembalikan</span>
               <p className="text-muted-foreground leading-relaxed">
                 Tiket ini telah dibatalkan dan dananya telah disetujui untuk dikembalikan. Tiket tidak dapat digunakan untuk check-in.
               </p>
@@ -222,7 +222,7 @@ export function EventTicketPassDialog({
             <div className="rounded-lg border bg-muted/40 p-4 text-center space-y-1 text-xs">
               <span className="font-semibold text-foreground block">Dana tiket telah dikembalikan</span>
               <p className="text-muted-foreground leading-relaxed">
-                Pemesanan tiket ini telah di-refund dan tidak berlaku untuk check-in di lokasi acara.
+                Pemesanan tiket ini telah dikembalikan dan tidak berlaku untuk check-in di lokasi acara.
               </p>
             </div>
           ) : (

@@ -39,6 +39,26 @@ export function TicketRefundSection({
 }: TicketRefundSectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  const deadlineWita = React.useMemo(() => {
+    if (!refundEligibility?.deadlineDate) return null;
+    try {
+      const d = new Date(refundEligibility.deadlineDate);
+      if (isNaN(d.getTime())) return null;
+      return (
+        new Intl.DateTimeFormat("id-ID", {
+          timeZone: "Asia/Makassar",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(d) + " WITA"
+      );
+    } catch {
+      return null;
+    }
+  }, [refundEligibility?.deadlineDate]);
+
   // 1. Status: Refund Sedang Diproses
   if (refundStatus === "REQUESTED") {
     return (
@@ -162,26 +182,6 @@ export function TicketRefundSection({
   const isEligible = refundEligibility?.eligible === true;
   const netRefund = refundEligibility?.calculatedRefundAmount ?? totalPrice;
   const feeDeducted = refundEligibility?.feeDeducted ?? 0;
-
-  const deadlineWita = React.useMemo(() => {
-    if (!refundEligibility?.deadlineDate) return null;
-    try {
-      const d = new Date(refundEligibility.deadlineDate);
-      if (isNaN(d.getTime())) return null;
-      return (
-        new Intl.DateTimeFormat("id-ID", {
-          timeZone: "Asia/Makassar",
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(d) + " WITA"
-      );
-    } catch {
-      return null;
-    }
-  }, [refundEligibility?.deadlineDate]);
 
   return (
     <>

@@ -245,7 +245,7 @@ function CustomerApp() {
       const cwTaxConfig = settings?.categoryTax?.coworking;
       const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
       const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
-      const cwTaxType = cwTaxConfig?.taxType || (cwTaxRatePercent > 0 ? "PPN" : "NON_TAX");
+      const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
       const tax = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(subtotal * (cwTaxRatePercent / 100)) : 0;
       const totalAmount = subtotal + tax;
 

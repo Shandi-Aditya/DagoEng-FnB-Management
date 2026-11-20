@@ -17,23 +17,29 @@ import {
   getAdminRefundBookings,
 } from "../src/lib/events";
 import { CommunityEvent, EventTicketOrder } from "../src/types/event";
+import { readPersistentData } from "../src/lib/persistent-storage";
+import type { ActivityLogEntry } from "../src/types/audit";
 
 const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 const BOOKINGS_FILE = path.join(DATA_DIR, "event_bookings.json");
+const AUDIT_LOGS_FILE = path.join(DATA_DIR, "audit_logs.json");
 
 describe("Event Refund Policy & Cancellation - Task S-14", () => {
   let originalEventsBackup: string | null = null;
   let originalBookingsBackup: string | null = null;
+  let originalAuditLogsBackup: string | null = null;
 
   beforeAll(() => {
     if (fs.existsSync(EVENTS_FILE)) originalEventsBackup = fs.readFileSync(EVENTS_FILE, "utf-8");
     if (fs.existsSync(BOOKINGS_FILE)) originalBookingsBackup = fs.readFileSync(BOOKINGS_FILE, "utf-8");
+    if (fs.existsSync(AUDIT_LOGS_FILE)) originalAuditLogsBackup = fs.readFileSync(AUDIT_LOGS_FILE, "utf-8");
   });
 
   afterAll(() => {
     if (originalEventsBackup !== null) fs.writeFileSync(EVENTS_FILE, originalEventsBackup, "utf-8");
     if (originalBookingsBackup !== null) fs.writeFileSync(BOOKINGS_FILE, originalBookingsBackup, "utf-8");
+    if (originalAuditLogsBackup !== null) fs.writeFileSync(AUDIT_LOGS_FILE, originalAuditLogsBackup, "utf-8");
   });
 
   describe("1. Refund Eligibility Domain Rules", () => {
@@ -419,6 +425,90 @@ describe("Event Refund Policy & Cancellation - Task S-14", () => {
       expect(refundOrder.refundRequest?.feeDeducted).toBeDefined();
       expect(refundOrder.refundRequest?.feeDeducted).toBe(7500); // 5% of 150000
       expect(refundOrder.refundRequest?.refundAmount).toBe(142500); // 150000 - 7500
+    });
+
+    it("3.6 records actual actorRole (not hardcoded SUPER_ADMIN) when adminProcessTicketRefund runs", async () => {
+      await adminProcessTicketRefund(
+        guardPaidBooking.id,
+        {
+          decision: "APPROVE",
+          adminNotes: "Disetujui oleh Owner platform",
+        },
+        "owner@dagoeng.com",
+        "OWNER"
+      );
+
+      const logs = await readPersistentData<ActivityLogEntry[]>("audit_logs.json", []);
+      const entry = logs.find(
+        (l) => l.recordId === guardPaidBooking.ticketCode && l.action === "EVENT_TICKET_REFUND_APPROVED"
+      );
+      expect(entry).toBeDefined();
+      expect(entry?.actorName).toBe("owner@dagoeng.com");
+      expect(entry?.actorRole).toBe("OWNER");
+    });
+  });
+
+  describe("4. Rules of Hooks, S-10 Tax Guard & S-14 UI Bounds", () => {
+    it("4.1 calls React hooks before any early return in TicketRefundSection and CustomerBookingModal", () => {
+      const refundSectionSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-tickets/TicketRefundSection.tsx"),
+        "utf-8"
+      );
+      const useMemoIdx = refundSectionSrc.indexOf("React.useMemo(");
+      const firstReturnIdx = refundSectionSrc.indexOf("return (");
+      expect(useMemoIdx).toBeGreaterThan(-1);
+      expect(firstReturnIdx).toBeGreaterThan(-1);
+      expect(useMemoIdx).toBeLessThan(firstReturnIdx);
+
+      const modalSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/customer/CustomerBookingModal.tsx"),
+        "utf-8"
+      );
+      const useSettingsIdx = modalSrc.indexOf("useSettings()");
+      const earlyReturnIdx = modalSrc.indexOf("if (!space) return null;");
+      expect(useSettingsIdx).toBeGreaterThan(-1);
+      expect(earlyReturnIdx).toBeGreaterThan(-1);
+      expect(useSettingsIdx).toBeLessThan(earlyReturnIdx);
+    });
+
+    it("4.2 clamps EventRefundPolicyEditor hMinusDays to 0..60 and normalizes Indonesian refund labels", () => {
+      const editorSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/components/events/EventRefundPolicyEditor.tsx"),
+        "utf-8"
+      );
+      expect(editorSrc).toContain("Math.max(0, Math.min(60");
+      expect(editorSrc).not.toContain("Math.max(1, Math.min(30");
+
+      const tableSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-admin/EventsRefundsTable.tsx"),
+        "utf-8"
+      );
+      expect(tableSrc).not.toContain('booking.refundStatus || "NONE"');
+
+      const passDialogSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/event-detail/EventTicketPassDialog.tsx"),
+        "utf-8"
+      );
+      expect(passDialogSrc).not.toContain("Di-refund");
+      expect(passDialogSrc).not.toContain("di-refund");
+      expect(passDialogSrc).toContain("Dikembalikan");
+      expect(passDialogSrc).toContain("Tiket telah dikembalikan");
+    });
+
+    it("4.3 guards cwTaxType with cwTaxEnabled && cwTaxRatePercent > 0 across all 5 coworking booking sites", () => {
+      const files = [
+        "src/app/(dashboard)/coworking/page.tsx",
+        "src/features/coworking/NewBookingModal.tsx",
+        "src/features/customer/CustomerBookingModal.tsx",
+        "src/features/customer/app/SpaceView.tsx",
+        "src/app/(mobile)/customer/page.tsx",
+      ];
+      for (const rel of files) {
+        const content = fs.readFileSync(path.resolve(process.cwd(), rel), "utf-8");
+        expect(content).toContain(
+          'const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";'
+        );
+      }
     });
   });
 });

@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     };
 
     const adminEmail = auth.email || auth.name || "admin";
-    const updated = await adminProcessTicketRefund(bookingId, payload, adminEmail);
+    const updated = await adminProcessTicketRefund(bookingId, payload, adminEmail, auth.role || "SUPER_ADMIN");
 
     return NextResponse.json({
       success: true,

@@ -38,7 +38,7 @@ export function EventRefundPolicyEditor({
   };
 
   const handleHMinusDaysChange = (days: number) => {
-    const safeDays = Math.max(1, Math.min(30, Math.floor(days || 1)));
+    const safeDays = Math.max(0, Math.min(60, Math.floor(Number.isFinite(days) ? days : 0)));
     onChange({
       ...value,
       policyType: "REFUNDABLE_UNTIL_H_MINUS",
