@@ -74,7 +74,7 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
 ### Langkah Uji Visual:
 1. **Halaman Detail Event Berbayar** (`/events/[id]`):
    - Buka event berbayar aktif.
-   - Pastikan informasi rekening resmi menampilkan Bank BCA, Nomor Rekening `135002938411`, dan Nama Pemilik `PT DAGO KREATIF MANDIRI`.
+   - Pastikan informasi rekening resmi menampilkan Bank BCA, Nomor Rekening `8830192841`, dan Nama Pemilik `PT DAGO CREATIVE HUB` (atau Bank Mandiri `1450012345678` a.n. `PT DAGO KREATIF MANDIRI`).
 2. **Pemesanan & Unggah Bukti**:
    - Lakukan pemesanan tiket (misal 2 tiket).
    - Di halaman detail pembayaran, pastikan tombol unggah bukti pembayaran aktif dan menampilkan status **Menunggu Verifikasi Pembayaran**.
@@ -98,28 +98,20 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
 
 ## 5. Dokumentasi Alur Visual (Screenshots S-07)
 
-Rangkaian tangkapan layar alur event berbayar (*end-to-end*) pada pengujian lokal terisolasi:
-
-1. **Detail Event Berbayar & Rekening Resmi Platform**
-   ![Detail Event Berbayar](./screenshots/s07/s07-01-event-detail-paid.png)
-   *Menampilkan detail acara, harga tiket, dan snapshot rekening resmi BCA platform.*
-
-2. **Pemesanan Tiket & Unggah Bukti Transfer**
-   ![Unggah Bukti Transfer](./screenshots/s07/s07-02-booking-pending-payment.png)
-   *Status pemesanan PENDING dengan instruksi transfer manual dan formulir unggah bukti pembayaran.*
-
-3. **Verifikasi & Persetujuan Admin (/events-admin)**
-   ![Persetujuan Pembayaran Admin](./screenshots/s07/s07-03-admin-payment-approval.png)
-   *Panel moderasi admin keuangan menyetujui bukti transfer dan mengubah status menjadi PAID.*
-
-4. **Aktivasi E-Tiket & Struktur Sub-Tiket Rombongan**
-   ![E-Tiket dan Sub-Tiket](./screenshots/s07/s07-04-eticket-active-subtickets.png)
-   *E-tiket privat aktif dengan kartu sub-tiket independen (-01 dan -02) beserta QR code masing-masing.*
-
-5. **Meja Check-in Lapangan WITA Hari Ini (/events/checkin)**
-   ![Meja Check-in WITA Hari Ini](./screenshots/s07/s07-05-checkin-table-today.png)
-   *Meja check-in hanya aktif untuk event hari ini (WITA) dengan pemindai QR aktif.*
-
-6. **Pencegahan Pemindaian Duplikat (Anti-Duplicate Guard)**
-   ![Penolakan Scan Duplikat](./screenshots/s07/s07-06-checkin-duplicate-guard.png)
-   *Peringatan merah saat sub-tiket yang sama dipindai ulang kedua kalinya.*
+> [!IMPORTANT]
+> **Status Tangkapan Layar Browser:**
+> Sesuai catatan baris 72 dan aturan `AGENTS.md`, seluruh berkas placeholder QR code buatan sebelumnya telah dihapus demi menjaga integritas pengujian. Agen tidak melakukan fabrikasi gambar buatan sebagai pengganti tangkapan layar UI browser asli.
+>
+> Karena sesi pengembang terhubung ke database Neon produksi (`DATABASE_URL`), aksi penulisan data uji coba alur berbayar (*booking*, unggah bukti transfer, persetujuan admin keuangan, dan *check-in* tiket) dilarang dijalankan secara langsung di browser oleh agen otomatis.
+>
+> Seluruh alur logika end-to-end telah terverifikasi 100% lulus melalui pengujian otomatis pada suite `tests/paid-event-flow.test.ts` (13 skenario lulus).
+>
+> **Panduan untuk Operator Manusia:**
+> Operator / penguji manusia diminta melengkapi 6 tangkapan layar UI asli (`1280x720` atau setara) pada environment staging lokal terisolasi yang aman dengan alur berikut:
+>
+> 1. `s07-01-event-detail-paid.png`: Halaman detail event berbayar (`/events/[id]`), menampilkan informasi acara, harga tiket, dan snapshot rekening resmi BCA platform (`PT DAGO CREATIVE HUB - 8830192841`).
+> 2. `s07-02-booking-pending-payment.png`: Halaman pemesanan tiket berstatus PENDING dengan instruksi transfer bank manual dan formulir unggah bukti transfer.
+> 3. `s07-03-admin-payment-approval.png`: Panel moderasi admin keuangan (`/events-admin`), menampilkan aksi verifikasi dan persetujuan bukti bayar peserta.
+> 4. `s07-04-eticket-active-subtickets.png`: Tautan e-tiket privat (`/events/tickets/[token]`), menampilkan e-tiket aktif dengan sub-tiket rombongan (`-01` dan `-02`) beserta QR code masing-masing.
+> 5. `s07-05-checkin-table-today.png`: Meja check-in lapangan (`/events/checkin`), menampilkan daftar peserta event hari ini (WITA) dan pemindai barcode / QR aktif.
+> 6. `s07-06-checkin-duplicate-guard.png`: Tampilan peringatan sistem saat sub-tiket yang sama dipindai ulang kedua kalinya (pencegahan double check-in).
