@@ -81,8 +81,6 @@ export interface LibraryPhoto {
   credit: { author: string; href: string; license: string };
 }
 
-const COMMONS = "https://upload.wikimedia.org/wikipedia/commons/thumb";
-
 export const HERO_PHOTO: LibraryPhoto = {
   src: "/images/events/coworking1.jpeg",
   srcSet: "/images/events/coworking1.jpeg",
@@ -94,15 +92,13 @@ export const HERO_PHOTO: LibraryPhoto = {
 };
 
 export const FOOD_PHOTO: LibraryPhoto = {
-  src: `${COMMONS}/5/52/Espresso_coffee_pouring_from_retro_espresso_machine.jpg/1280px-Espresso_coffee_pouring_from_retro_espresso_machine.jpg`,
-  srcSet: [960, 1280, 1920]
-    .map((w) => `${COMMONS}/5/52/Espresso_coffee_pouring_from_retro_espresso_machine.jpg/${w}px-Espresso_coffee_pouring_from_retro_espresso_machine.jpg ${w}w`)
-    .join(", "),
-  width: 4016,
-  height: 6016,
-  alt: "Espresso mengalir dari mesin ke dua gelas",
+  src: "/images/fnb.jpg",
+  srcSet: "/images/fnb.jpg",
+  width: 1000,
+  height: 667,
+  alt: "Area kuliner dan dapur mitra Dago Creative Hub",
   wanted: "Bar Kopi Senja atau satu hidangan dari dapur mitra, difoto dekat",
-  credit: { author: "Shixart1985", href: "https://commons.wikimedia.org/wiki/File:Espresso_coffee_pouring_from_retro_espresso_machine.jpg", license: "CC BY 2.0" },
+  credit: { author: "Dago Creative Hub", href: "", license: "Dokumentasi internal" },
 };
 
 export const EVENT_PHOTO: LibraryPhoto = {

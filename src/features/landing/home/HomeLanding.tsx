@@ -31,7 +31,7 @@ import { Reveal } from "./Reveal";
 import { EventsPanel, FoodPanel, WorkspacePanel } from "./ShowcasePanels";
 
 const SECTION = "mx-auto max-w-6xl px-4 sm:px-6";
-const SPLIT_STAGE = "aspect-4/5 sm:aspect-4/3";
+const SPLIT_STAGE = "aspect-4/5 sm:aspect-[5/4]";
 
 // Static class names so Tailwind can detect them: each tile takes its business unit's logo colour.
 const SUMMARY: readonly {

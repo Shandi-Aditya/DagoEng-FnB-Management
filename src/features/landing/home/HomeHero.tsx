@@ -12,7 +12,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-import { AmbientHeroBackdrop } from "./AmbientCanvas";
 import {
   EventsPanel,
   FoodPanel,
@@ -116,7 +115,7 @@ export function HomeHero() {
       <Tabs
         value={showcase}
         onValueChange={(value) => setShowcase(value as ShowcaseId)}
-        className={`w-full flex flex-col items-center gap-6 ${ENTER} delay-200`}
+        className={`w-full items-center gap-4 ${ENTER} delay-200`}
       >
         <TabsList className="!h-auto group-data-horizontal/tabs:!h-auto flex-wrap justify-center gap-2 bg-transparent p-0 w-full max-w-full">
           {SHOWCASE_TABS.map((tab) => (
@@ -126,27 +125,15 @@ export function HomeHero() {
             </TabsTrigger>
           ))}
         </TabsList>
-
-        {/* Ambient Gradient Canvas Frame with organic aurora shapes & unit-specific palette */}
-        <div className="relative w-full rounded-t-2xl sm:rounded-t-3xl rounded-b-none pt-5 px-5 pb-0 sm:pt-10 sm:px-10 sm:pb-0 lg:pt-14 lg:px-14 lg:pb-0 overflow-hidden">
-          <AmbientHeroBackdrop showcase={showcase} />
-
-          {/* Bottom dissolve overlay to page background for the ambient gradient sides */}
-          <div
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-36 sm:h-52 bg-gradient-to-t from-background from-15% via-background/80 via-55% to-transparent z-10"
-            aria-hidden="true"
-          />
-
-          <TabsContent value="work" className={`relative z-10 w-full m-0 ${SWAP}`}>
-            <WorkspacePanel priority withBottomDissolve className={STAGE} />
-          </TabsContent>
-          <TabsContent value="food" className={`relative z-10 w-full m-0 ${SWAP}`}>
-            <FoodPanel withBottomDissolve className={STAGE} />
-          </TabsContent>
-          <TabsContent value="events" className={`relative z-10 w-full m-0 ${SWAP}`}>
-            <EventsPanel withBottomDissolve noPhoto className={STAGE} />
-          </TabsContent>
-        </div>
+        <TabsContent value="work" className={`w-full ${SWAP}`}>
+          <WorkspacePanel priority withBottomDissolve className={STAGE} />
+        </TabsContent>
+        <TabsContent value="food" className={`w-full ${SWAP}`}>
+          <FoodPanel withBottomDissolve className={STAGE} />
+        </TabsContent>
+        <TabsContent value="events" className={`w-full ${SWAP}`}>
+          <EventsPanel withBottomDissolve className={STAGE} />
+        </TabsContent>
       </Tabs>
     </section>
   );

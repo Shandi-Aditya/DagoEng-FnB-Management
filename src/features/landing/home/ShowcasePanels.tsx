@@ -131,27 +131,25 @@ export function WorkspacePanel({
 }) {
   if (compact) {
     return (
-      <div className={cn("relative flex items-center justify-center p-3 sm:p-6", className)}>
-        <div className="relative w-full max-w-xl sm:min-w-[506px] h-[365.5px] rounded-2xl overflow-hidden bg-muted">
-          <Image
-            src={HERO_PHOTO.src}
-            alt={HERO_PHOTO.alt}
-            fill
-            sizes="(min-width: 64rem) 1100px, 100vw"
-            priority={priority}
-            className="object-cover saturate-85"
-          />
-          <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
-            <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
-              <CardHeader className="p-0 gap-0.5">
-                <CardTitle className="text-sm font-semibold">Tarif ruang kerja</CardTitle>
-                <CardDescription className="text-xs">Per jam, dipesan dari ponsel</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <PriceList items={WORKSPACES} compact />
-              </CardContent>
-            </Card>
-          </div>
+      <div className={cn("relative w-full overflow-hidden rounded-2xl bg-muted", className)}>
+        <Image
+          src={HERO_PHOTO.src}
+          alt={HERO_PHOTO.alt}
+          fill
+          sizes="(min-width: 64rem) 560px, 100vw"
+          priority={priority}
+          className="object-cover saturate-85"
+        />
+        <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
+          <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
+            <CardHeader className="p-0 gap-0.5">
+              <CardTitle className="text-sm font-semibold">Tarif ruang kerja</CardTitle>
+              <CardDescription className="text-xs">Per jam, dipesan dari ponsel</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <PriceList items={WORKSPACES} compact />
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -207,26 +205,24 @@ export function FoodPanel({
 }) {
   if (compact) {
     return (
-      <div className={cn("relative flex items-center justify-center p-3 sm:p-6", className)}>
-        <div className="relative w-full max-w-xl sm:min-w-[506px] h-[365.5px] rounded-2xl overflow-hidden bg-muted">
-          <Image
-            src={FOOD_PHOTO.src}
-            alt={FOOD_PHOTO.alt}
-            fill
-            sizes="(min-width: 64rem) 1100px, 100vw"
-            className="object-cover saturate-85"
-          />
-          <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
-            <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
-              <CardHeader className="p-0 gap-0.5">
-                <CardTitle className="text-sm font-semibold">Daftar dapur mitra</CardTitle>
-                <CardDescription className="truncate text-xs">Pesan dari meja, diantar langsung</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <KitchenList compact />
-              </CardContent>
-            </Card>
-          </div>
+      <div className={cn("relative w-full overflow-hidden rounded-2xl bg-muted", className)}>
+        <Image
+          src={FOOD_PHOTO.src}
+          alt={FOOD_PHOTO.alt}
+          fill
+          sizes="(min-width: 64rem) 560px, 100vw"
+          className="object-cover saturate-85"
+        />
+        <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
+          <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
+            <CardHeader className="p-0 gap-0.5">
+              <CardTitle className="text-sm font-semibold">Daftar dapur mitra</CardTitle>
+              <CardDescription className="truncate text-xs">Pesan dari meja, diantar langsung</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <KitchenList compact />
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -337,7 +333,7 @@ export function EventsPanel({
 
   if (noPhoto) {
     return (
-      <div className={cn("relative flex items-center justify-center p-1 sm:p-6 w-full", className)}>
+      <div className={cn("relative flex items-center justify-center w-full", className)}>
         {card}
       </div>
     );
