@@ -122,10 +122,20 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
         : null,
       dokuInvoiceNumber: booking.dokuInvoiceNumber,
       dokuPaymentUrl: booking.dokuPaymentUrl,
-      destinationBankSnapshot:
-        booking.destinationBankSnapshot ||
-        (matchingEvent ? resolveDestinationBankAccount(matchingEvent) : null),
-      activeDestinationBank: resolvedTransferBank.activeBank,
+      destinationBankSnapshot: (() => {
+        const raw =
+          booking.destinationBankSnapshot ||
+          (matchingEvent ? resolveDestinationBankAccount(matchingEvent) : null);
+        if (!raw) return null;
+        if (raw.accountType === "ORGANIZER" || isPlaceholderBankAccount(raw)) return null;
+        return raw;
+      })(),
+      activeDestinationBank: (() => {
+        const raw = resolvedTransferBank.activeBank;
+        if (!raw) return null;
+        if (raw.accountType === "ORGANIZER" || isPlaceholderBankAccount(raw)) return null;
+        return raw;
+      })(),
       isOriginalBankDeactivated: resolvedTransferBank.isSnapshotDeactivated,
       activeBankAccounts: (resolvedTransferBank.activeBank
         ? platformBanks.filter((b) => b.accountNumber === resolvedTransferBank.activeBank?.accountNumber)

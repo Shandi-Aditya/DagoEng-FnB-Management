@@ -239,7 +239,26 @@ export default function PrivateTicketViewPage() {
     selectedTicketIndex
   );
 
-  const bankAccounts =
+  const isSafeBank = (b: any) => {
+    if (!b) return false;
+    if (b.accountType === "ORGANIZER") return false;
+    const holder = (b.accountHolder || "").toLowerCase();
+    const num = b.accountNumber || "";
+    const label = (b.label || "").toLowerCase();
+    if (
+      holder.includes("demo") ||
+      holder.includes("dummy") ||
+      holder.includes("sandbox") ||
+      holder.includes("placeholder")
+    )
+      return false;
+    if (label.includes("demo") || label.includes("sandbox") || label.includes("placeholder"))
+      return false;
+    if (num === "1234567890" || num === "0000000000" || num === "1111111111") return false;
+    return true;
+  };
+
+  const rawBankAccounts =
     ticket.paymentStatus === "PAID" && ticket.destinationBankSnapshot
       ? [ticket.destinationBankSnapshot]
       : ticket.activeBankAccounts && ticket.activeBankAccounts.length > 0
@@ -247,6 +266,8 @@ export default function PrivateTicketViewPage() {
       : ticket.destinationBankSnapshot
       ? [ticket.destinationBankSnapshot]
       : [];
+
+  const bankAccounts = rawBankAccounts.filter(isSafeBank);
 
   return (
     <div data-unit="event" className="min-h-screen bg-background text-foreground flex flex-col justify-between">
@@ -344,6 +365,16 @@ export default function PrivateTicketViewPage() {
                   onDownloadSubTicket={handleDownloadSubTicket}
                   isDownloading={isDownloadingTicket}
                 />
+              )}
+
+              {ticket.paymentStatus === "CANCELLED" && ticket.paymentRejectionReason && (
+                <div className="p-3.5 rounded-xl border border-destructive/20 bg-destructive/10 text-destructive text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <AlertCircle className="size-4 shrink-0" />
+                    <span>Alasan penolakan / pembatalan pembayaran:</span>
+                  </div>
+                  <p className="leading-relaxed text-foreground">{ticket.paymentRejectionReason}</p>
+                </div>
               )}
 
               {ticket.paymentStatus === "PENDING" && ticket.totalPrice > 0 && (

@@ -346,11 +346,15 @@ export async function dispatchTransactionalEmail(options: TransactionalEmailOpti
           to: [options.to],
           subject: options.subject,
           html: options.html,
-          attachments: options.attachments?.map((a) => ({
-            filename: a.filename,
-            content: Buffer.isBuffer(a.content) ? a.content.toString("base64") : a.content,
-            cid: a.cid,
-          })),
+          ...(options.attachments && options.attachments.length > 0
+            ? {
+                attachments: options.attachments.map((a) => ({
+                  filename: a.filename,
+                  content: Buffer.isBuffer(a.content) ? a.content.toString("base64") : a.content,
+                  content_id: a.cid,
+                })),
+              }
+            : {}),
         }),
       });
 
@@ -390,12 +394,17 @@ export async function dispatchTransactionalEmail(options: TransactionalEmailOpti
           from: { email: fromEmail },
           subject: options.subject,
           content: [{ type: "text/html", value: options.html }],
-          attachments: options.attachments?.map((a) => ({
-            content: Buffer.isBuffer(a.content) ? a.content.toString("base64") : a.content,
-            filename: a.filename,
-            content_id: a.cid,
-            disposition: a.cid ? "inline" : "attachment",
-          })),
+          ...(options.attachments && options.attachments.length > 0
+            ? {
+                attachments: options.attachments.map((a) => ({
+                  content: Buffer.isBuffer(a.content) ? a.content.toString("base64") : a.content,
+                  filename: a.filename,
+                  type: a.contentType || "image/png",
+                  content_id: a.cid,
+                  disposition: a.cid ? "inline" : "attachment",
+                })),
+              }
+            : {}),
         }),
       });
 
@@ -474,12 +483,14 @@ export async function sendTicketConfirmationEmail(
       }
     }
     const cid = t.cid || `qr-seat-${t.seatNumber}@dagoeng.com`;
-    attachments.push({
-      filename: `qr-${t.ticketCode}.png`,
-      content: buf,
-      cid,
-      contentType: "image/png",
-    });
+    if (buf && buf.length > 0) {
+      attachments.push({
+        filename: `qr-${t.ticketCode}.png`,
+        content: buf,
+        cid,
+        contentType: "image/png",
+      });
+    }
   }
 
   return dispatchTransactionalEmail({
@@ -510,7 +521,7 @@ export async function dispatchPaidTicketEmail(
   },
   options?: { baseUrl?: string }
 ): Promise<EmailDispatchResult> {
-  const baseUrl = options?.baseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://dagoeng.com";
+  const baseUrl = options?.baseUrl || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://dagoeng.com";
   const count = booking.ticketCount || 1;
   const price = booking.totalPrice || 0;
   const privateAccessUrl = `${baseUrl}/events/tickets/${booking.guestToken || booking.ticketCode}`;

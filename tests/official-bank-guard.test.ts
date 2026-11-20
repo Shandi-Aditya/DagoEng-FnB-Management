@@ -208,6 +208,24 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
 
     it("2.4 should allow bypass when ALLOW_DEMO_BANK='true'", async () => {
       process.env.ALLOW_DEMO_BANK = "true";
+      const demoPolicy: EventRevenueSharingPolicy = {
+        ...getEventRevenuePolicy(),
+        bankAccounts: [
+          {
+            id: "bank-demo-placeholder",
+            label: "BCA Demo Sandbox",
+            bankName: "Bank BCA",
+            accountNumber: "1234567890",
+            accountHolder: "PT DEMO DAGOENG",
+            isDefault: true,
+            isActive: true,
+            accountType: "PLATFORM",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await saveEventSettingsToDisk(demoPolicy);
       await saveEventsToDisk([mockPaidEvent]);
       await saveBookingsToDisk([]);
 
@@ -217,6 +235,7 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
         guestEmail: "tester@demo.com",
         guestPhone: "081234567890",
         ticketCount: 1,
+        enforceOfficialBank: true,
       });
 
       expect(booking).toBeDefined();

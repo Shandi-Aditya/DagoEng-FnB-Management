@@ -350,7 +350,12 @@ export function EventAttendeesModal({
                                 </>
                               )}
                             </Button>
-                            {onDeleteBooking && b.paymentStatus !== "PAID" && (b.checkedInQty || 0) === 0 ? (
+                            {onDeleteBooking &&
+                            b.paymentStatus !== "PAID" &&
+                            b.paymentStatus !== "REFUNDED" &&
+                            b.refundStatus !== "REQUESTED" &&
+                            !(b.paymentStatus === "PENDING" && b.paymentProofUrl && !b.paymentRejectionReason) &&
+                            (b.checkedInQty || 0) === 0 ? (
                               <Button
                                 variant="ghost"
                                 size="sm"

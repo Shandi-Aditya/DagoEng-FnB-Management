@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { organizerCheckInAttendee, getBookingById, getApprovedEvents } from "@/lib/events";
+import { organizerCheckInAttendee, getBookingById, getAdminEvents } from "@/lib/events";
 import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
 import { assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
 import { AttendeeCheckInStatus } from "@/types/event";
@@ -66,7 +66,7 @@ export async function PATCH(req: NextRequest) {
     const enforceDateWindow = !reset;
 
     if (reset || checkInStatus === "REGISTERED") {
-      const allEvents = await getApprovedEvents();
+      const allEvents = await getAdminEvents();
       const booking = await getBookingById(identifier);
       if (booking) {
         const event = allEvents.find((e) => e.id === booking.eventId);

@@ -159,7 +159,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Layer 3: State machine validation (cannot settle expired or cancelled bookings)
+    // Layer 3: State machine validation (idempotent for PAID, cannot settle expired or cancelled bookings)
+    if (booking.paymentStatus === "PAID") {
+      return NextResponse.json({
+        success: true,
+        message: "Pesanan ini sudah berstatus PAID sebelumnya (idempoten).",
+        simulation: {
+          invoice_number: booking.dokuInvoiceNumber || `INV-${booking.ticketCode}`,
+          status: "SUCCESS",
+          isAlreadyPaid: true,
+        },
+      });
+    }
+
     if (booking.paymentStatus === "CANCELLED" || booking.paymentStatus === "EXPIRED") {
       return NextResponse.json(
         {
@@ -230,13 +242,18 @@ export async function POST(req: NextRequest) {
     if (targetStatus === "SUCCESS") {
       const updatedBooking = updatedBookings.find((b) => b.id === booking.id);
       if (updatedBooking) {
+        let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([
             dispatchPaidTicketEmail(updatedBooking),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000)),
+            new Promise((_, reject) => {
+              emailTimer = setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000);
+            }),
           ]);
         } catch (emailErr) {
           console.error(`[DOKU Simulate] Failed to dispatch paid ticket email for ${updatedBooking.ticketCode}:`, emailErr);
+        } finally {
+          if (emailTimer) clearTimeout(emailTimer);
         }
       }
     }

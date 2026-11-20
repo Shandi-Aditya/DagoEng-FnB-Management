@@ -1141,6 +1141,26 @@ export function buildUpdateEventBankAccount(
   const existing = currentAccounts[index];
   const now = new Date().toISOString();
 
+  const effectiveBankName = updates.bankName !== undefined ? updates.bankName.trim() : existing.bankName;
+  const effectiveHolder = updates.accountHolder !== undefined ? updates.accountHolder.trim() : existing.accountHolder;
+  const effectiveNumber = updates.accountNumber !== undefined ? updates.accountNumber.replace(/[^0-9]/g, "") : existing.accountNumber;
+  const effectiveLabel = updates.label !== undefined
+    ? (updates.label.trim() || `${effectiveBankName} Official`)
+    : existing.label || `${effectiveBankName} Official`;
+  const effectiveAccountType = updates.accountType || existing.accountType;
+
+  if (
+    effectiveAccountType === "PLATFORM" &&
+    process.env.NODE_ENV !== "test" &&
+    isPlaceholderBankAccount({
+      accountNumber: effectiveNumber,
+      accountHolder: effectiveHolder,
+      label: effectiveLabel,
+    })
+  ) {
+    throw new Error("Rekening platform resmi tidak boleh menggunakan nomor atau nama rekening placeholder/demo.");
+  }
+
   if (updates.isDefault && !existing.isDefault) {
     currentAccounts.forEach((b) => {
       if (b.accountType === existing.accountType) b.isDefault = false;
@@ -1150,6 +1170,10 @@ export function buildUpdateEventBankAccount(
   const updated: EventBankAccount = {
     ...existing,
     ...updates,
+    label: effectiveLabel,
+    bankName: effectiveBankName,
+    accountNumber: effectiveNumber,
+    accountHolder: effectiveHolder,
     id: existing.id,
     updatedAt: now,
   };
@@ -3756,13 +3780,18 @@ export async function createInvitationTicket(
       markStorageSyncSynced("event_bookings.json");
 
       if (committedBooking) {
+        let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([
             dispatchPaidTicketEmail(committedBooking),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending invitation ticket email")), 10000)),
+            new Promise((_, reject) => {
+              emailTimer = setTimeout(() => reject(new Error("Timeout sending invitation ticket email")), 10000);
+            }),
           ]);
         } catch (err) {
           console.warn("[Events] Gagal mengirim email tiket undangan:", err);
+        } finally {
+          if (emailTimer) clearTimeout(emailTimer);
         }
       }
     }
@@ -4561,13 +4590,18 @@ export async function createEventBooking(
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket gratis terbit (PAID)
       if (committedBooking && (committedBooking as EventTicketOrder).paymentStatus === "PAID") {
+        let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([
             dispatchPaidTicketEmail(committedBooking as EventTicketOrder),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending free ticket email")), 10000)),
+            new Promise((_, reject) => {
+              emailTimer = setTimeout(() => reject(new Error("Timeout sending free ticket email")), 10000);
+            }),
           ]);
         } catch (err) {
           console.warn("[Events] Gagal mengirim email tiket gratis:", err);
+        } finally {
+          if (emailTimer) clearTimeout(emailTimer);
         }
       }
     }
@@ -5171,13 +5205,18 @@ export async function updateBookingPaymentStatus(
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket berbayar diverifikasi (PAID)
       if (previousStatus !== "PAID" && status === "PAID") {
+        let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([
             dispatchPaidTicketEmail(committedBooking),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000)),
+            new Promise((_, reject) => {
+              emailTimer = setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000);
+            }),
           ]);
         } catch (err) {
           console.warn("[Events] Gagal mengirim email tiket lunas:", err);
+        } finally {
+          if (emailTimer) clearTimeout(emailTimer);
         }
       }
 
@@ -5236,7 +5275,7 @@ export async function deleteEventBooking(
       );
     }
 
-    if (booking.paymentProofUrl && booking.paymentStatus === "PENDING") {
+    if (booking.paymentProofUrl && booking.paymentStatus === "PENDING" && !booking.paymentRejectionReason) {
       throw new Error(
         `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] memiliki bukti pembayaran yang menunggu verifikasi.`
       );
@@ -5434,12 +5473,20 @@ export async function adminRejectBookingPayment(
 /**
  * Calculates operational KPIs for Event Komunitas.
  */
-export async function getEventOperationalStats(): Promise<EventOperationalStats> {
+export async function getEventOperationalStats(
+  allowedEventIds?: string[] | Set<string>
+): Promise<EventOperationalStats> {
   await syncStorageFromDb("events.json").catch(() => { });
   await syncStorageFromDb("event_bookings.json").catch(() => { });
-  const events = loadEventsFromDisk();
+  let events = loadEventsFromDisk();
   await syncNormalizedEventsToDb();
-  const bookings = loadBookingsFromDisk();
+  let bookings = loadBookingsFromDisk();
+
+  if (allowedEventIds) {
+    const idSet = allowedEventIds instanceof Set ? allowedEventIds : new Set(allowedEventIds);
+    events = events.filter((e) => idSet.has(e.id));
+    bookings = bookings.filter((b) => idSet.has(b.eventId));
+  }
 
   const totalEvents = events.length;
   const approvedEvents = events.filter((e) => e.status === "APPROVED").length;
@@ -5650,7 +5697,9 @@ export async function organizerCheckInAttendee(
 
   // Event operational date window verification (if enforced)
   if (options?.enforceDateWindow && event.startDate) {
-    const refDate = new Date();
+    const refDate = options?.currentTimestamp
+      ? new Date(options.currentTimestamp)
+      : new Date();
     const dateStatus = getEventDateStatusWita(
       { startDate: event.startDate, endDate: event.endDate },
       refDate

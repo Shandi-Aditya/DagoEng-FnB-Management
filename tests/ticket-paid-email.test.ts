@@ -250,6 +250,62 @@ describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
       expect(callArg.attachments[1].filename).toBe("qr-DAGO-EVT-12345-02.png");
       expect(callArg.attachments[1].cid).toBe("qr-seat-2@dagoeng.com");
     });
+
+    it("3.5 mengirimkan payload Resend dengan key content_id bukan cid pada attachments", async () => {
+      process.env.RESEND_API_KEY = "re_test_key_abc";
+      let capturedBody: any = null;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
+        const url = typeof input === "string" ? input : input?.url || "";
+        if (url.includes("resend.com")) {
+          capturedBody = JSON.parse(init?.body as string);
+          return new Response(JSON.stringify({ id: "resend_123" }), { status: 200 });
+        }
+        return new Response("Not found", { status: 404 });
+      });
+
+      const res = await dispatchPaidTicketEmail(sampleBooking);
+      expect(res.sent).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody.attachments).toHaveLength(2);
+      expect(capturedBody.attachments[0]).toHaveProperty("content_id");
+      expect(capturedBody.attachments[0]).not.toHaveProperty("cid");
+      expect(capturedBody.attachments[0].content_id).toBe("qr-seat-1@dagoeng.com");
+    });
+
+    it("3.6 mengirimkan payload SendGrid dengan format type dan disposition inline", async () => {
+      delete process.env.RESEND_API_KEY;
+      process.env.SENDGRID_API_KEY = "sg_test_key_xyz";
+      let capturedBody: any = null;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
+        const url = typeof input === "string" ? input : input?.url || "";
+        if (url.includes("sendgrid.com")) {
+          capturedBody = JSON.parse(init?.body as string);
+          return new Response(JSON.stringify({}), { status: 202 });
+        }
+        return new Response("Not found", { status: 404 });
+      });
+
+      const res = await dispatchPaidTicketEmail(sampleBooking);
+      expect(res.sent).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody.attachments).toHaveLength(2);
+      expect(capturedBody.attachments[0].type).toBe("image/png");
+      expect(capturedBody.attachments[0].disposition).toBe("inline");
+      expect(capturedBody.attachments[0].content_id).toBe("qr-seat-1@dagoeng.com");
+    });
+
+    it("3.7 menghormati fallback process.env.APP_URL pada tautan privat tiket", async () => {
+      process.env.RESEND_API_KEY = "re_test_key_abc";
+      process.env.APP_URL = "https://custom-app.dagoeng.com";
+      let capturedBody: any = null;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init?: any) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response(JSON.stringify({ id: "resend_123" }), { status: 200 });
+      });
+
+      await dispatchPaidTicketEmail(sampleBooking);
+      expect(capturedBody.html).toContain("https://custom-app.dagoeng.com/events/tickets/tok-ahmad-secret");
+    });
   });
 
   describe("4. Integrasi Alur Bisnis Event (End-to-End Trigger)", () => {
@@ -359,6 +415,43 @@ describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
       // Email terkirim dengan sub-tiket rombongan
       const dispatchResult = await dispatchPaidTicketEmail(approved);
       expect(dispatchResult.sent).toBe(true);
+    });
+
+    it("4.3 simulasi DOKU webhook bersifat idempoten dan tidak mengirimkan email ganda ketika booking sudah PAID", async () => {
+      const { POST } = await import("@/app/api/webhooks/doku/simulate/route");
+      const paidBooking = {
+        id: "book-paid-sim",
+        eventId: paidEvent.id,
+        eventTitle: paidEvent.title,
+        guestEmail: "paid-sim@dagoeng.com",
+        guestName: "Sim Tester",
+        guestPhone: "081234567890",
+        ticketCode: "DAGO-EVT-SIM01",
+        ticketCount: 1,
+        totalPrice: 50000,
+        paymentStatus: "PAID" as const,
+        paymentMethod: "DOKU_CHECKOUT" as const,
+        dokuInvoiceNumber: "INV-SIM-PAID-01",
+        dokuPaymentUrl: "https://dagoeng.com/checkout-link-v2/tok-valid-checkout",
+      };
+      await saveBookingsToDisk([paidBooking as any]);
+
+      const req = new Request("http://localhost/api/webhooks/doku/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceNumber: paidBooking.ticketCode,
+          token: "tok-valid-checkout",
+          status: "SUCCESS",
+        }),
+      });
+
+      const res = await POST(req as any);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.message).toContain("idempoten");
+      expect(json.simulation.isAlreadyPaid).toBe(true);
     });
   });
 });

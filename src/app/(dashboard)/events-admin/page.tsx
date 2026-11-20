@@ -18,6 +18,7 @@ import {
   type DateRange,
 } from "@/components/events/EventDateRangeFilter";
 import { downloadCSV } from "@/lib/export-utils";
+import { notify } from "@/components/app/notify";
 
 // Sub-komponen modular yang sudah diredesign
 import {
@@ -661,7 +662,7 @@ export default function AdminEventsPage() {
     setEditingBank(null);
     setBankForm({
       label: "",
-      bankName: "BCA",
+      bankName: "BCA (Bank Central Asia)",
       customBankName: "",
       accountNumber: "",
       accountHolder: "",
@@ -674,11 +675,29 @@ export default function AdminEventsPage() {
 
   const handleOpenEditBank = (acc: any) => {
     setEditingBank(acc);
-    const knownBanks = ["BCA", "Mandiri", "BNI", "BRI", "BSI", "CIMB", "Permata"];
-    const isKnown = knownBanks.includes(acc.bankName);
+    const knownBanks = [
+      "BCA (Bank Central Asia)",
+      "Bank Mandiri",
+      "BNI (Bank Negara Indonesia)",
+      "Bank BRI",
+      "BSI (Bank Syariah Indonesia)",
+      "CIMB Niaga",
+      "Bank Permata",
+    ];
+    let matchedBank = knownBanks.find((k) => k === acc.bankName);
+    if (!matchedBank) {
+      if (acc.bankName === "BCA") matchedBank = "BCA (Bank Central Asia)";
+      else if (acc.bankName === "Mandiri") matchedBank = "Bank Mandiri";
+      else if (acc.bankName === "BNI") matchedBank = "BNI (Bank Negara Indonesia)";
+      else if (acc.bankName === "BRI") matchedBank = "Bank BRI";
+      else if (acc.bankName === "BSI") matchedBank = "BSI (Bank Syariah Indonesia)";
+      else if (acc.bankName === "CIMB") matchedBank = "CIMB Niaga";
+      else if (acc.bankName === "Permata") matchedBank = "Bank Permata";
+    }
+    const isKnown = Boolean(matchedBank);
     setBankForm({
       label: acc.label || "",
-      bankName: isKnown ? acc.bankName : "Other",
+      bankName: isKnown ? matchedBank! : "Other",
       customBankName: isKnown ? "" : acc.bankName,
       accountNumber: acc.accountNumber || "",
       accountHolder: acc.accountHolder || "",
@@ -691,6 +710,10 @@ export default function AdminEventsPage() {
 
   const handleSubmitBankForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (bankForm.bankName === "Other" && !bankForm.customBankName?.trim()) {
+      notify.error("Validasi gagal", "Nama bank kustom wajib diisi.");
+      return;
+    }
     try {
       setIsSavingSettings(true);
       const isEdit = Boolean(editingBank);

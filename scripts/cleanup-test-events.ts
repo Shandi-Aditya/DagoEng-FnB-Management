@@ -75,6 +75,9 @@ async function main() {
       await syncStorageFromDb("events.json");
       await syncStorageFromDb("event_bookings.json");
     } catch (e) {
+      if (isApply) {
+        throw new Error(`Gagal pra-sinkronisasi database saat mode --apply: ${e}`);
+      }
       console.warn("Peringatan pra-sinkronisasi database gagal:", e);
     }
   }
@@ -107,11 +110,14 @@ async function main() {
     rejectedEvents: [],
   };
 
+  const EXPLICIT_CLEANUP_CODES = new Set(["DAGO-EVT-88221", "DAGO-EVT-14704"]);
+
   // 1. Process Bookings
   const survivingBookings: EventTicketOrder[] = [];
   for (const b of allBookings) {
     if (isIdentifiedTestBooking(b)) {
-      if (b.paymentStatus === "PAID" && b.paymentMethod !== "FREE" && !b.guestEmail.includes("example.com")) {
+      const isExplicitTarget = EXPLICIT_CLEANUP_CODES.has(b.ticketCode);
+      if (!isExplicitTarget && b.paymentStatus === "PAID" && b.paymentMethod !== "FREE" && !b.guestEmail.includes("example.com")) {
         report.rejectedBookings.push({
           id: b.id,
           reason: `Pemesanan tiket berbayar non-mock (${b.ticketCode}) ditolak demi keamanan finansial.`,

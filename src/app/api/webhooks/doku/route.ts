@@ -117,13 +117,18 @@ export async function POST(req: NextRequest) {
       allBookings[bookingIndex] = updatedBooking;
       await saveBookingsToDisk(allBookings);
 
+      let emailTimer: NodeJS.Timeout | undefined;
       try {
         await Promise.race([
           dispatchPaidTicketEmail(updatedBooking),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000)),
+          new Promise((_, reject) => {
+            emailTimer = setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000);
+          }),
         ]);
       } catch (emailErr) {
         console.error(`[DOKU Webhook] Failed to dispatch paid ticket email for ${updatedBooking.ticketCode}:`, emailErr);
+      } finally {
+        if (emailTimer) clearTimeout(emailTimer);
       }
 
       if (wasCancelled) {

@@ -62,13 +62,13 @@ export function BankModal({
               onChange={(e) => onFormChange({ ...formData, bankName: e.target.value })}
               required
             >
-              <NativeSelectOption value="BCA">BCA (Bank Central Asia)</NativeSelectOption>
-              <NativeSelectOption value="Mandiri">Bank Mandiri</NativeSelectOption>
-              <NativeSelectOption value="BNI">BNI (Bank Negara Indonesia)</NativeSelectOption>
-              <NativeSelectOption value="BRI">BRI (Bank Rakyat Indonesia)</NativeSelectOption>
-              <NativeSelectOption value="BSI">BSI (Bank Syariah Indonesia)</NativeSelectOption>
-              <NativeSelectOption value="CIMB">CIMB Niaga</NativeSelectOption>
-              <NativeSelectOption value="Permata">Bank Permata</NativeSelectOption>
+              <NativeSelectOption value="BCA (Bank Central Asia)">BCA (Bank Central Asia)</NativeSelectOption>
+              <NativeSelectOption value="Bank Mandiri">Bank Mandiri</NativeSelectOption>
+              <NativeSelectOption value="BNI (Bank Negara Indonesia)">BNI (Bank Negara Indonesia)</NativeSelectOption>
+              <NativeSelectOption value="Bank BRI">Bank BRI</NativeSelectOption>
+              <NativeSelectOption value="BSI (Bank Syariah Indonesia)">BSI (Bank Syariah Indonesia)</NativeSelectOption>
+              <NativeSelectOption value="CIMB Niaga">CIMB Niaga</NativeSelectOption>
+              <NativeSelectOption value="Bank Permata">Bank Permata</NativeSelectOption>
               <NativeSelectOption value="Other">Lainnya</NativeSelectOption>
             </NativeSelect>
           </div>

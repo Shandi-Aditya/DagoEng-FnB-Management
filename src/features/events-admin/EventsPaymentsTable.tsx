@@ -244,7 +244,12 @@ export function EventsPaymentsTable({
                                 </Button>
                               ) : null}
 
-                              {onDeleteBooking && b.paymentStatus !== "PAID" && !(isPending && b.paymentProofUrl) && (b.checkedInQty || 0) === 0 ? (
+                              {onDeleteBooking &&
+                              b.paymentStatus !== "PAID" &&
+                              b.paymentStatus !== "REFUNDED" &&
+                              b.refundStatus !== "REQUESTED" &&
+                              !(isPending && b.paymentProofUrl && !b.paymentRejectionReason) &&
+                              (b.checkedInQty || 0) === 0 ? (
                                 <Button
                                   variant="ghost"
                                   size="sm"

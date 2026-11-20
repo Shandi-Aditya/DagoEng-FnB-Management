@@ -195,8 +195,8 @@ export function EventsSettingsView({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Bank & Rekening</TableHead>
-                      <TableHead>Atas Nama</TableHead>
+                      <TableHead>Bank & rekening</TableHead>
+                      <TableHead>Atas nama</TableHead>
                       <TableHead className="hidden sm:table-cell">Cabang</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-0 text-right">
@@ -313,7 +313,7 @@ export function EventsSettingsView({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[180px]">Waktu</TableHead>
-                    <TableHead>Aksi & Bank</TableHead>
+                    <TableHead>Aksi & bank</TableHead>
                     <TableHead>Petugas</TableHead>
                     <TableHead>Keterangan</TableHead>
                   </TableRow>

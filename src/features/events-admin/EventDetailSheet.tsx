@@ -357,7 +357,7 @@ export function EventDetailSheet({
                   </Button>
                 ) : null}
 
-                {onDelete ? (
+                {onDelete && effStatus !== "APPROVED" ? (
                   <Button
                     variant="outline"
                     size="lg"
