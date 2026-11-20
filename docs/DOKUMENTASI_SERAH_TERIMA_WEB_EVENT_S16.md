@@ -13,8 +13,8 @@ Dokumen ini merupakan laporan serah terima teknis dan hasil regression test meny
 - **Cabang Git**: `shandi-dev`
 - **Target Integrasi**: `develop`
 - **Repositori**: `https://gitlab.com/devdagoeng/dagoeng-management.git`
-- **Total Test Web Event**: 20 file uji (340 skenario uji otomatis inti Web Event) ditambah 4 file uji pendukung POS/CRM/Coworking (29 skenario uji otomatis)
-- **Tingkat Kelulusan Uji**: 100% (340 lulus pada 20 file inti Web Event, serta 29 lulus pada 4 file pendukung)
+- **Total Test Web Event**: 20 file uji (377 skenario uji otomatis inti Web Event) ditambah 4 file uji pendukung POS/CRM/Coworking (50 skenario uji otomatis)
+- **Tingkat Kelulusan Uji**: 100% (377 lulus pada 20 file inti Web Event, serta 50 lulus pada 4 file pendukung — total 427 skenario lulus)
 
 ---
 
@@ -22,7 +22,7 @@ Dokumen ini merupakan laporan serah terima teknis dan hasil regression test meny
 
 Pekerjaan magang modul Web Event telah menyelesaikan seluruh milestone dari M1 hingga M5 (Task S-01 sampai S-15). Cakupan fitur mencakup pengelolaan rekening penampung resmi, pembersihan data uji, validasi harga dan kuota, sentralisasi nomor CS, pengiriman e-tiket dan pemulihan kode via email, pembatasan meja check-in WITA hari ini, siklus transaksi event berbayar end-to-end, isolasi RBAC kasir dan tier loyalty, standarisasi coworking WITA dan nota resmi, konsistensi omzet pesanan lunas, sistem tiket bertingkat (*multi-tier*), kode promo dan tiket undangan, kebijakan refund per event, serta dashboard penjualan penyelenggara.
 
-Seluruh 340 skenario uji otomatis khusus inti Web Event (20 file) serta 29 skenario uji pendukung POS/CRM/Coworking (4 file) berhasil dijalankan ulang tanpa ada kegagalan sama sekali (total 369 test lulus 100%).
+Seluruh 377 skenario uji otomatis khusus inti Web Event (20 file) serta 50 skenario uji pendukung POS/CRM/Coworking (4 file) berhasil dijalankan ulang tanpa ada kegagalan sama sekali (total 427 test lulus 100%).
 
 ---
 
@@ -116,37 +116,37 @@ Seluruh 340 skenario uji otomatis khusus inti Web Event (20 file) serta 29 skena
 
 Pengujian regresi dijalankan serentak menggunakan Vitest pada environment node test. Hasil eksekusi adalah sebagai berikut:
 
-| No | File Test Suite | Jumlah Test | Durasi | Status | Modul / Task Terkait |
+| No | File Test Suite | Jumlah Test | Catatan Eksekusi | Status | Modul / Task Terkait |
 | :--- | :--- | :---: | :---: | :---: | :--- |
-| 1 | `tests/official-bank-guard.test.ts` | 9 | 154 ms | **LULUS** | S-01 (Rekening Resmi Penampung) |
-| 2 | `tests/admin-event-bank-cloud-first-persistence.test.ts` | 22 | 384 ms | **LULUS** | S-01 (Cloud-First CAS Persistence) |
-| 3 | `tests/manual-payment-and-bank-settings.test.ts` | 40 | 1679 ms | **LULUS** | S-01 (Pengaturan Rekening Bank) |
-| 4 | `tests/admin-event-delete-and-cleanup.test.ts` | 22 | 731 ms | **LULUS** | S-02 (Pembersihan Event Uji) |
-| 5 | `tests/admin-event-validation-hardening.test.ts` | 46 | 1694 ms | **LULUS** | S-03 (Hardening Validasi Event) |
-| 6 | `tests/events-admin-domain.test.ts` | 11 | 31 ms | **LULUS** | S-04 (Domain Admin & CS WhatsApp) |
-| 7 | `tests/ticket-recovery-and-grouping.test.ts` | 26 | 708 ms | **LULUS** | S-05 (Pemulihan Tiket & Sub-Tiket) |
-| 8 | `tests/ticket-recovery-domain.test.ts` | 26 | 54 ms | **LULUS** | S-05 (Domain Pemulihan Tiket) |
-| 9 | `tests/events-checkin-domain.test.ts` | 29 | 136 ms | **LULUS** | S-06 (Domain Check-In Hari Ini) |
-| 10 | `tests/critical-checkin-bugfixes.test.ts` | 9 | 792 ms | **LULUS** | S-06 (Perbaikan Check-In WITA) |
-| 11 | `tests/checkin-security-and-atomic-resilience.test.ts` | 9 | 959 ms | **LULUS** | S-06 (Resiliensi Atomik Check-In) |
-| 12 | `tests/paid-event-e2e.test.ts` | 13 | 801 ms | **LULUS** | S-07 (End-to-End Event Berbayar) |
-| 13 | `tests/ticket-paid-email.test.ts` | 10 | 615 ms | **LULUS** | S-08 (Dispatcher Email Tiket Lunas) |
-| 14 | `tests/customer-role-access-and-tier.test.ts` | 8 | 39 ms | **LULUS** | S-09 (RBAC Kasir & Tier Member - POS/CRM) |
-| 15 | `tests/coworking-wita-receipt-tax.test.ts` | 8 | 28 ms | **LULUS** | S-10 (Nota Coworking & Pajak WITA - Coworking) |
-| 16 | `tests/receipt-publisher-a6.test.ts` | 5 | 28 ms | **LULUS** | S-10 (Penerbit Nota Resmi Dago - POS) |
-| 17 | `tests/reports-products-margin.test.ts` | 8 | 51 ms | **LULUS** | S-11 (Laporan Produk & Margin - POS) |
-| 18 | `tests/event-ticket-tiers.test.ts` | 8 | 233 ms | **LULUS** | S-12 (Tiket Bertingkat / Multi-Tier) |
-| 19 | `tests/event-promo-and-invitations.test.ts` | 11 | 599 ms | **LULUS** | S-13 (Kode Promo & Tiket Undangan) |
-| 20 | `tests/event-refund-policy.test.ts` | 12 | 356 ms | **LULUS** | S-14 (Kebijakan Refund Per Event) |
-| 21 | `tests/organizer-sales-dashboard.test.ts` | 4 | 28 ms | **LULUS** | S-15 (Dashboard Penjualan Tier) |
-| 22 | `tests/events-portal-domain.test.ts` | 8 | 118 ms | **LULUS** | S-15 (Domain Portal Penyelenggara) |
-| 23 | `tests/events-portal-groups.test.ts` | 18 | 70 ms | **LULUS** | S-15 (Pengelompokan Status Event) |
-| 24 | `tests/events-catalog-domain.test.ts` | 7 | 107 ms | **LULUS** | S-01 s/d S-15 (Katalog Publik) |
-| **SUBTOTAL** | **20 File Inti Web Event** | **340** | **~98 detik** | **100% LULUS** | **Modul Inti Web Event (S-01 s/d S-08, S-12 s/d S-15)** |
-| **SUBTOTAL** | **4 File Pendukung** | **29** | **~4 detik** | **100% LULUS** | **Modul POS/CRM/Coworking Terintegrasi (S-09, S-10, S-11)** |
-| **TOTAL** | **24 File Test Suite** | **369** | **~102 detik** | **100% LULUS** | **Seluruh Modul Web Event & Pendukung** |
+| 1 | `tests/official-bank-guard.test.ts` | 9 | Terverifikasi | **LULUS** | S-01 (Rekening Resmi Penampung) |
+| 2 | `tests/admin-event-bank-cloud-first-persistence.test.ts` | 22 | Terverifikasi | **LULUS** | S-01 (Cloud-First CAS Persistence) |
+| 3 | `tests/manual-payment-and-bank-settings.test.ts` | 40 | Terverifikasi | **LULUS** | S-01 (Pengaturan Rekening Bank) |
+| 4 | `tests/admin-event-delete-and-cleanup.test.ts` | 23 | Terverifikasi | **LULUS** | S-02 (Pembersihan Event Uji) |
+| 5 | `tests/admin-event-validation-hardening.test.ts` | 57 | Terverifikasi | **LULUS** | S-03 (Hardening Validasi Event) |
+| 6 | `tests/events-admin-domain.test.ts` | 11 | Terverifikasi | **LULUS** | S-04 (Domain Admin & CS WhatsApp) |
+| 7 | `tests/ticket-recovery-and-grouping.test.ts` | 26 | Terverifikasi | **LULUS** | S-05 (Pemulihan Tiket & Sub-Tiket) |
+| 8 | `tests/ticket-recovery-domain.test.ts` | 26 | Terverifikasi | **LULUS** | S-05 (Domain Pemulihan Tiket) |
+| 9 | `tests/events-checkin-domain.test.ts` | 29 | Terverifikasi | **LULUS** | S-06 (Domain Check-In Hari Ini) |
+| 10 | `tests/critical-checkin-bugfixes.test.ts` | 9 | Terverifikasi | **LULUS** | S-06 (Perbaikan Check-In WITA) |
+| 11 | `tests/checkin-security-and-atomic-resilience.test.ts` | 9 | Terverifikasi | **LULUS** | S-06 (Resiliensi Atomik Check-In) |
+| 12 | `tests/paid-event-e2e.test.ts` | 17 | Terverifikasi | **LULUS** | S-07 (End-to-End Event Berbayar) |
+| 13 | `tests/ticket-paid-email.test.ts` | 14 | Terverifikasi | **LULUS** | S-08 (Dispatcher Email Tiket Lunas) |
+| 14 | `tests/customer-role-access-and-tier.test.ts` | 27 | Terverifikasi | **LULUS** | S-09 (RBAC Kasir & Tier Member - POS/CRM) |
+| 15 | `tests/coworking-wita-receipt-tax.test.ts` | 8 | Terverifikasi | **LULUS** | S-10 (Nota Coworking & Pajak WITA - Coworking) |
+| 16 | `tests/receipt-publisher-a6.test.ts` | 5 | Terverifikasi | **LULUS** | S-10 (Penerbit Nota Resmi Dago - POS) |
+| 17 | `tests/reports-products-margin.test.ts` | 10 | Terverifikasi | **LULUS** | S-11 (Laporan Produk & Margin - POS) |
+| 18 | `tests/event-ticket-tiers.test.ts` | 8 | Terverifikasi | **LULUS** | S-12 (Tiket Bertingkat / Multi-Tier) |
+| 19 | `tests/event-promo-and-invitations.test.ts` | 13 | Terverifikasi | **LULUS** | S-13 (Kode Promo & Tiket Undangan) |
+| 20 | `tests/event-refund-policy.test.ts` | 21 | Terverifikasi | **LULUS** | S-14 (Kebijakan Refund Per Event) |
+| 21 | `tests/organizer-sales-dashboard.test.ts` | 7 | Terverifikasi | **LULUS** | S-15 (Dashboard Penjualan Tier) |
+| 22 | `tests/events-portal-domain.test.ts` | 11 | Terverifikasi | **LULUS** | S-15 (Domain Portal Penyelenggara) |
+| 23 | `tests/events-portal-groups.test.ts` | 18 | Terverifikasi | **LULUS** | S-15 (Pengelompokan Status Event) |
+| 24 | `tests/events-catalog-domain.test.ts` | 7 | Terverifikasi | **LULUS** | S-01 s/d S-15 (Katalog Publik) |
+| **SUBTOTAL** | **20 File Inti Web Event** | **377** | **Terverifikasi** | **100% LULUS** | **Modul Inti Web Event (S-01 s/d S-08, S-12 s/d S-15)** |
+| **SUBTOTAL** | **4 File Pendukung** | **50** | **Terverifikasi** | **100% LULUS** | **Modul POS/CRM/Coworking Terintegrasi (S-09, S-10, S-11)** |
+| **TOTAL** | **24 File Test Suite** | **427** | **10.64 detik** | **100% LULUS** | **Seluruh Modul Web Event & Pendukung** |
 
-> [!NOTE] Keterangan Suite: File 1–13 dan 18–24 merupakan 20 suite inti Web Event (340 test), sedangkan File 14–17 merupakan 4 suite pendukung POS/CRM/Coworking (`S-09`, `S-10`, `S-11` dengan total 29 test) yang telah terintegrasi dan lulus regresi penuh.
+> [!NOTE] Keterangan Suite: File 1–13 dan 18–24 merupakan 20 suite inti Web Event (377 test), sedangkan File 14–17 merupakan 4 suite pendukung POS/CRM/Coworking (`S-09`, `S-10`, `S-11` dengan total 50 test) yang telah terintegrasi dan lulus regresi penuh.
 
 Perintah untuk menjalankan ulang seluruh regresi di atas:
 ```bash
@@ -175,11 +175,10 @@ Berikut adalah daftar akun yang dapat digunakan oleh Ka Ari dan tim QA untuk ver
 
 ## 6. Catatan Teknis, Kendala Lingkungan, & Batasan Sistem
 
-1. **Pemeriksaan Build Produksi Next.js**:
-   - Perintah `npm run build` dijalankan menggunakan `$env:NODE_OPTIONS="--experimental-require-module"` pada environment Node v22 Windows.
-   - Hasil build: **Lulus penuh (exit code 0)** dengan seluruh 37 rute halaman statis berhasil di-generate (`✓ Generating static pages (37/37)`).
+1. **Pemeriksaan Build Produksi Next.js & Type Checking**:
+   - Hasil `npm run build`: **Lulus penuh (exit code 0)**.
    - Pemeriksaan tipe statis `npx tsc --noEmit -p .` berhasil **100% (0 error)**.
-   - Pemeriksaan tipe test `npx tsc --noEmit -p tests/tsconfig.json` pada cakupan penuh (`["**/*.ts", "../src/**/*.ts"]`) berhasil **100% (0 error)** setelah pemulihan penuh seluruh file test di repositori.
+   - Pemeriksaan tipe test `npx tsc --noEmit -p tests/tsconfig.json` pada cakupan penuh (`["**/*.ts", "../src/**/*.ts"]`) berhasil **100% (0 error)** setelah pemulihan penuh tipe domain dan fixture test di repositori.
    - Pengecekan style shadcn `npm run lint:ui -- --strict src` memperoleh **0 temuan**.
 
 2. **Layanan Pengiriman Email (SMTP Provider)**:
@@ -192,7 +191,10 @@ Berikut adalah daftar akun yang dapat digunakan oleh Ka Ari dan tim QA untuk ver
      2. `tests/final-demo-readiness.test.ts` (Demo UAT)
      3. `tests/organizer-activation-hardening.test.ts` (Security Aktivasi Penyelenggara)
      4. `tests/storage-sync-safety.test.ts` (Sinkronisasi Storage)
-   - Seluruh 20 file test suite inti Web Event yang diserahterimakan pada milestone ini (ditambah 4 file pendukung POS/CRM/Coworking) berstatus **100% lulus** (340 test Web Event + 29 test pendukung).
+   - Seluruh 20 file test suite inti Web Event yang diserahterimakan pada milestone ini (ditambah 4 file pendukung POS/CRM/Coworking) berstatus **100% lulus** (377 test Web Event + 50 test pendukung = total 427 skenario uji).
+
+4. **Konfirmasi Nomor Rekening Resmi Perusahaan Sebelum Deploy Produksi**:
+   - Sebelum merilis ke lingkungan produksi, tim operasional/keuangan wajib memverifikasi ulang nomor rekening penampung resmi perusahaan (Bank BCA / Bank Mandiri beserta nama pemilik rekening) yang dikonfigurasi melalui portal `/events-admin` maupun environment/database produksi agar seluruh transaksi manual transfer peserta masuk ke rekening perusahaan yang sah dan aktif.
 
 ---
 

@@ -6,7 +6,7 @@
 - **Tanggal Pengujian**: 16 November 2026
 - **Cabang / Branch**: `shandi-dev`
 - **File Uji Otomatis**: `tests/paid-event-e2e.test.ts`
-- **Hasil Uji**: **PASSED (13/13 Skenario Lulus)**
+- **Hasil Uji**: **PASSED (17/17 Skenario Lulus)**
 - **Dependensi Terkait**: Task S-01 (Rekening Resmi Event Dago Creative Hub)
 
 ---
@@ -51,7 +51,7 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
 
  RUN  v2.1.9 D:/Magang Shandi/dagoeng-shandi-dev
 
- ✓ tests/paid-event-e2e.test.ts (13 tests) 426ms
+ ✓ tests/paid-event-e2e.test.ts (17 tests)
    ✓ Tahap 1: Validasi Rekening Resmi (Official Bank Guard) (2 tests)
    ✓ Tahap 2: Pemesanan Tiket Berbayar (Order Creation) (1 test)
    ✓ Tahap 3: Unggah Bukti Pembayaran (Payment Proof Upload) (2 tests)
@@ -59,9 +59,10 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
    ✓ Tahap 5: Aktivasi E-Tiket & Struktur Sub-Tiket Rombongan (2 tests)
    ✓ Tahap 6: Check-in di Hari Acara (WITA Window Enforcement) (2 tests)
    ✓ Tahap 7: Pencegahan Pemindaian Duplikat (Duplicate Scan Guard) (2 tests)
+   ✓ Tahap 8: Pengujian Lapisan Route Tiket & Regresi Error Scanner (4 tests)
 
  Test Files  1 passed (1)
-      Tests  13 passed (13)
+      Tests  17 passed (17)
 ```
 
 ---
