@@ -1,4 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import fs from "fs";
+import path from "path";
+import { NextRequest } from "next/server";
+import * as serverAuth from "@/lib/server-auth";
+import { GET as getBookingsRoute } from "@/app/api/events/bookings/route";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
   filterOrganizerEvents,
@@ -296,5 +301,44 @@ describe("events-portal-domain", () => {
 
     expect(paymentStatusLabel("PAID")).toBe("Lunas");
     expect(paymentStatusTone("PAID")).toBe("success");
+  });
+
+  describe("S-06 QR scanner selection stability & CHECKIN_STAFF stats guard", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("omits global platform stats when CHECKIN_STAFF requests ?includeStats=true without eventId", async () => {
+      vi.spyOn(serverAuth, "assertEventAdmin").mockResolvedValue({ authorized: false });
+      vi.spyOn(serverAuth, "assertCheckInAuth").mockResolvedValue({
+        authorized: true,
+        role: "CHECKIN_STAFF",
+      });
+
+      const resNoEvent = await getBookingsRoute(
+        new NextRequest("http://localhost:3000/api/events/bookings?includeStats=true")
+      );
+      expect(resNoEvent.status).toBe(200);
+      const jsonNoEvent = await resNoEvent.json();
+      expect(jsonNoEvent.stats).toBeNull();
+
+      const resWithEvent = await getBookingsRoute(
+        new NextRequest("http://localhost:3000/api/events/bookings?includeStats=true&eventId=evt-1")
+      );
+      expect(resWithEvent.status).toBe(200);
+      const jsonWithEvent = await resWithEvent.json();
+      expect(jsonWithEvent.stats).not.toBeNull();
+    });
+
+    it("keeps OrganizerQRScannerDialog dropdown selection without snapping back or restarting camera", () => {
+      const src = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-portal/OrganizerQRScannerDialog.tsx"),
+        "utf-8"
+      );
+      expect(src).toContain("prevOpenRef");
+      expect(src).toContain("processCheckInRef");
+      expect(src).toContain("[open, selectedEventId, todayEvents]);");
+      expect(src).not.toContain("[open, selectedEventId, todayEvents, activeEventId]");
+    });
   });
 });

@@ -113,8 +113,8 @@ export function OrganizerAttendeesTab({
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
   const targetInviteEvent = useMemo(() => {
-    if (selectedEventId !== "ALL") {
-      return selectedEvent || null;
+    if (selectedEventId !== "ALL" && selectedEvent?.status === "APPROVED") {
+      return selectedEvent;
     }
     return (
       approvedEvents.find((e) => e.id === (inviteApprovedEventId || approvedEvents[0]?.id)) ||
@@ -382,7 +382,7 @@ export function OrganizerAttendeesTab({
 
                         <TableCell className="hidden lg:table-cell">
                           <span className="text-xs font-medium text-foreground">
-                            {b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar")}
+                            {b.ticketTierName || (b.isInvitation ? "Tiket undangan" : "Standar")}
                           </span>
                         </TableCell>
 

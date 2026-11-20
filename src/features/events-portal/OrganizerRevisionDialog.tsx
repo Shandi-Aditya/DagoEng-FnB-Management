@@ -90,37 +90,38 @@ export function OrganizerRevisionDialog({
   setRefundPolicy,
   hasPaidTickets,
 }: OrganizerRevisionDialogProps) {
-  const [rawCapacity, setRawCapacity] = React.useState<string>(capacity > 0 ? String(capacity) : "");
+  const [rawCapacity, setRawCapacity] = React.useState<string>(String(capacity ?? ""));
   const [capacityError, setCapacityError] = React.useState<string | null>(null);
   const [tiersError, setTiersError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setRawCapacity(capacity > 0 ? String(capacity) : "");
-  }, [capacity]);
+    setRawCapacity(String(capacity ?? ""));
+    setCapacityError(null);
+    setTiersError(null);
+  }, [event?.id, open]);
 
   const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setRawCapacity(val);
-    if (val === "") {
+    if (val.trim() === "") {
       setCapacity(0);
       setCapacityError("Kuota kapasitas wajib diisi.");
       return;
     }
-    const num = Number(val);
-    const capCheck = validateEventCapacity(num, false);
+    const capCheck = validateEventCapacity(val, false);
     if (!capCheck.valid) {
       setCapacityError(capCheck.error || "Kapasitas tidak valid.");
     } else {
       setCapacityError(null);
+      setCapacity(capCheck.value!);
     }
-    setCapacity(num);
   };
 
   if (!event) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
-    const num = Number(rawCapacity);
-    const capCheck = validateEventCapacity(num, false);
+    const capCheck = validateEventCapacity(rawCapacity, false);
+    const num = capCheck.value ?? Number(rawCapacity);
     if (!capCheck.valid) {
       e.preventDefault();
       setCapacityError(capCheck.error || "Kapasitas tidak valid.");

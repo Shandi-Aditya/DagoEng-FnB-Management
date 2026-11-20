@@ -70,15 +70,32 @@ export function OrganizerQRScannerDialog({
     return todayEvents[0]?.id || "";
   });
 
+  const prevOpenRef = useRef(false);
+
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!open) return;
+
+    if (justOpened) {
       if (selectedEventId && todayEvents.some((e) => e.id === selectedEventId)) {
         setActiveEventId(selectedEventId);
-      } else if (todayEvents.length > 0 && !todayEvents.some((e) => e.id === activeEventId)) {
+      } else if (todayEvents.length > 0) {
         setActiveEventId(todayEvents[0].id);
+      } else {
+        setActiveEventId("");
       }
+      return;
     }
-  }, [open, selectedEventId, todayEvents, activeEventId]);
+
+    setActiveEventId((prev) => {
+      if (prev && todayEvents.some((e) => e.id === prev)) return prev;
+      if (selectedEventId && todayEvents.some((e) => e.id === selectedEventId)) {
+        return selectedEventId;
+      }
+      return todayEvents[0]?.id || "";
+    });
+  }, [open, selectedEventId, todayEvents]);
 
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -271,6 +288,11 @@ export function OrganizerQRScannerDialog({
     [events, bookings, organizerEmail, activeEventId, onCheckInSuccess, playBeep]
   );
 
+  const processCheckInRef = useRef(processCheckIn);
+  useEffect(() => {
+    processCheckInRef.current = processCheckIn;
+  }, [processCheckIn]);
+
   const startCameraStream = useCallback(async () => {
     setCameraError(null);
     setIsInitializing(true);
@@ -293,7 +315,7 @@ export function OrganizerQRScannerDialog({
           return;
         }
         lastScannedRef.current = { code: decodedText, timestamp: now };
-        processCheckIn(decodedText);
+        processCheckInRef.current(decodedText);
       };
 
       await scannerRef.current.start(
@@ -317,7 +339,7 @@ export function OrganizerQRScannerDialog({
     } finally {
       setIsInitializing(false);
     }
-  }, [processCheckIn]);
+  }, []);
 
   useEffect(() => {
     if (open && hasTodayEvents) {

@@ -489,6 +489,22 @@ export default function EventDetailPage() {
       {!isPast && !event.availability?.isSoldOut && (() => {
         const mobilePrice = formatEventPriceSummary(event);
         const isPaidEffective = isEventPaidEffective(event);
+        const tiers = event.ticketTiers || [];
+        const hasTiers = tiers.length > 0;
+        const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
+        const hasOnSaleTier = hasTiers
+          ? tiers.some((t) => {
+              if (t.isActive === false) return false;
+              const a = tierAvailabilities.find((ta) => ta.tierId === t.id);
+              return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" : true;
+            })
+          : true;
+        const hasUpcomingTier =
+          hasTiers &&
+          tierAvailabilities.some((a) => {
+            const matchingTier = tiers.find((t) => t.id === a.tierId);
+            return (!matchingTier || matchingTier.isActive !== false) && a.salesStatus === "UPCOMING";
+          });
 
         return (
           <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-background/95 backdrop-blur border-t p-3.5 px-4 flex items-center justify-between gap-4 shadow-lg">
@@ -501,13 +517,22 @@ export default function EventDetailPage() {
 
             <Button
               size="lg"
+              disabled={!hasOnSaleTier}
               onClick={() => {
                 setBookingError(null);
                 setIsBookingModalOpen(true);
               }}
             >
               <Ticket className="size-3.5" />
-              <span>{isPaidEffective ? "Pesan tiket" : "Daftar gratis"}</span>
+              <span>
+                {!hasOnSaleTier
+                  ? hasUpcomingTier
+                    ? "Penjualan belum dibuka"
+                    : "Penjualan telah berakhir"
+                  : isPaidEffective
+                  ? "Pesan tiket"
+                  : "Daftar gratis"}
+              </span>
             </Button>
           </div>
         );

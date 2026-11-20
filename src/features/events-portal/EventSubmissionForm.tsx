@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
+import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE, validateEventCapacity, validateEventPrice } from "@/lib/event-validation";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
 import { formatEventPriceSummary } from "@/features/events-catalog/events-catalog-domain";
@@ -58,6 +58,8 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
   const isCheckInStaff = isCheckInStaffRole(user?.role);
   const needsPassword = mode === "guest" && !signedIn;
   const [form, setForm] = useState<SubmissionForm>(() => emptySubmissionForm(organizer));
+  const [rawCapacity, setRawCapacity] = useState<string>(() => String(emptySubmissionForm(organizer).maxCapacity));
+  const [rawPrice, setRawPrice] = useState<string>(() => String(emptySubmissionForm(organizer).price));
   const [errors, setErrors] = useState<SubmissionErrors>({});
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,6 +92,17 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
     }
 
     const found = validateSubmissionForm(form, { needsPassword });
+    const rawCapCheck = validateEventCapacity(rawCapacity, false);
+    if (!rawCapCheck.valid) {
+      found.maxCapacity = rawCapCheck.error;
+    }
+    const hasTiers = Array.isArray(form.ticketTiers) && form.ticketTiers.length > 0;
+    if (form.isPaid && !hasTiers) {
+      const rawPriceCheck = validateEventPrice(true, rawPrice);
+      if (!rawPriceCheck.valid) {
+        found.price = rawPriceCheck.error;
+      }
+    }
     setErrors(found);
     if (Object.keys(found).length > 0) {
       document.querySelector("[data-invalid=true]")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -267,8 +280,22 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                 min={1}
                 max={1000}
                 step={1}
-                value={String(form.maxCapacity || "")}
-                onChange={(v) => set("maxCapacity", Number(v))}
+                value={rawCapacity}
+                onChange={(v) => {
+                  setRawCapacity(v);
+                  if (v.trim() === "") {
+                    setForm((prev) => ({ ...prev, maxCapacity: 0 }));
+                    setErrors((prev) => ({ ...prev, maxCapacity: "Kapasitas maksimal venue/tiket wajib diisi." }));
+                    return;
+                  }
+                  const capRes = validateEventCapacity(v, false);
+                  if (!capRes.valid) {
+                    setForm((prev) => ({ ...prev, maxCapacity: Number(v) }));
+                    setErrors((prev) => ({ ...prev, maxCapacity: capRes.error || "Kapasitas tidak valid." }));
+                  } else {
+                    set("maxCapacity", capRes.value!);
+                  }
+                }}
                 error={err("maxCapacity")}
                 hint={capacityHint.isConfirmed && venueChoice !== OTHER_VENUE ? `Ruangan ini muat ${capacityHint.capacity} orang.` : undefined}
               />
@@ -294,7 +321,10 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                     aria-checked={form.isPaid === option.paid}
                     onClick={() => {
                       set("isPaid", option.paid);
-                      if (option.paid && !(form.price > 0)) set("price", 25000);
+                      if (option.paid && !(form.price > 0)) {
+                        set("price", 25000);
+                        setRawPrice("25000");
+                      }
                     }}
                     className={cn(
                       "h-9 rounded-md border text-sm font-medium transition-colors",
@@ -314,8 +344,22 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                     inputMode="numeric"
                     min={0}
                     step={1}
-                    value={String(form.price || "")}
-                    onChange={(v) => set("price", Number(v))}
+                    value={rawPrice}
+                    onChange={(v) => {
+                      setRawPrice(v);
+                      if (v.trim() === "") {
+                        setForm((prev) => ({ ...prev, price: 0 }));
+                        setErrors((prev) => ({ ...prev, price: "Nominal harga tiket wajib lebih dari Rp 0 untuk event berbayar." }));
+                        return;
+                      }
+                      const priceRes = validateEventPrice(true, v);
+                      if (!priceRes.valid) {
+                        setForm((prev) => ({ ...prev, price: Number(v) }));
+                        setErrors((prev) => ({ ...prev, price: priceRes.error || "Harga tiket tidak valid." }));
+                      } else {
+                        set("price", priceRes.value!);
+                      }
+                    }}
                     error={err("price")}
                   />
                   <TextField
@@ -344,16 +388,21 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                   onChange={(tiers) => {
                     set("ticketTiers", tiers);
                     const sumQ = tiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
-                    if (sumQ > 0) set("maxCapacity", sumQ);
+                    if (sumQ > 0) {
+                      set("maxCapacity", sumQ);
+                      setRawCapacity(String(sumQ));
+                    }
                     const paidTiers = tiers.filter((t) => Number(t.price) > 0);
                     const hasPaid = paidTiers.length > 0;
                     if (hasPaid) {
                       set("isPaid", true);
                       const minPaidPrice = Math.min(...paidTiers.map((t) => Number(t.price)));
                       set("price", minPaidPrice);
+                      setRawPrice(String(minPaidPrice));
                     } else if (tiers.length > 0) {
                       set("isPaid", false);
                       set("price", 0);
+                      setRawPrice("0");
                     }
                   }}
                   maxVenueCapacity={capacityHint.capacity}

@@ -40,6 +40,12 @@ function isIdentifiedTestData(event: CommunityEvent): boolean {
     "uji coba",
     "dummy",
     "disposable",
+    "tes 1",
+    "(tes 1)",
+    "tes cek",
+    "cek mas",
+    "111",
+    "sdhghfdsdsghjhghfgd",
   ];
 
   return (
@@ -71,14 +77,26 @@ function isIdentifiedTestBooking(booking: EventTicketOrder): boolean {
 
 async function main() {
   if (process.env.DATABASE_URL) {
+    let syncedEvents = false;
+    let syncedBookings = false;
     try {
-      await syncStorageFromDb("events.json");
-      await syncStorageFromDb("event_bookings.json");
+      syncedEvents = await syncStorageFromDb("events.json");
+      syncedBookings = await syncStorageFromDb("event_bookings.json");
     } catch (e) {
       if (isApply) {
         throw new Error(`Gagal pra-sinkronisasi database saat mode --apply: ${e}`);
       }
       console.warn("Peringatan pra-sinkronisasi database gagal:", e);
+    }
+    if (!syncedEvents || !syncedBookings) {
+      if (isApply) {
+        throw new Error(
+          `Gagal pra-sinkronisasi database saat mode --apply (events=${syncedEvents}, event_bookings=${syncedBookings}).`
+        );
+      }
+      console.warn(
+        `Peringatan pra-sinkronisasi database tidak lengkap (events=${syncedEvents}, event_bookings=${syncedBookings}).`
+      );
     }
   }
 
@@ -116,7 +134,9 @@ async function main() {
   const survivingBookings: EventTicketOrder[] = [];
   for (const b of allBookings) {
     if (isIdentifiedTestBooking(b)) {
-      const isExplicitTarget = EXPLICIT_CLEANUP_CODES.has(b.ticketCode);
+      const isExplicitTarget = EXPLICIT_CLEANUP_CODES.has(
+        (b.ticketCode || "").trim().toUpperCase()
+      );
       if (!isExplicitTarget && b.paymentStatus === "PAID" && b.paymentMethod !== "FREE" && !b.guestEmail.includes("example.com")) {
         report.rejectedBookings.push({
           id: b.id,

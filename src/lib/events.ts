@@ -2675,16 +2675,6 @@ export async function updateEventDetails(
         throw new Error("Tanggal dan waktu selesai tidak boleh mendahului tanggal mulai.");
       }
       if (updates.location !== undefined) sanitizedUpdates.location = sanitizeHtmlText(updates.location);
-      if (updates.isPaid !== undefined || updates.price !== undefined) {
-        const targetIsPaid = updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid;
-        const targetPrice = updates.price !== undefined ? updates.price : existing.price;
-        const priceVal = validateEventPrice(targetIsPaid, targetPrice);
-        if (!priceVal.valid) {
-          throw new Error(priceVal.error || "Harga tiket tidak valid.");
-        }
-        sanitizedUpdates.isPaid = targetIsPaid;
-        sanitizedUpdates.price = priceVal.value!;
-      }
 
       const isExplicitCapacitySent =
         updates.maxCapacity !== undefined &&
@@ -2700,6 +2690,7 @@ export async function updateEventDetails(
         // SYNC-01: Fail-closed storage sync guard
         if (!tx) {
           await syncBookingsStorageFailClosed();
+          allBookings = await loadBookingsFromTxOrDisk(tx);
         }
         const currentlyBooked = getEventActiveBookedTicketCount(id, allBookings);
         if (capVal.value! < currentlyBooked) {
@@ -2739,6 +2730,7 @@ export async function updateEventDetails(
         // Fail-closed storage sync guard when checking tiers against bookings
         if (!tx) {
           await syncBookingsStorageFailClosed();
+          allBookings = await loadBookingsFromTxOrDisk(tx);
         }
 
         // Tolak penghapusan tier yang sudah memiliki booking aktif
@@ -2776,6 +2768,19 @@ export async function updateEventDetails(
             : 0;
         }
         sanitizedUpdates.ticketTiers = validTiers;
+      }
+      if (
+        (updates.isPaid !== undefined || updates.price !== undefined) &&
+        (!sanitizedUpdates.ticketTiers || sanitizedUpdates.ticketTiers.length === 0)
+      ) {
+        const targetIsPaid = updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid;
+        const targetPrice = updates.price !== undefined ? updates.price : existing.price;
+        const priceVal = validateEventPrice(targetIsPaid, targetPrice);
+        if (!priceVal.valid) {
+          throw new Error(priceVal.error || "Harga tiket tidak valid.");
+        }
+        sanitizedUpdates.isPaid = targetIsPaid;
+        sanitizedUpdates.price = priceVal.value!;
       }
       if (updates.promoCodes !== undefined) {
         sanitizedUpdates.promoCodes = Array.isArray(updates.promoCodes) ? updates.promoCodes : undefined;
@@ -3606,7 +3611,10 @@ export async function createEventPromoCode(
           severity: "MEDIUM",
           status: "SUCCESS",
           actorName: actor?.name || event.organizerName || "Organizer",
-          actorRole: (actor?.role?.toUpperCase() === "ADMIN" || actor?.role?.toUpperCase() === "SUPER_ADMIN") ? (actor.role.toUpperCase() as any) : "ORGANIZER",
+          actorRole: (() => {
+            const r = (actor?.role || "").trim().toUpperCase();
+            return ["SUPER_ADMIN", "OWNER", "MANAGER", "ADMIN"].includes(r) ? r : "ORGANIZER";
+          })(),
           recordId: promoRecord.id,
           description: `Membuat atau memperbarui kode promo [${promoRecord.code}] untuk event [${event.title}] (${event.id}).`,
           newValue: JSON.stringify(promoRecord),
@@ -4368,17 +4376,18 @@ export async function createEventBooking(
   return withBookingLock(async () => {
     let committedBooking: EventTicketOrder | null = null;
     let committedBookingsList: EventTicketOrder[] | null = null;
+    let committedEventsList: CommunityEvent[] | null = null;
 
     const result = await runWithDistributedEventLock(payload.eventId, async (tx) => {
       let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
       let allBookings: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
 
-      const event = allEvents.find((e) => e.id === payload.eventId);
-      if (!event) {
+      const initialEvent = allEvents.find((e) => e.id === payload.eventId);
+      if (!initialEvent) {
         throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
       }
 
-      const validation = validateEventBooking(payload, event);
+      const validation = validateEventBooking(payload, initialEvent);
       if (!validation.valid) {
         throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
       }
@@ -4386,6 +4395,10 @@ export async function createEventBooking(
       await expirePendingBookings();
       allEvents = await loadEventsFromTxOrDisk(tx);
       allBookings = await loadBookingsFromTxOrDisk(tx);
+      const event = allEvents.find((e) => e.id === payload.eventId);
+      if (!event) {
+        throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
+      }
       const activeBookings = allBookings.filter(
         (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
       );
@@ -4481,7 +4494,7 @@ export async function createEventBooking(
             if (eventIndex !== -1) {
               allEvents[eventIndex] = event;
               await saveEventsToDisk(allEvents, { tx });
-              syncEventsToLocalDiskAndCache(allEvents, Date.now());
+              committedEventsList = allEvents;
             }
           }
         }
@@ -4590,6 +4603,10 @@ export async function createEventBooking(
     });
 
     // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
+    }
     if (committedBookingsList) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
@@ -5847,6 +5864,7 @@ export async function organizerResubmitEvent(
         // SYNC-01: Fail-closed storage sync guard
         if (!tx) {
           await syncBookingsStorageFailClosed();
+          allBookings = await loadBookingsFromTxOrDisk(tx);
         }
         const currentlyBooked = getEventActiveBookedTicketCount(eventId, allBookings);
         if (capVal.value! < currentlyBooked) {
@@ -5860,17 +5878,6 @@ export async function organizerResubmitEvent(
 
       let newIsPaid = existing.isPaid;
       let newPrice = existing.price;
-      if (updates.isPaid !== undefined || updates.price !== undefined) {
-        const targetIsPaid = updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid;
-        const targetPrice = updates.price !== undefined ? updates.price : existing.price;
-        const priceVal = validateEventPrice(targetIsPaid, targetPrice);
-        if (!priceVal.valid) {
-          throw new Error(priceVal.error || "Harga tiket tidak valid.");
-        }
-        newIsPaid = targetIsPaid;
-        newPrice = priceVal.value!;
-      }
-
       let newTicketTiers = existing.ticketTiers;
       if (updates.ticketTiers !== undefined) {
         const tierVal = validateEventTicketTiers(updates.ticketTiers, { maxCapacity: newMaxCapacity });
@@ -5882,6 +5889,7 @@ export async function organizerResubmitEvent(
         // Fail-closed storage sync guard when checking tiers against bookings
         if (!tx) {
           await syncBookingsStorageFailClosed();
+          allBookings = await loadBookingsFromTxOrDisk(tx);
         }
 
         // Tolak penghapusan tier yang sudah memiliki booking aktif
@@ -5919,6 +5927,20 @@ export async function organizerResubmitEvent(
             : 0;
         }
         newTicketTiers = validTiers;
+      }
+
+      if (
+        (updates.isPaid !== undefined || updates.price !== undefined) &&
+        (!newTicketTiers || newTicketTiers.length === 0)
+      ) {
+        const targetIsPaid = updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid;
+        const targetPrice = updates.price !== undefined ? updates.price : existing.price;
+        const priceVal = validateEventPrice(targetIsPaid, targetPrice);
+        if (!priceVal.valid) {
+          throw new Error(priceVal.error || "Harga tiket tidak valid.");
+        }
+        newIsPaid = targetIsPaid;
+        newPrice = priceVal.value!;
       }
 
       let newRefundPolicy = existing.refundPolicy;

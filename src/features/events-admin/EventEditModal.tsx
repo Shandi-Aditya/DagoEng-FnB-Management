@@ -294,8 +294,12 @@ export function EventEditModal({
                   price: nextPrice,
                   maxCapacity: sumQuota > 0 ? sumQuota : formData.maxCapacity,
                 });
-                if (sumQuota > 0) setRawQuota(String(sumQuota));
+                if (sumQuota > 0) {
+                  setRawQuota(String(sumQuota));
+                  setQuotaError(null);
+                }
                 setRawPrice(String(nextPrice));
+                setPriceError(null);
               }}
             />
           </div>

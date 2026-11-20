@@ -249,6 +249,9 @@ export function EventsPaymentsTable({
                               b.paymentStatus !== "REFUNDED" &&
                               b.refundStatus !== "REQUESTED" &&
                               !(isPending && b.paymentProofUrl && !b.paymentRejectionReason) &&
+                              b.checkInStatus !== "CHECKED_IN" &&
+                              b.checkInStatus !== "PARTIALLY_CHECKED_IN" &&
+                              !(b.checkedInSeats && b.checkedInSeats.length > 0) &&
                               (b.checkedInQty || 0) === 0 ? (
                                 <Button
                                   variant="ghost"

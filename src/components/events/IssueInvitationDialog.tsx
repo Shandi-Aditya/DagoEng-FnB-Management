@@ -274,7 +274,7 @@ export function IssueInvitationDialog({
                   type="tel"
                   value={guestPhone}
                   onChange={(e) => setGuestPhone(e.target.value)}
-                  placeholder="08123456789"
+                  placeholder="08xxxxxxxxxx"
                   className="h-8 text-xs font-mono"
                 />
               </div>
@@ -306,7 +306,7 @@ export function IssueInvitationDialog({
                     onChange={(e) => setTicketTierId(e.target.value)}
                     className="h-8 text-xs"
                   >
-                    <NativeSelectOption value="">Tiket Undangan Umum</NativeSelectOption>
+                    <NativeSelectOption value="">Tiket undangan umum</NativeSelectOption>
                     {event.ticketTiers.map((t) => (
                       <NativeSelectOption key={t.id} value={t.id}>
                         {t.name}

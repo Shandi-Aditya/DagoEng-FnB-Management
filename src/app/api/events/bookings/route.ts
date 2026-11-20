@@ -111,12 +111,12 @@ export async function GET(req: NextRequest) {
 
     let stats = null;
     if (includeStats) {
-      if (isOrganizer) {
-        stats = await getEventOperationalStats(myEventIds);
-      } else if (!adminAuth.authorized && eventId) {
-        stats = await getEventOperationalStats([eventId]);
-      } else {
+      if (adminAuth.authorized) {
         stats = await getEventOperationalStats(eventId ? [eventId] : undefined);
+      } else if (isOrganizer) {
+        stats = await getEventOperationalStats(myEventIds);
+      } else if (eventId) {
+        stats = await getEventOperationalStats([eventId]);
       }
     }
 

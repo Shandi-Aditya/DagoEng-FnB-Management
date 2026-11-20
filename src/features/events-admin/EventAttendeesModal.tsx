@@ -358,6 +358,9 @@ export function EventAttendeesModal({
                             b.paymentStatus !== "REFUNDED" &&
                             b.refundStatus !== "REQUESTED" &&
                             !(b.paymentStatus === "PENDING" && b.paymentProofUrl && !b.paymentRejectionReason) &&
+                            b.checkInStatus !== "CHECKED_IN" &&
+                            b.checkInStatus !== "PARTIALLY_CHECKED_IN" &&
+                            !(b.checkedInSeats && b.checkedInSeats.length > 0) &&
                             (b.checkedInQty || 0) === 0 ? (
                               <Button
                                 variant="ghost"

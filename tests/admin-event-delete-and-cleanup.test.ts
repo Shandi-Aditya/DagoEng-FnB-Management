@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import fs from "fs";
+import path from "path";
 import { NextRequest } from "next/server";
 import * as dataStorage from "@/lib/data-storage";
 import {
@@ -930,6 +932,48 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
       expect(res.status).toBe(404);
       const json = await res.json();
       expect(json.error).toContain("tidak ditemukan");
+    });
+
+    it("4.9 should enforce S-02 cleanup fail-fast sync check, test patterns, and UI delete guards", () => {
+      const cleanupSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "scripts/cleanup-test-events.ts"),
+        "utf-8"
+      );
+      expect(cleanupSrc).toContain("syncedEvents = await syncStorageFromDb");
+      expect(cleanupSrc).toContain("syncedBookings = await syncStorageFromDb");
+      expect(cleanupSrc).toContain("if (!syncedEvents || !syncedBookings)");
+      expect(cleanupSrc).toContain('"tes 1"');
+      expect(cleanupSrc).toContain('"tes cek"');
+      expect(cleanupSrc).toContain('"cek mas"');
+      expect(cleanupSrc).toContain(".trim().toUpperCase()");
+
+      const adminPageSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/app/(dashboard)/events-admin/page.tsx"),
+        "utf-8"
+      );
+      expect(adminPageSrc).toContain("relatedBookingsCount");
+
+      const detailSheetSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-admin/EventDetailSheet.tsx"),
+        "utf-8"
+      );
+      expect(detailSheetSrc).toContain("relatedBookingsCount");
+
+      const moderationTableSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/events-admin/EventsModerationTable.tsx"),
+        "utf-8"
+      );
+      expect(moderationTableSrc).toContain("relatedBookingsCount === 0");
+
+      for (const rel of [
+        "src/features/events-admin/EventAttendeesModal.tsx",
+        "src/features/events-admin/EventsPaymentsTable.tsx",
+      ]) {
+        const src = fs.readFileSync(path.resolve(process.cwd(), rel), "utf-8");
+        expect(src).toContain('checkInStatus !== "CHECKED_IN"');
+        expect(src).toContain('checkInStatus !== "PARTIALLY_CHECKED_IN"');
+        expect(src).toContain("checkedInSeats");
+      }
     });
   });
 });

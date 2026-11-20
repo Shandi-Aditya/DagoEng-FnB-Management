@@ -285,7 +285,7 @@ export function EventDetailSheet({
                   <span>Tolak</span>
                 </Button>
               </div>
-              {onDelete ? (
+              {onDelete && ((event as any).relatedBookingsCount ?? (event as any).bookedCount ?? 0) === 0 ? (
                 <Button
                   variant="outline"
                   size="lg"
@@ -357,7 +357,7 @@ export function EventDetailSheet({
                   </Button>
                 ) : null}
 
-                {onDelete && effStatus !== "APPROVED" ? (
+                {onDelete && effStatus !== "APPROVED" && ((event as any).relatedBookingsCount ?? (event as any).bookedCount ?? 0) === 0 ? (
                   <Button
                     variant="outline"
                     size="lg"

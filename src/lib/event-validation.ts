@@ -422,7 +422,14 @@ export function validateEventTicketTiers(
     let salesEndDate: string | undefined;
 
     if (t.salesStartDate && typeof t.salesStartDate === "string" && t.salesStartDate.trim()) {
-      salesStartDate = normalizeDateToWitaIso(t.salesStartDate);
+      try {
+        salesStartDate = normalizeDateToWitaIso(t.salesStartDate);
+      } catch {
+        return {
+          valid: false,
+          error: `Waktu mulai penjualan jenis tiket '${name}' tidak valid.`,
+        };
+      }
       if (isNaN(new Date(salesStartDate).getTime())) {
         return {
           valid: false,
@@ -432,7 +439,14 @@ export function validateEventTicketTiers(
     }
 
     if (t.salesEndDate && typeof t.salesEndDate === "string" && t.salesEndDate.trim()) {
-      salesEndDate = normalizeDateToWitaIso(t.salesEndDate);
+      try {
+        salesEndDate = normalizeDateToWitaIso(t.salesEndDate);
+      } catch {
+        return {
+          valid: false,
+          error: `Waktu selesai penjualan jenis tiket '${name}' tidak valid.`,
+        };
+      }
       if (isNaN(new Date(salesEndDate).getTime())) {
         return {
           valid: false,

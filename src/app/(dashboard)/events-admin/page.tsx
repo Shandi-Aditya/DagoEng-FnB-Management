@@ -246,7 +246,9 @@ export default function AdminEventsPage() {
 
   const eventsWithBookedCount = useMemo(() => {
     const bookedByEvent = new Map<string, number>();
+    const relatedByEvent = new Map<string, number>();
     for (const b of allBookings) {
+      relatedByEvent.set(b.eventId, (relatedByEvent.get(b.eventId) ?? 0) + 1);
       if (b.paymentStatus === "PAID") {
         bookedByEvent.set(b.eventId, (bookedByEvent.get(b.eventId) ?? 0) + (b.ticketCount || 1));
       }
@@ -254,6 +256,7 @@ export default function AdminEventsPage() {
     return events.map((e) => ({
       ...e,
       bookedCount: bookedByEvent.get(e.id) ?? (e as CommunityEvent & { bookedCount?: number }).bookedCount ?? 0,
+      relatedBookingsCount: relatedByEvent.get(e.id) ?? 0,
     }));
   }, [events, allBookings]);
 

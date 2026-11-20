@@ -281,7 +281,7 @@ export function EventPromosDialog({
                 <Input
                   id="promo-quota"
                   type="number"
-                  min={1}
+                  min={0}
                   required
                   value={quota}
                   onChange={(e) => setQuota(Number(e.target.value))}
@@ -431,7 +431,7 @@ export function EventPromosDialog({
 
                     <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
                       <span>
-                        Digunakan: <strong className="font-mono text-foreground">{p.usedCount || 0}</strong> / {p.quota} kuota
+                        Digunakan: <strong className="font-mono text-foreground">{p.usedCount || 0}</strong> / {p.quota === 0 ? "Tanpa batas" : `${p.quota} kuota`}
                       </span>
                       {p.minOrderAmount && (
                         <span>Min. beli: {formatCurrencyIDR(p.minOrderAmount)}</span>

@@ -57,6 +57,7 @@ interface ScanFeedback {
   guestName?: string;
   timestamp: string;
   isInvitation?: boolean;
+  invitationNote?: string;
   ticketTierName?: string;
   promoCode?: string;
 }
@@ -182,6 +183,7 @@ export function EventCheckInScannerDialog({
             ticketCode: cleanCode,
             guestName: booking?.guestName,
             isInvitation: booking?.isInvitation,
+            invitationNote: booking?.invitationNote || undefined,
             ticketTierName: booking?.ticketTierName,
             promoCode: booking?.promoCode || undefined,
             timestamp: nowStr,
@@ -211,6 +213,7 @@ export function EventCheckInScannerDialog({
           ticketCode: cleanCode,
           guestName: booking.guestName,
           isInvitation: booking.isInvitation,
+          invitationNote: booking.invitationNote || undefined,
           ticketTierName: booking.ticketTierName,
           promoCode: booking.promoCode || undefined,
           timestamp: nowStr,
@@ -420,6 +423,11 @@ export function EventCheckInScannerDialog({
                     </span>
                   )}
                 </div>
+              )}
+              {feedback.invitationNote && (
+                <p className="text-xs text-muted-foreground pt-0.5">
+                  Catatan undangan: {feedback.invitationNote}
+                </p>
               )}
             </div>
           )}

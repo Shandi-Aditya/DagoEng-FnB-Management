@@ -32,27 +32,37 @@ export function EventDetailSidebar({
   const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
   const hasOnSaleTier = hasTiers
     ? tiers.some((t) => {
+        if (t.isActive === false) return false;
         const a = tierAvailabilities.find((ta) => ta.tierId === t.id);
         return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" : true;
       })
     : !isSoldOut;
 
+  const activeTierAvailabilities = tierAvailabilities.filter((a) => {
+    const matchingTier = tiers.find((t) => t.id === a.tierId);
+    return !matchingTier || matchingTier.isActive !== false;
+  });
+
   const allTiersUpcoming =
     hasTiers &&
-    tierAvailabilities.length > 0 &&
-    tierAvailabilities.every((a) => a.salesStatus === "UPCOMING");
+    activeTierAvailabilities.length > 0 &&
+    activeTierAvailabilities.every((a) => a.salesStatus === "UPCOMING");
+
+  const hasUpcomingTier =
+    hasTiers &&
+    activeTierAvailabilities.some((a) => a.salesStatus === "UPCOMING");
 
   const allTiersEnded =
     hasTiers &&
-    tierAvailabilities.length > 0 &&
-    tierAvailabilities.every((a) => a.salesStatus === "ENDED");
+    activeTierAvailabilities.length > 0 &&
+    activeTierAvailabilities.every((a) => a.salesStatus === "ENDED");
 
   let quotaStatus: { label: string; tone: "success" | "warning" | "destructive" | "info" | "neutral" } =
     getQuotaBadgeTone(occupancyRate, isSoldOut);
   if (!isSoldOut && ticketsRemaining > 0) {
-    if (allTiersUpcoming) {
+    if (allTiersUpcoming || (hasTiers && !hasOnSaleTier && hasUpcomingTier)) {
       quotaStatus = { label: "Penjualan belum dibuka", tone: "info" };
-    } else if (allTiersEnded) {
+    } else if (allTiersEnded || (hasTiers && !hasOnSaleTier)) {
       quotaStatus = { label: "Penjualan telah berakhir", tone: "destructive" };
     }
   } else if (isSoldOut) {
@@ -205,7 +215,7 @@ export function EventDetailSidebar({
             <Button disabled variant="outline" size="lg" className="w-full text-destructive">
               Habis terjual
             </Button>
-          ) : allTiersUpcoming ? (
+          ) : allTiersUpcoming || (hasTiers && !hasOnSaleTier && hasUpcomingTier) ? (
             <Button disabled variant="outline" size="lg" className="w-full">
               Penjualan belum dibuka
             </Button>

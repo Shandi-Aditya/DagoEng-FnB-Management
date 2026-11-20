@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   validateEventPrice,
   validateEventCapacity,
@@ -1714,6 +1716,88 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
       expect(avail.ticketsRemaining).toBe(50);
       expect(avail.isSoldOut).toBe(false);
       expect(avail.tiers?.[0].salesStatus).toBe("UPCOMING");
+    });
+
+    it("9.9 PUT /api/events/[id] mengembalikan HTTP 400 saat startDate > endDate dan validateEventTicketTiers mengembalikan valid=false pada tanggal tier cacat", async () => {
+      vi.spyOn(serverAuth, "assertEventAdmin").mockResolvedValue({
+        authorized: true,
+        userId: "admin-super",
+        name: "Super Admin",
+        role: "SUPER_ADMIN",
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/events/${tahapCEventId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: "2026-12-10T16:00:00+08:00",
+          endDate: "2026-12-10T10:00:00+08:00",
+        }),
+      });
+      const res = await putEventRoute(req, { params: Promise.resolve({ id: tahapCEventId }) });
+      expect(res.status).toBe(400);
+
+      const tierRes = validateEventTicketTiers([
+        {
+          id: "t-bad-date",
+          name: "Tier Cacat",
+          price: 50000,
+          quota: 10,
+          salesStartDate: "invalid-tier-date",
+        },
+      ]);
+      expect(tierRes.valid).toBe(false);
+      expect(tierRes.error).toContain("tidak valid");
+    });
+
+    it("9.10 updateEventDetails dan organizerResubmitEvent menurunkan isPaid/price dari updates.ticketTiers sebelum validateEventPrice", async () => {
+      const updated = await updateEventDetails(tahapCEventId, {
+        isPaid: true,
+        price: 0,
+        ticketTiers: [
+          {
+            id: "tier-derived-1",
+            name: "Reguler",
+            price: 75000,
+            quota: 20,
+            isActive: true,
+          },
+        ],
+      });
+      expect(updated.isPaid).toBe(true);
+      expect(updated.price).toBe(75000);
+
+      const resubmitted = await organizerResubmitEvent("dagotech@example.com", tahapCEventId, {
+        isPaid: true,
+        price: 0,
+        ticketTiers: [
+          {
+            id: "tier-derived-2",
+            name: "VIP",
+            price: 120000,
+            quota: 15,
+            isActive: true,
+          },
+        ],
+      });
+      expect(resubmitted.isPaid).toBe(true);
+      expect(resubmitted.price).toBe(120000);
+    });
+
+    it("9.11 EventDetailSidebar & events/[id]/page menonaktifkan CTA saat hasOnSaleTier false dan memprioritaskan 'Penjualan belum dibuka'", () => {
+      const sidebarSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/event-detail/EventDetailSidebar.tsx"),
+        "utf-8"
+      );
+      expect(sidebarSrc).toContain("if (t.isActive === false) return false;");
+      expect(sidebarSrc).toContain("hasUpcomingTier");
+
+      const detailPageSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "src/app/events/[id]/page.tsx"),
+        "utf-8"
+      );
+      expect(detailPageSrc).toContain("disabled={!hasOnSaleTier}");
+      expect(detailPageSrc).toContain("if (t.isActive === false) return false;");
     });
   });
 });

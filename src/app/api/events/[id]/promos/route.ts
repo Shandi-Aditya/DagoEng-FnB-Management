@@ -99,7 +99,7 @@ export async function POST(
     }
 
     const actor = adminAuth.authorized
-      ? { name: (adminAuth as any).user?.username || (adminAuth as any).user?.name || "Admin", role: adminAuth.role || "ADMIN" }
+      ? { name: adminAuth.name || adminAuth.email || "Admin", role: adminAuth.role || "SUPER_ADMIN" }
       : { name: event.organizerName || "Organizer", role: "ORGANIZER" };
 
     const promo = await createEventPromoCode(

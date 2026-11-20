@@ -148,7 +148,10 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       error?.message?.includes("refund") ||
       error?.message?.includes("Refund") ||
       error?.message?.includes("kebijakan") ||
-      error?.message?.includes("jenis tiket");
+      error?.message?.includes("jenis tiket") ||
+      error?.message?.includes("mendahului") ||
+      error?.message?.includes("tanggal") ||
+      error?.message?.includes("Tanggal");
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui detail event." },
       { status: isValidationError ? 400 : 500 }

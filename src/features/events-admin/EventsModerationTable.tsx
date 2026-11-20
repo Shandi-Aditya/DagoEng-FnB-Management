@@ -122,6 +122,7 @@ export function EventsModerationTable({
               const isPaid = isEventPaidEffective(event);
               const priceSummary = formatEventPriceSummary(event);
               const bookedCount = (event as any).bookedCount || 0;
+              const relatedBookingsCount = (event as any).relatedBookingsCount ?? bookedCount;
               const maxCapacity = event.maxCapacity || 0;
               const waUrl = formatWhatsAppUrl(event.organizerPhone);
 
@@ -291,7 +292,7 @@ export function EventsModerationTable({
                             </>
                           ) : null}
 
-                          {onDelete && (effStatus === "PENDING" || effStatus === "REVISION_REQUESTED" || effStatus === "REJECTED" || effStatus === "ARCHIVED") ? (
+                          {onDelete && relatedBookingsCount === 0 && (effStatus === "PENDING" || effStatus === "REVISION_REQUESTED" || effStatus === "REJECTED" || effStatus === "ARCHIVED") ? (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
