@@ -178,28 +178,17 @@ export function WorkspacePanel({
   );
 }
 
-const KITCHEN_DOT: readonly string[] = [
-  "bg-unit-fnb",
-  "bg-unit-coworking",
-  "bg-unit-event",
-  "bg-unit-loyalty",
-];
-
 function KitchenList({ compact = false }: { compact?: boolean }) {
   return (
     <ul className="flex flex-col divide-y divide-border/60">
-      {KITCHENS.map((kitchen, index) => (
+      {KITCHENS.map((kitchen) => (
         <li
           key={kitchen}
           className={cn(
-            "flex items-center gap-2.5 first:pt-0 last:pb-0",
+            "first:pt-0 last:pb-0",
             compact ? "py-1.5" : "py-2.5",
           )}
         >
-          <span
-            className={cn("size-2 shrink-0 rounded-full", KITCHEN_DOT[index % KITCHEN_DOT.length])}
-            aria-hidden="true"
-          />
           <span className={cn("font-medium", compact ? "text-xs" : "text-sm")}>{kitchen}</span>
         </li>
       ))}
