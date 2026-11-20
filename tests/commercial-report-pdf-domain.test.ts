@@ -10,7 +10,7 @@ import {
 } from "@/features/commercial/commercial-report-pdf-domain";
 import type { CommercialLease } from "@/types/commercial";
 
-const MOCK_LEASES: CommercialLease[] = [
+const MOCK_LEASES: CommercialLease[] = ([
   {
     id: "lease-1",
     leaseNumber: "LSE-001",
@@ -58,7 +58,7 @@ const MOCK_LEASES: CommercialLease[] = [
     status: "TERMINATED",
     paymentHistory: [],
   },
-];
+] as any);
 
 describe("commercial-report-pdf-domain", () => {
   it("computes executive commercial report metrics accurately without mutating input", () => {

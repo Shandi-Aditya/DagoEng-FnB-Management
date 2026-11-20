@@ -1,8 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+export type { LoyaltyMember } from "@/types/loyalty";
 import {
-  LoyaltyMember,
+  type LoyaltyMember,
   LoyaltyTier,
   LoyaltyPointTransaction,
   LoyaltyTierChangeLog,
@@ -504,7 +505,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         relatedModule: "LOYALTY",
         actionUrl: "/customers",
         outletId: target.registeredOutletId,
-        outletName: target.registeredOutletName,
+        outletName: target.registeredOutletName || "",
       });
 
       logActivity({
@@ -517,7 +518,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         reason: `Poin mencapai ${newPoints}`,
         status: "SUCCESS",
         outletId: target.registeredOutletId,
-        outletName: target.registeredOutletName,
+        outletName: target.registeredOutletName || "",
       });
     }
 

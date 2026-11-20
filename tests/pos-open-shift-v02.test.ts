@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import { validateManualShiftOpen } from "@/lib/shift-management";
-import type { ShiftRecord } from "@/features/employees/types";
+import type { ShiftRecord } from "@/types/shift";
 
 describe("Task V-02: Buka Shift - Cegah Request Ganda & Modal Awal Kosong", () => {
   describe("1. Static Analysis & Code Invariants", () => {
@@ -92,7 +92,7 @@ describe("Task V-02: Buka Shift - Cegah Request Ganda & Modal Awal Kosong", () =
 
   describe("3. Concurrency Guard: Satu Klik = Satu Request (Anti 409 Conflict)", () => {
     it("mendeteksi shift yang sedang aktif di outlet dan mencegah pembukaan shift duplikat", () => {
-      const activeShift: ShiftRecord = {
+      const activeShift: any = {
         id: "shift-act-001",
         shiftName: "Shift Pagi Aktif",
         assignedCashierId: "emp-001",

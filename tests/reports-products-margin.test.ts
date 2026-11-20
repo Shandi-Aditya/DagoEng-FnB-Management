@@ -407,7 +407,7 @@ describe("Task S-11: Laporan Produk & Margin — Menu Terjual Hanya Dari Pesanan
 
   describe("3. Outlet-Scoped Products Filtering (ALL and Branch)", () => {
     it("retains products with outletId === 'ALL' and matching branch when scoped to a specific outlet", () => {
-      const activeOutletId = "outlet-sgr";
+      const activeOutletId: string = "outlet-sgr";
       const filtered = dummyProducts.filter(
         (p) =>
           activeOutletId === "ALL" ||

@@ -196,7 +196,10 @@ describe("PHASE 1: DOKU Simulation Security & Gateway Hardening", () => {
       paymentMethod: "DOKU_CHECKOUT",
       paymentStatus: "PENDING",
       checkInStatus: "REGISTERED",
+      eventDate: "2026-12-01T10:00:00Z",
+      eventLocation: "Dago Lab",
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     it("13. rejects checkout initiation in production when test client ID is configured", async () => {

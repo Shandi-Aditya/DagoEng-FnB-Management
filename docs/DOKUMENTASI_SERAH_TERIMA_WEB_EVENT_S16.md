@@ -13,8 +13,8 @@ Dokumen ini merupakan laporan serah terima teknis dan hasil regression test meny
 - **Cabang Git**: `shandi-dev`
 - **Target Integrasi**: `develop`
 - **Repositori**: `https://gitlab.com/devdagoeng/dagoeng-management.git`
-- **Total Test Web Event**: 24 file uji (369 skenario uji otomatis)
-- **Tingkat Kelulusan Uji**: 100% (369 lulus, 0 gagal)
+- **Total Test Web Event**: 20 file uji (340 skenario uji otomatis inti Web Event) ditambah 4 file uji pendukung POS/CRM/Coworking (29 skenario uji otomatis)
+- **Tingkat Kelulusan Uji**: 100% (340 lulus pada 20 file inti Web Event, serta 29 lulus pada 4 file pendukung)
 
 ---
 
@@ -22,7 +22,7 @@ Dokumen ini merupakan laporan serah terima teknis dan hasil regression test meny
 
 Pekerjaan magang modul Web Event telah menyelesaikan seluruh milestone dari M1 hingga M5 (Task S-01 sampai S-15). Cakupan fitur mencakup pengelolaan rekening penampung resmi, pembersihan data uji, validasi harga dan kuota, sentralisasi nomor CS, pengiriman e-tiket dan pemulihan kode via email, pembatasan meja check-in WITA hari ini, siklus transaksi event berbayar end-to-end, isolasi RBAC kasir dan tier loyalty, standarisasi coworking WITA dan nota resmi, konsistensi omzet pesanan lunas, sistem tiket bertingkat (*multi-tier*), kode promo dan tiket undangan, kebijakan refund per event, serta dashboard penjualan penyelenggara.
 
-Seluruh 369 skenario uji otomatis khusus Web Event berhasil dijalankan ulang pada tanggal 19 November 2026 tanpa ada kegagalan sama sekali.
+Seluruh 340 skenario uji otomatis khusus inti Web Event (20 file) serta 29 skenario uji pendukung POS/CRM/Coworking (4 file) berhasil dijalankan ulang tanpa ada kegagalan sama sekali (total 369 test lulus 100%).
 
 ---
 
@@ -142,9 +142,11 @@ Pengujian regresi dijalankan serentak menggunakan Vitest pada environment node t
 | 22 | `tests/events-portal-domain.test.ts` | 8 | 118 ms | **LULUS** | S-15 (Domain Portal Penyelenggara) |
 | 23 | `tests/events-portal-groups.test.ts` | 18 | 70 ms | **LULUS** | S-15 (Pengelompokan Status Event) |
 | 24 | `tests/events-catalog-domain.test.ts` | 7 | 107 ms | **LULUS** | S-01 s/d S-15 (Katalog Publik) |
+| **SUBTOTAL** | **20 File Inti Web Event** | **340** | **~98 detik** | **100% LULUS** | **Modul Inti Web Event (S-01 s/d S-08, S-12 s/d S-15)** |
+| **SUBTOTAL** | **4 File Pendukung** | **29** | **~4 detik** | **100% LULUS** | **Modul POS/CRM/Coworking Terintegrasi (S-09, S-10, S-11)** |
 | **TOTAL** | **24 File Test Suite** | **369** | **~102 detik** | **100% LULUS** | **Seluruh Modul Web Event & Pendukung** |
 
-> [!NOTE] Keterangan Suite: File 1–13 dan 18–24 merupakan suite inti Web Event, sedangkan File 14–17 merupakan suite pendukung POS/CRM/Coworking (`S-09`, `S-10`, `S-11`) yang telah terintegrasi dan lulus regresi penuh.
+> [!NOTE] Keterangan Suite: File 1–13 dan 18–24 merupakan 20 suite inti Web Event (340 test), sedangkan File 14–17 merupakan 4 suite pendukung POS/CRM/Coworking (`S-09`, `S-10`, `S-11` dengan total 29 test) yang telah terintegrasi dan lulus regresi penuh.
 
 Perintah untuk menjalankan ulang seluruh regresi di atas:
 ```bash
@@ -177,20 +179,20 @@ Berikut adalah daftar akun yang dapat digunakan oleh Ka Ari dan tim QA untuk ver
    - Perintah `npm run build` dijalankan menggunakan `$env:NODE_OPTIONS="--experimental-require-module"` pada environment Node v22 Windows.
    - Hasil build: **Lulus penuh (exit code 0)** dengan seluruh 37 rute halaman statis berhasil di-generate (`✓ Generating static pages (37/37)`).
    - Pemeriksaan tipe statis `npx tsc --noEmit -p .` berhasil **100% (0 error)**.
-   - Pemeriksaan tipe test `npx tsc --noEmit -p tests/tsconfig.json` berhasil **100% (0 error)**.
+   - Pemeriksaan tipe test `npx tsc --noEmit -p tests/tsconfig.json` pada cakupan penuh (`["**/*.ts", "../src/**/*.ts"]`) berhasil **100% (0 error)** setelah pemulihan penuh seluruh file test di repositori.
    - Pengecekan style shadcn `npm run lint:ui -- --strict src` memperoleh **0 temuan**.
 
 2. **Layanan Pengiriman Email (SMTP Provider)**:
    - Fitur pengiriman email e-tiket (S-08) dan pemulihan tiket (S-05) telah diintegrasikan dengan transport `nodemailer` di `src/lib/email.ts`.
    - Jika kredensial `SMTP_HOST`, `SMTP_USER`, dan `SMTP_PASS` di environment belum diisi, sistem secara aman mencatat payload dan URL e-tiket privat ke log konsol (`[Email Dispatcher]`) tanpa memutus transaksi pengguna (`sent: false`, tidak melempar uncaught error).
 
-3. **Baseline Suite Non-Web Event Workspace**:
-   - Sesuai dengan dokumentasi `AGENTS.md` bagian Perintah Verifikasi, terdapat tepat 4 file test non-Web Event yang merupakan baseline gagal bawaan:
-     1. `tests/etl-data-validation.test.ts`
-     2. `tests/final-demo-readiness.test.ts`
-     3. `tests/organizer-activation-hardening.test.ts`
-     4. `tests/storage-sync-safety.test.ts`
-   - Keempat file tersebut berada di luar lingkup modul Web Event. Seluruh suite Web Event (24 file) berstatus **100% lulus**.
+3. **Baseline Kegagalan Vitest Workspace**:
+   - Sesuai dengan dokumentasi `AGENTS.md` bagian Perintah Verifikasi, terdapat tepat 4 file test baseline workspace yang diizinkan gagal karena ketergantungan mock data lama workspace:
+     1. `tests/etl-data-validation.test.ts` (ETL)
+     2. `tests/final-demo-readiness.test.ts` (Demo UAT)
+     3. `tests/organizer-activation-hardening.test.ts` (Security Aktivasi Penyelenggara)
+     4. `tests/storage-sync-safety.test.ts` (Sinkronisasi Storage)
+   - Seluruh 20 file test suite inti Web Event yang diserahterimakan pada milestone ini (ditambah 4 file pendukung POS/CRM/Coworking) berstatus **100% lulus** (340 test Web Event + 29 test pendukung).
 
 ---
 
@@ -200,19 +202,19 @@ Untuk pengujian manual secara visual di browser, ikuti tahapan berikut:
 
 1. **Pengajuan Event Multi-Tier oleh Penyelenggara**:
    - Buka `/events/portal` dan login menggunakan akun `baristaguild@dagocreative.id`.
-   - Klik tombol **Ajukan Event**.
+   - Klik tombol **Ajukan event**.
    - Masukkan informasi event dan tambahkan tier tiket (misal: *Early Bird* Rp 50.000 kuota 10 pax, *Reguler* Rp 100.000 kuota 20 pax).
-   - Pilih kebijakan refund: *Bisa refund hingga H-3 acara* dengan biaya admin 10%.
-   - Simpan event. Status akan masuk ke antrean *Menunggu Persetujuan Admin*.
+   - Pilih kebijakan refund: **Bisa refund sampai H-x sebelum acara** (misal H-3 dengan biaya admin 10%).
+   - Simpan event. Status akan masuk ke antrean **Menunggu review**.
 
 2. **Persetujuan Event oleh Super Admin**:
    - Buka `/events-admin` dan login sebagai `admin@dagoeng.com`.
-   - Pada tab **Moderasi**, pilih event yang baru diajukan lalu klik **Setujui Event**.
+   - Pada tab **Moderasi**, pilih event yang baru diajukan lalu klik **Setujui**.
    - Event kini aktif dan muncul di katalog publik `/events`.
 
 3. **Pemesanan Tiket & Kode Promo oleh Pembeli**:
    - Buka `/events` (tanpa login atau sebagai tamu).
-   - Buka detail event tersebut. Pastikan informasi rekening BCA an PT DAGO KREATIF MANDIRI tampil resmi tanpa tulisan demo.
+   - Buka detail event tersebut. Pastikan informasi rekening resmi tampil tanpa tulisan demo (BCA an PT DAGO CREATIVE HUB dan Mandiri an PT DAGO KREATIF MANDIRI).
    - Pilih tiket *Early Bird*, masukkan kode promo (jika ada), lalu selesaikan pemesanan.
    - Unggah bukti transfer pada halaman pembayaran.
 
@@ -224,13 +226,13 @@ Untuk pengujian manual secara visual di browser, ikuti tahapan berikut:
 5. **Akses E-Tiket & Simulasi Pengajuan Refund**:
    - Buka halaman e-tiket peserta melalui tautan tiket (`/events/tickets/[token]`).
    - QR Code aktif untuk setiap sub-tiket peserta.
-   - Klik tombol **Ajukan refund**.
+   - Klik tombol **Ajukan refund tiket**.
    - Masukkan nomor rekening pengembalian dana dan alasan pembatalan, lalu kirim.
    - Buka `/events-admin` tab **Pengajuan refund**, lalu setujui permohonan refund tersebut.
 
 6. **Dashboard Penjualan Tiket**:
    - Masuk kembali ke `/events/portal` sebagai penyelenggara.
-   - Pada tab ringkasan beranda dan modal detail event, periksa tabel **Penjualan per jenis tiket**.
+   - Pada tab ringkasan beranda dan modal detail event, periksa tabel/kartu **Penjualan tiket per jenis**.
    - Pastikan angka tiket terjual, sisa kuota, badge habis, dan omzet terhitung tepat sesuai transaksi yang telah terjadi.
 
 7. **Meja Check-in Hari Acara**:

@@ -24,10 +24,13 @@ export interface OrderStatusHistoryItem {
 export interface OrderItemRecord {
   id: string;
   productId?: string;
+  menuItemId?: string;
   tenantId?: string;
   productName: string;
   quantity: number;
   unitPrice: number;
+  price?: number;
+  subtotal?: number;
   notes?: string;
   modifiers?: string[];
 }
@@ -35,9 +38,10 @@ export interface OrderItemRecord {
 export interface OrderRecord {
   id: string;
   orderNumber: string;
-  organizationId: string;
+  organizationId?: string;
   outletId: string;
-  outletName: string;
+  outletName?: string;
+  tenantId?: string;
   tableNumber: string;
   customerName: string;
   /** Phone left by the guest at self-order checkout; the customer app finds "my orders" by this, never by name. */
@@ -76,7 +80,7 @@ export interface OrderRecord {
   loyaltyPointsCredited?: boolean;
   syncStatus?: "SYNCED" | "PENDING" | "REJECTED";
   syncError?: string;
-  targetServiceMinutes: number; // Target SLA in minutes (e.g. 10m or 15m)
+  targetServiceMinutes?: number; // Target SLA in minutes (e.g. 10m or 15m)
   notes?: string; // Optional customer / order notes
   refundReason?: string;
   refundApprovedBy?: string;
@@ -96,7 +100,8 @@ export interface OrderRecord {
   servedAt?: string;             // 7. Served to Customer
   completedAt?: string;          // 8. Order Closed / Bill Closed
 
-  statusHistory: OrderStatusHistoryItem[];
+  statusHistory?: OrderStatusHistoryItem[];
+  type?: string;
 }
 
 export interface OrderTimeMetrics {

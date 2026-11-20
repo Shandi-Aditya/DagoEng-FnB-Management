@@ -207,7 +207,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-cashier",
         name: "Kasir Test",
         role: "CASHIER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       const req = new NextRequest("http://localhost:3000/api/loyalty/members?phone=081911223344");
       const res = await GET(req);
@@ -223,7 +224,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-mgr",
         name: "Manager Test",
         role: "MANAGER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       const req = new NextRequest("http://localhost:3000/api/loyalty/members?phone=081911223344");
       const res = await GET(req);
@@ -239,7 +241,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-mgr",
         name: "Manager Test",
         role: "MANAGER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       const req = new NextRequest("http://localhost:3000/api/loyalty/members");
       const res = await GET(req);
@@ -257,7 +260,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-cashier",
         name: "Kasir Test",
         role: "CASHIER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       // Ketut Dian has id "mem-001"
       const req = new NextRequest("http://localhost:3000/api/loyalty/members", {
@@ -299,7 +303,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-cashier",
         name: "Kasir Test",
         role: "CASHIER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       // Ketut Dian has 55 points, cashier tries to set Platinum
       const req = new NextRequest("http://localhost:3000/api/loyalty/members", {
@@ -334,7 +339,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-cashier",
         name: "Kasir Test",
         role: "CASHIER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       const req = new NextRequest("http://localhost:3000/api/loyalty/members", {
         method: "PUT",
@@ -357,7 +363,8 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
         userId: "user-mgr",
         name: "Manager Test",
         role: "MANAGER",
-      });
+        scopeLevel: "OUTLET",
+      } as any);
 
       const getReq = new NextRequest("http://localhost:3000/api/loyalty/members");
       const getRes = await GET(getReq);

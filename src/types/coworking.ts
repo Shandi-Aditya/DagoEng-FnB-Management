@@ -18,6 +18,7 @@ export interface CoworkingSpaceItem {
   dailyRate: number;
   monthlyRate?: number;
   status: SpaceStatus;
+  isActive?: boolean;
   amenities: string[];
   description?: string;
   imageUrl?: string;
@@ -70,10 +71,12 @@ export interface CoworkingBooking {
   outletId?: string;
   createdAt?: string;
   totalAmount: number;
+  paidAmount?: number;
+  remainingAmount?: number;
   paymentStatus: "PAID" | "PENDING";
   paymentMethod?: string;
   paymentRef?: string;
-  checkInStatus: "RESERVED" | "CHECKED_IN" | "COMPLETED" | "CANCELLED";
+  checkInStatus: "RESERVED" | "CHECKED_IN" | "COMPLETED" | "CANCELLED" | "CONFIRMED";
   fnbVoucherApplied?: string;
   notes?: string;
   qrisVerification?: QRISVerificationDetail;

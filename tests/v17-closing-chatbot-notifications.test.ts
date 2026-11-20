@@ -655,11 +655,12 @@ describe("Task V-17: Closing Chatbot Notifications (Ka Ari & Partners)", () => {
     expect(kopiSenja).toBeDefined();
     expect(kopiSenja?.role).toBe("PARTNER");
     if (kopiSenja?.role === "PARTNER") {
-      expect(kopiSenja.summary.effectiveBasisAmount).toBe(110000);
-      expect(kopiSenja.summary.tenantSharePercent).toBe(80);
-      expect(kopiSenja.summary.dagoSharePercent).toBe(20);
-      expect(kopiSenja.summary.partnerShareAmount).toBe(88000);
-      expect(kopiSenja.summary.dagoShareAmount).toBe(22000);
+      const partnerSummary = kopiSenja.summary as any;
+      expect(partnerSummary.effectiveBasisAmount).toBe(110000);
+      expect(partnerSummary.tenantSharePercent).toBe(80);
+      expect(partnerSummary.dagoSharePercent).toBe(20);
+      expect(partnerSummary.partnerShareAmount).toBe(88000);
+      expect(partnerSummary.dagoShareAmount).toBe(22000);
     }
     expect(kopiSenja?.message).toContain("Rp 110.000");
     expect(kopiSenja?.message).toContain("Rp 88.000");
@@ -759,8 +760,8 @@ describe("Task V-17: Closing Chatbot Notifications (Ka Ari & Partners)", () => {
       (e: { recipientId: string }) => e.recipientId === "tenant-ks"
     );
     expect(ksEnv).toBeDefined();
-    expect(ksEnv.summary.effectiveBasisAmount).toBe(100000);
-    expect(ksEnv.summary.partnerShareAmount).toBe(70000);
-    expect(ksEnv.summary.dagoShareAmount).toBe(30000);
+    expect((ksEnv.summary as any).effectiveBasisAmount).toBe(100000);
+    expect((ksEnv.summary as any).partnerShareAmount).toBe(70000);
+    expect((ksEnv.summary as any).dagoShareAmount).toBe(30000);
   });
 });

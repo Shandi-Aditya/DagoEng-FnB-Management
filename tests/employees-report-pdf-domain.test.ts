@@ -10,7 +10,7 @@ import {
 } from "@/features/employees/employees-report-pdf-domain";
 import type { Employee, ShiftRecord } from "@/types/shift";
 
-const MOCK_EMPLOYEES: Employee[] = [
+const MOCK_EMPLOYEES: Employee[] = ([
   {
     id: "emp-1",
     employeeNumber: "EMP-001",
@@ -41,9 +41,9 @@ const MOCK_EMPLOYEES: Employee[] = [
     status: "CUTI",
     phone: "0813334445",
   },
-];
+] as any);
 
-const MOCK_SHIFTS: ShiftRecord[] = [
+const MOCK_SHIFTS: ShiftRecord[] = ([
   {
     id: "shift-1",
     cashierName: "Budi Santoso",
@@ -73,7 +73,7 @@ const MOCK_SHIFTS: ShiftRecord[] = [
     status: "OPEN",
     notes: "",
   },
-];
+] as any);
 
 describe("employees-report-pdf-domain", () => {
   it("computes executive summary metrics accurately without mutating input", () => {

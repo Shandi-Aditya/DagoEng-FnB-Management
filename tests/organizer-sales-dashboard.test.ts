@@ -331,7 +331,7 @@ describe("organizer-sales-dashboard (Task S-15)", () => {
         expiresAt: futureDate,
         createdAt: nowIso,
       },
-    ];
+    ] as any;
 
     const summary = calculateEventSalesSummary(limitedEvent, bookingsWithPending);
     expect(summary.totalCapacity).toBe(10);
@@ -391,7 +391,7 @@ describe("organizer-sales-dashboard (Task S-15)", () => {
         paymentStatus: "PAID",
         createdAt: "2026-11-02T10:00:00Z",
       },
-    ];
+    ] as any;
 
     const summary = calculateEventSalesSummary(nonTierEvent, bookingsWithInv);
     expect(summary.totalTicketsSold).toBe(15);
@@ -446,7 +446,7 @@ describe("organizer-sales-dashboard (Task S-15)", () => {
         paymentMethod: "MANUAL_TRANSFER",
         createdAt: "2026-11-02T10:00:00Z",
       },
-    ];
+    ] as any;
 
     const summary = calculateEventSalesSummary(customSplitEvent, bookings);
     expect(summary.totalRevenue).toBe(200000);

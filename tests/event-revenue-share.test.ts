@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import {
@@ -337,7 +337,7 @@ describe("Per-Event Revenue Sharing & Mutation Lock", () => {
         }),
       });
 
-      const res = await postRevenueShareHandler(req, { params: { id: lockedEventId } });
+      const res = await postRevenueShareHandler(req, { params: Promise.resolve({ id: lockedEventId }) });
       expect(res.status).toBe(400);
 
       const json = await res.json();

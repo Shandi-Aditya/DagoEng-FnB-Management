@@ -7,7 +7,7 @@ import { EDGE_SESSION_COOKIE_NAME } from "@/lib/edge-session";
 function createOrderRequest(body: any, role: string = "CASHIER", email: string = "cashier@dagoeng.com"): NextRequest {
   const token = signEdgeSessionToken({
     userId: `user-${role.toLowerCase()}-1`,
-    role,
+    role: role as any,
     scopeLevel: "OUTLET",
     email,
     maxAgeSeconds: 3600,

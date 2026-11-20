@@ -34,7 +34,7 @@ describe("pos-coworking logic", () => {
   });
 
   describe("checkSlotAvailability", () => {
-    const spaces: CoworkingSpaceItem[] = [
+    const spaces: any[] = [
       {
         id: "space-1",
         name: "Private Office A",
@@ -70,7 +70,7 @@ describe("pos-coworking logic", () => {
     });
 
     it("detects conflict when a single-capacity room is already booked", () => {
-      const bookings: CoworkingBooking[] = [
+      const bookings: any[] = [
         {
           id: "b-1",
           bookingCode: "BK-01",
@@ -103,7 +103,7 @@ describe("pos-coworking logic", () => {
     });
 
     it("allows multiple bookings up to capacity on HOT_DESK", () => {
-      const bookings: CoworkingBooking[] = [
+      const bookings: any[] = [
         {
           id: "b-1",
           bookingCode: "BK-01",

@@ -105,7 +105,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         body: formData,
       });
 
-      const res = await uploadProofRoute(req, { params: { token: bookingA.guestToken } });
+      const res = await uploadProofRoute(req, { params: Promise.resolve({ token: bookingA.guestToken!  }) });
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -123,7 +123,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         body: formData,
       });
 
-      const res = await uploadProofRoute(req, { params: { token: bookingA.guestToken } });
+      const res = await uploadProofRoute(req, { params: Promise.resolve({ token: bookingA.guestToken!  }) });
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
@@ -155,7 +155,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         body: formData,
       });
 
-      const res = await uploadProofRoute(req, { params: { token: bookingA.guestToken } });
+      const res = await uploadProofRoute(req, { params: Promise.resolve({ token: bookingA.guestToken!  }) });
       const json = await res.json();
       savedFilename = path.basename(json.data.paymentProofUrl);
     });
@@ -165,7 +165,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         method: "GET",
       });
 
-      const res = await getProofRoute(req, { params: { filename: savedFilename } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: savedFilename  }) });
       expect(res.status).toBe(401);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -178,7 +178,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         { method: "GET" }
       );
 
-      const res = await getProofRoute(req, { params: { filename: savedFilename } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: savedFilename  }) });
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toBe("image/jpeg");
       expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
@@ -191,7 +191,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         { method: "GET" }
       );
 
-      const res = await getProofRoute(req, { params: { filename: savedFilename } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: savedFilename  }) });
       expect(res.status).toBe(403);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -206,7 +206,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         },
       });
 
-      const res = await getProofRoute(req, { params: { filename: savedFilename } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: savedFilename  }) });
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toBe("image/jpeg");
     });
@@ -216,7 +216,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         method: "GET",
       });
 
-      const res = await getProofRoute(req, { params: { filename: "../../etc/passwd" } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: "../../etc/passwd"  }) });
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -233,7 +233,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         }),
       });
 
-      const res = await updateBookingRoute(req, { params: { id: bookingA.id } });
+      const res = await updateBookingRoute(req, { params: Promise.resolve({ id: bookingA.id  }) });
       expect(res.status).toBe(403);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -249,7 +249,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         }),
       });
 
-      const res = await updateBookingRoute(req, { params: { id: bookingA.id } });
+      const res = await updateBookingRoute(req, { params: Promise.resolve({ id: bookingA.id  }) });
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
@@ -345,6 +345,9 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         paymentStatus: "PAID",
         checkInStatus: "REGISTERED",
         paymentProofUrl: `/api/events/proofs/${LEGACY_FILE_1}`,
+        eventDate: "2026-11-20T10:00:00Z",
+        eventLocation: "Dago Lab",
+        updatedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       };
       saveBookingsToDisk([...existingBookings, legacyBooking]);
@@ -357,7 +360,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         },
       });
 
-      const res = await getProofRoute(req, { params: { filename: LEGACY_FILE_1 } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: LEGACY_FILE_1  }) });
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toBe("image/png");
       expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
@@ -369,7 +372,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         { method: "GET" }
       );
 
-      const res = await getProofRoute(req, { params: { filename: LEGACY_FILE_1 } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: LEGACY_FILE_1  }) });
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toBe("image/png");
     });
@@ -379,7 +382,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         method: "GET",
       });
 
-      const res = await getProofRoute(req, { params: { filename: LEGACY_FILE_1 } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: LEGACY_FILE_1  }) });
       expect(res.status).toBe(401);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -392,7 +395,7 @@ describe("DAGOENG PAYMENT PROOF SECURITY & ACCESS CONTROL (P0 REMEDIATION)", () 
         { method: "GET" }
       );
 
-      const res = await getProofRoute(req, { params: { filename: LEGACY_FILE_1 } });
+      const res = await getProofRoute(req, { params: Promise.resolve({ filename: LEGACY_FILE_1  }) });
       expect(res.status).toBe(403);
       const json = await res.json();
       expect(json.success).toBe(false);

@@ -261,7 +261,7 @@ function OrderDetailBody({
         <section className="flex flex-col gap-3">
           <h3 className="text-xs text-muted-foreground">Riwayat status</h3>
           <ol className="flex flex-col gap-3 border-l pl-4">
-            {selectedOrder.statusHistory.map((step, idx) => (
+            {(selectedOrder.statusHistory || []).map((step, idx) => (
               <li key={idx} className="relative flex flex-col gap-0.5">
                 <span className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-muted-foreground" aria-hidden />
                 <span className="flex items-baseline gap-2">

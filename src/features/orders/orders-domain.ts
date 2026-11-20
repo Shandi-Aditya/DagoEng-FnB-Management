@@ -139,7 +139,7 @@ export function paymentStatusLabel(status: OrderRecord["paymentStatus"]): string
   }
 }
 
-export function paymentStatusTone(status: OrderRecord["paymentStatus"]): StatusTone {
+export function paymentStatusTone(status: OrderRecord["paymentStatus"] | "UNPAID" | string): StatusTone {
   switch (status) {
     case "PAID":
       return "success";

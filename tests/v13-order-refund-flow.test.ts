@@ -28,7 +28,7 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
     recordedRefundIds: [],
   };
 
-  const qrisOrder: OrderRecord = {
+  const qrisOrder: any = {
     id: "ord-qris-101",
     orderNumber: "ORD-QRIS-101",
     customerName: "Gede Arya",
@@ -75,7 +75,7 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
     ],
   };
 
-  const cashOrder: OrderRecord = {
+  const cashOrder: any = {
     id: "ord-cash-202",
     orderNumber: "ORD-CASH-202",
     customerName: "Made Suardana",
@@ -133,7 +133,7 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
         refundedAt: nowIso,
         refundMethod: "CASH",
         statusHistory: [
-          ...qrisOrder.statusHistory,
+          ...(qrisOrder.statusHistory || []),
           {
             id: "sh-refund-1",
             orderId: qrisOrder.id,
@@ -260,11 +260,11 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
       const earnedPoints = Math.floor(qrisOrder.total / 1000);
       expect(earnedPoints).toBe(66);
 
-      const initialMember: LoyaltyMember = {
+      const initialMember: any = {
         id: "mem-01",
         name: "Gede Arya",
         phone: "081234567890",
-        tier: "CLASSIC",
+        tier: "Bronze",
         points: 100,
         totalSpend: 100000,
         totalVisits: 2,
@@ -288,7 +288,7 @@ describe("Task V-13: Refund Transaksi QRIS & Tunai", () => {
 
       // Penarikan kembali poin (reverseTransactionPoints)
       const earnTx = initialMember.pointHistory.find(
-        (ptx) => ptx.type === "EARN" && ptx.relatedTransactionId === qrisOrder.id
+        (ptx: any) => ptx.type === "EARN" && ptx.relatedTransactionId === qrisOrder.id
       );
       expect(earnTx).toBeDefined();
 

@@ -190,7 +190,7 @@ describe("Tahap 7: Audit Trail & Activity Log Comprehensive Test Suite", () => {
 
     const searchByActor = filterLogs(mockLogs, { searchTerm: "Ni Kadek" });
     expect(searchByActor.length).toBeGreaterThan(0);
-    expect(searchByActor.every((l) => l.actorName.includes("Ni Kadek"))).toBe(true);
+    expect(searchByActor.every((l) => l.actorName?.includes("Ni Kadek"))).toBe(true);
 
     const searchByRecordId = filterLogs(mockLogs, { searchTerm: "REC-1005" });
     expect(searchByRecordId.length).toBe(1);

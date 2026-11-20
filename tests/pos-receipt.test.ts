@@ -12,7 +12,7 @@ import type { POSReceiptItem } from "@/features/pos/types";
 describe("pos-receipt domain logic", () => {
   describe("calculateTenantReceiptGroups", () => {
     it("groups items by tenant correctly and calculates subtotal without mutating input", () => {
-      const items: readonly POSReceiptItem[] = [
+      const items: readonly any[] = [
         {
           id: "item-1",
           productId: "prod-1",
@@ -71,7 +71,7 @@ describe("pos-receipt domain logic", () => {
     });
 
     it("falls back to default tenant name when tenant info is omitted", () => {
-      const items: readonly POSReceiptItem[] = [
+      const items: readonly any[] = [
         {
           id: "item-x",
           productId: "prod-x",

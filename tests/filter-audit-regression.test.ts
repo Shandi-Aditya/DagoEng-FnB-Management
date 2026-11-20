@@ -8,9 +8,9 @@ import {
 } from "@/contexts/DateFilterContext";
 import { bucketOrdersByDateRange } from "@/features/dashboard/dashboard-metrics";
 import { checkPromoValidity, getPromoComputedStatus } from "@/lib/promo";
-import type { PromoConfig } from "@/types/promo";
+import type { PromoConfig } from "@/lib/promo";
 import { filterActivityLogs } from "@/features/activity-log/activity-log-domain";
-import type { ActivityLogEntry } from "@/contexts/ActivityLogContext";
+import type { ActivityLogEntry } from "@/types/audit";
 import { checkSlotAvailability } from "@/features/pos/pos-coworking";
 import {
   checkCoworkingBookingConflict,
@@ -41,7 +41,7 @@ import {
 } from "@/features/events-admin/events-admin-domain";
 import { filterOrganizerAttendees } from "@/features/events-portal/events-portal-domain";
 import { GET as getCoworkingBookingsRoute } from "@/app/api/coworking/bookings/route";
-import type { CoworkingBooking, CoworkingSpaceItem } from "@/contexts/InventoryContext";
+import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 import type { EventTicketOrder, PublicCommunityEvent } from "@/types/event";
 
 describe("Filter audit behavioral regressions", () => {
@@ -120,7 +120,7 @@ describe("Filter audit behavioral regressions", () => {
   });
 
   describe("Promo WITA start-of-day and end-of-day validity", () => {
-    const basePromo: PromoConfig = {
+    const basePromo: any = {
       id: "promo-nov18",
       name: "Promo Hari Kerja",
       type: "AUTOMATIC_PROMO",
@@ -169,7 +169,7 @@ describe("Filter audit behavioral regressions", () => {
         userName: "Ghost",
         userRole: "STAFF",
         outletId: "OUTLET-001",
-        module: "POS_ORDER",
+        module: "POS_ORDER" as any,
         action: "CREATE",
         description: "Data korup",
         status: "FAILED",
@@ -204,11 +204,12 @@ describe("Filter audit behavioral regressions", () => {
       hourlyRate: 15000,
       dailyRate: 60000,
       monthlyRate: 900000,
+      area: "Ground Floor Main",
       status: "AVAILABLE",
-      facilities: ["WiFi"],
+      amenities: ["WiFi"],
     };
 
-    const makeBooking = (overrides: Partial<CoworkingBooking>): CoworkingBooking => ({
+    const makeBooking = (overrides: any): any => ({
       id: "cw-1",
       bookingCode: "CW-001",
       guestName: "Tamu Satu",
@@ -224,7 +225,7 @@ describe("Filter audit behavioral regressions", () => {
       discountAmount: 0,
       totalPrice: 30000,
       paymentStatus: "PAID",
-      checkInStatus: "BOOKED",
+      checkInStatus: "RESERVED",
       createdAt: "2026-11-18T01:00:00.000Z",
       ...overrides,
     });
@@ -342,7 +343,7 @@ describe("Filter audit behavioral regressions", () => {
           outletId: "OUTLET-001",
         },
       ];
-      const visible = filterCustomerProducts(products, "tenant-ks", "Semua", "");
+      const visible = filterCustomerProducts(products as any, { partnerId: "tenant-ks", category: "Semua", searchQuery: "" });
       expect(visible.map((p) => p.id)).toEqual(["p-active"]);
       expect(spaceTypeLabel("PRIVATE_POD")).toBe("Private pod");
       expect(bookingStatusLabel("RESERVED")).toBe("Dipesan");
@@ -364,7 +365,7 @@ describe("Filter audit behavioral regressions", () => {
           totalSpent: 450000,
         },
       ];
-      expect(filterMembers(members, "081234567890", "ALL")).toHaveLength(1);
+      expect(filterMembers(members as any, "081234567890", "ALL")).toHaveLength(1);
 
       const employees = [
         {
@@ -382,8 +383,8 @@ describe("Filter audit behavioral regressions", () => {
           pin: "1234",
         },
       ];
-      expect(filterEmployees(employees, "ALL", "ALL", "081999887766")).toHaveLength(1);
-      expect(filterEmployees(employees, "ALL", "ALL", "gede@dago.id")).toHaveLength(1);
+      expect(filterEmployees(employees as any, "ALL", "ALL", "081999887766")).toHaveLength(1);
+      expect(filterEmployees(employees as any, "ALL", "ALL", "gede@dago.id")).toHaveLength(1);
 
       const shifts = [
         {
@@ -398,10 +399,10 @@ describe("Filter audit behavioral regressions", () => {
           status: "OPEN" as const,
         },
       ];
-      expect(filterShifts(shifts, "", "ACTIVE", "2026-11-18")).toHaveLength(1);
-      expect(filterShifts(shifts, "", "ACTIVE", "2026-11-17")).toHaveLength(0);
+      expect(filterShifts(shifts as any, "", "ACTIVE", "2026-11-18")).toHaveLength(1);
+      expect(filterShifts(shifts as any, "", "ACTIVE", "2026-11-17")).toHaveLength(0);
 
-      const cwBookings: CoworkingBooking[] = [
+      const cwBookings: any[] = [
         {
           id: "cwb-1",
           bookingCode: "CW-900",
@@ -522,7 +523,7 @@ describe("Filter audit behavioral regressions", () => {
     });
 
     it("separates rejected payment proofs from pending verification in events-admin and portal", () => {
-      const bookings: EventTicketOrder[] = [
+      const bookings: EventTicketOrder[] = ([
         {
           id: "bk-pending-valid",
           eventId: "ev-1",
@@ -569,9 +570,9 @@ describe("Filter audit behavioral regressions", () => {
           checkInStatus: "PARTIALLY_CHECKED_IN",
           createdAt: "2026-11-18T04:00:00.000Z",
         },
-      ];
+      ] as any);
 
-      expect(filterBookings(bookings, "PENDING_PROOF", "").map((b) => b.id)).toEqual([
+      expect(filterBookings(bookings as any, "PENDING_PROOF", "").map((b) => b.id)).toEqual([
         "bk-pending-valid",
       ]);
       expect(filterBookings(bookings, "REJECTED", "").map((b) => b.id)).toEqual([

@@ -102,7 +102,7 @@ describe("Task V-01: Perbaiki crash pembayaran F&B (React error #310 / Hook Orde
     });
 
     it("memvalidasi payload transaksi tunai untuk penerbitan struk", () => {
-      const cartItems: POSCartItem[] = [
+      const cartItems: any[] = [
         {
           productId: "prod-kopi-senja",
           productName: "Kopi Senja Aren",

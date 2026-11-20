@@ -105,7 +105,7 @@ describe("DAGOENG FINAL DEMO READINESS VALIDATION (30 OKTOBER 2026)", () => {
       const req = new NextRequest(`http://localhost:3000/api/events/tickets/${booking.guestToken}`, {
         method: "GET",
       });
-      const res = await getTicketRoute(req, { params: { token: booking.guestToken } });
+      const res = await getTicketRoute(req, { params: Promise.resolve({ token: booking.guestToken! }) });
       expect(res.status).toBe(200);
       const ticketData = await res.json();
       expect(ticketData.data.guestName).toBe("Budi Demo");
@@ -158,7 +158,7 @@ describe("DAGOENG FINAL DEMO READINESS VALIDATION (30 OKTOBER 2026)", () => {
         method: "POST",
         body: formData,
       });
-      const uploadRes = await uploadProofRoute(uploadReq, { params: { token: attendeeA.guestToken } });
+      const uploadRes = await uploadProofRoute(uploadReq, { params: Promise.resolve({ token: attendeeA.guestToken! }) });
       expect(uploadRes.status).toBe(200);
       const uploadJson = await uploadRes.json();
       expect(uploadJson.success).toBe(true);
@@ -176,17 +176,17 @@ describe("DAGOENG FINAL DEMO READINESS VALIDATION (30 OKTOBER 2026)", () => {
 
       // Access test: Owner with matching guestToken -> ALLOWED (200)
       const allowedReq = new NextRequest(`http://localhost:3000/api/events/proofs/${proofFilename}?token=${attendeeA.guestToken}`);
-      const allowedRes = await getProofRoute(allowedReq, { params: { filename: proofFilename } });
+      const allowedRes = await getProofRoute(allowedReq, { params: Promise.resolve({ filename: proofFilename }) });
       expect(allowedRes.status).toBe(200);
 
       // Access test: Unauthenticated without token -> BLOCKED (401)
       const unauthReq = new NextRequest(`http://localhost:3000/api/events/proofs/${proofFilename}`);
-      const unauthRes = await getProofRoute(unauthReq, { params: { filename: proofFilename } });
+      const unauthRes = await getProofRoute(unauthReq, { params: Promise.resolve({ filename: proofFilename }) });
       expect(unauthRes.status).toBe(401);
 
       // Access test: IDOR (Attendee B using their token to view Attendee A's proof) -> BLOCKED (403)
       const idorReq = new NextRequest(`http://localhost:3000/api/events/proofs/${proofFilename}?token=${attendeeB.guestToken}`);
-      const idorRes = await getProofRoute(idorReq, { params: { filename: proofFilename } });
+      const idorRes = await getProofRoute(idorReq, { params: Promise.resolve({ filename: proofFilename }) });
       expect(idorRes.status).toBe(403);
     });
   });

@@ -83,7 +83,24 @@ describe("events-admin-domain", () => {
     },
   ];
 
-  const mockBookings: EventTicketOrder[] = [
+  
+function mockAdminTicket(override: any): EventTicketOrder {
+  return {
+    eventTitle: "Workshop Melukis",
+    eventDate: "2026-11-20T10:00:00Z",
+    eventLocation: "Singaraja",
+    ticketCount: 1,
+    unitPrice: override.totalPrice ?? 50000,
+    platformFeePercent: 20,
+    platformFeeAmount: 10000,
+    organizerRevenueAmount: 40000,
+    paymentMethod: "MANUAL_TRANSFER",
+    updatedAt: "2026-11-11T12:00:00Z",
+    ...override,
+  };
+}
+
+const mockBookings: EventTicketOrder[] = [
     {
       id: "bkg-1",
       eventId: "evt-1",
@@ -109,7 +126,7 @@ describe("events-admin-domain", () => {
       checkInStatus: "CHECKED_IN",
       createdAt: "2026-11-11T14:00:00Z",
     },
-  ];
+].map(mockAdminTicket);
 
   describe("Status labels and tones", () => {
     it("maps event status to proper Indonesian sentence case label", () => {

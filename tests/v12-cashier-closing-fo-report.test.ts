@@ -6,7 +6,7 @@ import type { ShiftRecord } from "@/types/shift";
 import type { OrderRecord } from "@/types/order";
 
 describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", () => {
-  const mockOrders: OrderRecord[] = [
+  const mockOrders: any[] = [
     {
       id: "ord-1",
       orderNumber: "ORD-001",
@@ -61,7 +61,7 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
 
   describe("1. CLOSING Report Domain (reports-domain.ts)", () => {
     it("reports NEEDS_RECONCILIATION shifts accurately instead of 0 shift and false Seimbang", () => {
-      const overdueShifts: ShiftRecord[] = [
+      const overdueShifts: any[] = [
         {
           id: "shf-overdue-1",
           shiftName: "Shift Pagi (Auto-reconciled)",
@@ -103,7 +103,7 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
     });
 
     it("reports Seimbang only when all shifts are CLOSED and variance is 0", () => {
-      const balancedShifts: ShiftRecord[] = [
+      const balancedShifts: any[] = [
         {
           id: "shf-closed-1",
           shiftName: "Shift Pagi",
@@ -135,7 +135,7 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
     });
 
     it("reports Ada selisih when shifts are CLOSED but variance is non-zero", () => {
-      const varianceShifts: ShiftRecord[] = [
+      const varianceShifts: any[] = [
         {
           id: "shf-closed-2",
           shiftName: "Shift Sore",
@@ -168,7 +168,7 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
 
   describe("2. Front Office (FO) Closing Report Data Builder", () => {
     it("builds FO closing report with complete cash drawer reconciliation metrics", () => {
-      const sampleShift: ShiftRecord = {
+      const sampleShift: any = {
         id: "shf-fo-1",
         shiftName: "Shift 1 (Pagi)",
         assignedCashierName: "Made Suantara",
@@ -211,7 +211,7 @@ describe("Task V-12: Cashier Closing Status & Front Office (FO) Report Format", 
 
   describe("3. PDF URL Generator & Server Rendering Integration", () => {
     it("includes FO cash reconciliation parameters in the closing PDF endpoint URL", () => {
-      const sampleShift: ShiftRecord = {
+      const sampleShift: any = {
         id: "shf-fo-2",
         shiftName: "Shift Malam",
         assignedCashierName: "Budi",

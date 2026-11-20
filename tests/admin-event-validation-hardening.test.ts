@@ -40,6 +40,31 @@ import * as dataStorage from "@/lib/data-storage";
 import { NextRequest } from "next/server";
 import { EventSubmissionPayload, CommunityEvent, EventTicketOrder } from "@/types/event";
 
+
+function createMockTicketOrder(override: any): EventTicketOrder {
+  return {
+    ticketCode: `DAGO-EVT-${override.id}`,
+    eventTitle: 'Test Validation Event',
+    eventDate: '2026-12-01T10:00:00+08:00',
+    eventLocation: 'Dago Creative Hub',
+    guestName: override.guestName || 'Guest',
+    guestEmail: override.guestEmail || 'guest@example.com',
+    guestPhone: override.guestPhone || '081234567890',
+    ticketCount: override.ticketCount ?? 1,
+    unitPrice: override.totalPrice ? Math.round(override.totalPrice / (override.ticketCount || 1)) : 50000,
+    totalPrice: override.totalPrice ?? 50000,
+    platformFeePercent: override.platformFeePercent ?? 20,
+    platformFeeAmount: override.platformFeeAmount ?? 10000,
+    organizerRevenueAmount: override.organizerRevenueAmount ?? 40000,
+    paymentMethod: override.paymentMethod || 'MANUAL_TRANSFER',
+    paymentStatus: override.paymentStatus || 'PENDING',
+    checkInStatus: override.checkInStatus || 'REGISTERED',
+    createdAt: override.createdAt || new Date().toISOString(),
+    updatedAt: override.updatedAt || new Date().toISOString(),
+    ...override,
+  };
+}
+
 describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -266,7 +291,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
       // Mock session user as CHECKIN_STAFF
       vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
         isAuthenticated: true,
-        role: "CHECKIN_STAFF",
+        role: "CHECKIN_STAFF" as any,
         userId: "user-staff-1",
         email: "staff@dagoeng.com",
         name: "Staff Check In",
@@ -324,12 +349,13 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
         id: "user-checkin-staff",
         email: "checkin@dagoeng.com",
         name: "Petugas Lapangan",
-        role: "CHECKIN_STAFF",
-        tenantId: "org-dago-hub",
+        role: "CHECKIN_STAFF" as any,
+        phone: "081234567890",
+        updatedAt: "2026-01-01T00:00:00.000Z",
         passwordHash: "hash",
-        isActive: true,
+        status: "ACTIVE",
         createdAt: "2026-01-01T00:00:00.000Z",
-      });
+      } as any);
 
       const payload: EventSubmissionPayload = {
         title: "Event dari Email Checkin Staff",
@@ -740,7 +766,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
     });
 
     it("6.1 getEventActiveBookedTicketCount menghitung tiket aktif dengan tepat dan mengecualikan cancelled/expired", () => {
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         // 1. Paid booking dengan 2 tiket
         {
           id: "bk-1",
@@ -827,7 +853,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
 
       // Total aktif = 2 (PAID) + 3 (PAID + CHECKED_IN) + 1 (PENDING) = 6 tiket
       const count = getEventActiveBookedTicketCount(testEventId, mockBookings);
@@ -838,7 +864,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
       // 10 tiket aktif (2 transaksi @ 6 dan 4 tiket)
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-active-1-${Date.now()}`,
           eventId: testEventId,
@@ -868,7 +894,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       // Coba turunkan kuota ke 9 (padahal sudah ada 10 tiket aktif)
@@ -882,7 +908,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
     it("6.3 Kuota baru sama dengan tiket aktif: diterima", async () => {
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-exact-${Date.now()}`,
           eventId: testEventId,
@@ -899,7 +925,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       // Update kuota persis ke 15 (sama dengan 15 tiket aktif)
@@ -910,7 +936,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
     it("6.4 Kuota baru lebih besar daripada tiket aktif: diterima", async () => {
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-greater-${Date.now()}`,
           eventId: testEventId,
@@ -927,7 +953,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       // Update kuota ke 25 (lebih besar dari 10 tiket aktif)
@@ -938,7 +964,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
     it("6.5 Booking expired dan cancelled tidak menghalangi penurunan kuota", async () => {
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         // Hanya 3 tiket PAID yang aktif
         {
           id: `bk-paid-${Date.now()}`,
@@ -990,7 +1016,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       // Turunkan kuota ke 5 (hanya 3 tiket aktif, 35 tiket lain sudah cancelled/expired) -> harus BERHASIL
@@ -1001,7 +1027,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
     it("6.6 Tiket berstatus CHECKED_IN tetap dihitung sebagai kapasitas aktif", async () => {
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-checked-in-${Date.now()}`,
           eventId: testEventId,
@@ -1019,7 +1045,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       // Kuota tidak boleh diturunkan di bawah 8
@@ -1034,7 +1060,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
       // 1 baris booking tetapi berisi 10 tiket
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-multi-ticket-${Date.now()}`,
           eventId: testEventId,
@@ -1051,7 +1077,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       // Coba ubah kuota menjadi 9 (meskipun hanya 1 booking baris, tiket berjumlah 10) -> harus ditolak
@@ -1076,7 +1102,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
     it("6.9 Penolakan update kapasitas tidak mengubah data booking maupun kuota yang ada", async () => {
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-preserve-${Date.now()}`,
           eventId: testEventId,
@@ -1093,7 +1119,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       try {
@@ -1123,7 +1149,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
 
       await saveEventsToDisk([baseEvent, ...originalEvents.filter((e) => e.id !== baseEvent.id)]);
 
-      const mockBookings: EventTicketOrder[] = [
+      const mockBookings: EventTicketOrder[] = ([
         {
           id: `bk-api-guard-${Date.now()}`,
           eventId: testEventId,
@@ -1140,7 +1166,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      ];
+      ] as any[]).map(createMockTicketOrder);
       await saveBookingsToDisk([...mockBookings, ...originalBookings.filter((b) => b.eventId !== testEventId)]);
 
       const req = new NextRequest(`http://localhost:3000/api/events/${testEventId}`, {
@@ -1201,7 +1227,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
 
     it("7.1 Serialisasi: Update kapasitas duluan menolak booking konkuren yang melebihi kapasitas baru", async () => {
       // Kondisi awal: 5 tiket terjual (sisa 5 tiket dari kapasitas 10)
-      const initialBooking: EventTicketOrder = {
+      const initialBooking: EventTicketOrder = createMockTicketOrder({
         id: `bk-rc-init-${Date.now()}`,
         eventId: rcEventId,
         guestName: "Initial User",
@@ -1216,7 +1242,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
         organizerRevenueAmount: 200000,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      };
+      });
       await saveBookingsToDisk([initialBooking, ...existingBookings.filter((b) => b.eventId !== rcEventId)]);
 
       // Eksekusi konkuren: Admin menurunkan kapasitas ke 6 (sisa 1), user secara konkuren mencoba memesan 3 tiket
@@ -1254,7 +1280,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
 
     it("7.2 Serialisasi: Booking duluan menolak penurunan kapasitas konkuren yang menabrak kuota", async () => {
       // Kondisi awal: 5 tiket terjual dari kapasitas 10
-      const initialBooking: EventTicketOrder = {
+      const initialBooking: EventTicketOrder = createMockTicketOrder({
         id: `bk-rc-init2-${Date.now()}`,
         eventId: rcEventId,
         guestName: "Initial User 2",
@@ -1269,7 +1295,7 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
         organizerRevenueAmount: 200000,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      };
+      });
       await saveBookingsToDisk([initialBooking, ...existingBookings.filter((b) => b.eventId !== rcEventId)]);
 
       // Eksekusi booking 3 tiket terlebih dahulu (total booked menjadi 8)
@@ -1515,9 +1541,12 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
         price: 0,
         maxCapacity: 45,
         status: "APPROVED",
+        organizerName: "Dago Tech",
+        organizerPhone: "081234567890",
         organizerEmail: "dagotech@example.com",
         posterUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87",
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       saveEventsToDisk([...allEvents.filter((e) => e.id !== tahapCEventId), testEvt]);
     });
@@ -1661,6 +1690,11 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
         price: 100000,
         maxCapacity: 50,
         status: "APPROVED",
+        posterUrl: "https://example.com/poster.jpg",
+        organizerName: "Dago Tech",
+        organizerPhone: "081234567890",
+        organizerEmail: "dagotech@example.com",
+        updatedAt: new Date().toISOString(),
         ticketTiers: [
           {
             id: "tier-up-1",

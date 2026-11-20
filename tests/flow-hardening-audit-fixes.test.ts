@@ -388,7 +388,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
           body: JSON.stringify(payload),
         });
 
-        const res = await handleBookEvent(req, { params: { id: testEventId } });
+        const res = await handleBookEvent(req, { params: Promise.resolve({ id: testEventId  }) });
         expect(res.status).toBe(502);
 
         const json = await res.json();
@@ -426,7 +426,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
           body: JSON.stringify(payload),
         });
 
-        const res = await handleBookEvent(req, { params: { id: testEventId } });
+        const res = await handleBookEvent(req, { params: Promise.resolve({ id: testEventId  }) });
         expect(res.status).toBe(504);
 
         const json = await res.json();
@@ -476,7 +476,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
         }),
       });
 
-      const res = await handleBookEvent(req, { params: { id: freeEvent.id } });
+      const res = await handleBookEvent(req, { params: Promise.resolve({ id: freeEvent.id  }) });
       expect(res.status).toBe(201);
 
       const json = await res.json();
@@ -797,7 +797,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
 
       // 2. Akses tiket via GET /api/events/tickets/[token]
       const req = new NextRequest(`http://localhost:3000/api/events/tickets/${booking.guestToken}`);
-      const res = await handleGetTicketByToken(req, { params: { token: booking.guestToken! } });
+      const res = await handleGetTicketByToken(req, { params: Promise.resolve({ token: booking.guestToken!  }) });
       expect(res.status).toBe(200);
 
       const json = await res.json();
@@ -822,7 +822,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
       expect(pendingBooking.paymentStatus).toBe("PENDING");
 
       const req = new NextRequest(`http://localhost:3000/api/events/tickets/${pendingBooking.guestToken}`);
-      const res = await handleGetTicketByToken(req, { params: { token: pendingBooking.guestToken! } });
+      const res = await handleGetTicketByToken(req, { params: Promise.resolve({ token: pendingBooking.guestToken!  }) });
       expect(res.status).toBe(200);
 
       const json = await res.json();
@@ -837,13 +837,13 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
     it("6.3. Menolak token akses tiket yang tidak valid, format salah, atau tidak ditemukan (400 & 404)", async () => {
       // Token terlalu pendek
       const shortReq = new NextRequest("http://localhost:3000/api/events/tickets/abc");
-      const shortRes = await handleGetTicketByToken(shortReq, { params: { token: "abc" } });
+      const shortRes = await handleGetTicketByToken(shortReq, { params: Promise.resolve({ token: "abc"  }) });
       expect(shortRes.status).toBe(400);
 
       // Token acak yang tidak ada di database
       const nonExistentToken = "0123456789abcdef0123456789abcdef";
       const notFoundReq = new NextRequest(`http://localhost:3000/api/events/tickets/${nonExistentToken}`);
-      const notFoundRes = await handleGetTicketByToken(notFoundReq, { params: { token: nonExistentToken } });
+      const notFoundRes = await handleGetTicketByToken(notFoundReq, { params: Promise.resolve({ token: nonExistentToken  }) });
       expect(notFoundRes.status).toBe(404);
       const notFoundJson = await notFoundRes.json();
       expect(notFoundJson.success).toBe(false);

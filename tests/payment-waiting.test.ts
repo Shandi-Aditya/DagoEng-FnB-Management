@@ -72,6 +72,10 @@ describe("payment-waiting domain logic", () => {
       const order: OrderRecord = {
         id: "ord-123",
         orderNumber: "ORD-2026-001",
+        organizationId: "org-dago-hub",
+        orderType: "DINE_IN",
+        targetServiceMinutes: 15,
+        statusHistory: [],
         customerName: "Ahmad",
         tableNumber: "T-04",
         outletId: "outlet-sgr",

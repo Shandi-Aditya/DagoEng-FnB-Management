@@ -252,14 +252,14 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
       const customEvent: Partial<CommunityEvent> = {
         id: "evt-approved-custom",
         title: "Konser Amal Dago",
-        status: "PUBLISHED",
+        status: "APPROVED",
         customPlatformFeePercent: 10,
       };
 
       // Platform changes global default to 35%
       mockPolicy.defaultPlatformFeePercent = 35;
 
-      const split = eventsLib.calculateEventRevenueSplit(100000, customEvent.customPlatformFeePercent);
+      const split = eventsLib.calculateEventRevenueSplit(100000, customEvent.customPlatformFeePercent ?? undefined);
       expect(split.platformFeePercent).toBe(10);
       expect(split.organizerSharePercent).toBe(90);
       expect(split.platformFeeAmount).toBe(10000);
@@ -270,12 +270,12 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
       const lockedEvent: Partial<CommunityEvent> = {
         id: "evt-locked-1",
         title: "Tech Meetup Dago",
-        status: "PUBLISHED",
+        status: "APPROVED",
         customPlatformFeePercent: 20,
       };
 
       // Booking exists -> locked
-      const bookings: Partial<EventBooking>[] = [
+      const bookings: any[] = [
         { id: "b-1", eventId: lockedEvent.id!, status: "CONFIRMED", totalAmount: 50000 },
       ];
       const isLocked = eventsLib.isEventRevenueSplitLocked(lockedEvent.id!, bookings as any);
@@ -284,7 +284,7 @@ describe("Tahap 6 — Admin Event Commission Settings & Immutability Regression 
       // Attempting to change global default to 40%
       mockPolicy.defaultPlatformFeePercent = 40;
 
-      const split = eventsLib.calculateEventRevenueSplit(50000, lockedEvent.customPlatformFeePercent);
+      const split = eventsLib.calculateEventRevenueSplit(50000, lockedEvent.customPlatformFeePercent ?? undefined);
       expect(split.platformFeePercent).toBe(20);
       expect(split.platformFeeAmount).toBe(10000);
       expect(split.organizerRevenueAmount).toBe(40000);

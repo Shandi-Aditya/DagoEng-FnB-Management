@@ -301,7 +301,7 @@ describe("Commission Override Security & Lock Guard Regression Suite", () => {
         }),
       });
 
-      const res = await updateEventRoute(req, { params: { id: event.id } });
+      const res = await updateEventRoute(req, { params: Promise.resolve({ id: event.id }) });
       // Either 400 (locked) or 403 (unauthorized in test env), but if unauthorized it is 403, if authorized it MUST return 400 with EVENT_REVENUE_SPLIT_LOCKED
       const json = await res.json();
       if (res.status === 400) {

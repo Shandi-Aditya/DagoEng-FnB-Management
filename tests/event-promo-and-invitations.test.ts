@@ -305,6 +305,7 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
           discountType: "PERCENT",
           discountValue: 15,
           quota: 0,
+          isActive: true,
         },
         { name: "Organizer", role: "ORGANIZER" }
       );

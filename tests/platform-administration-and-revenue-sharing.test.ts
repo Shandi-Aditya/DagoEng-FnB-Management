@@ -266,7 +266,7 @@ describe("Platform Administration & Event Marketplace Revenue Sharing", () => {
       const policy = getEventRevenuePolicy();
       expect(policy.defaultPlatformFeePercent).toBe(20);
       expect(policy.defaultOrganizerSharePercent).toBe(80);
-      expect(policy.defaultPlatformFeePercent + policy.defaultOrganizerSharePercent).toBe(100);
+      expect(policy.defaultPlatformFeePercent + (policy.defaultOrganizerSharePercent ?? 80)).toBe(100);
     });
 
     it("should update platform default commission fee and record history log", () => {

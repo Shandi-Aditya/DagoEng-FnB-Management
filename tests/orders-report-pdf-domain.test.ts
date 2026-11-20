@@ -9,7 +9,7 @@ import {
 } from "@/features/orders/orders-report-pdf-domain";
 
 describe("orders-report-pdf-domain", () => {
-  const sampleOrders: OrderRecord[] = [
+  const sampleOrders: OrderRecord[] = ([
     {
       id: "ord-1",
       orderNumber: "ORD-1001",
@@ -56,7 +56,7 @@ describe("orders-report-pdf-domain", () => {
       createdAt: new Date("2026-11-15T08:20:00Z"),
       updatedAt: new Date("2026-11-15T08:25:00Z"),
     },
-  ];
+  ] as any);
 
   it("computes executive summary metrics accurately without mutating input", () => {
     const ordersCopy = JSON.parse(JSON.stringify(sampleOrders));

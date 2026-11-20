@@ -38,6 +38,7 @@ export interface POSCartItem {
   productName: string;
   quantity: number;
   basePrice: number;
+  unitPrice?: number;
   selectedVariant?: POSVariantOption;
   selectedModifiers: POSModifierOption[];
   notes?: string;
@@ -90,6 +91,7 @@ export interface POSReceiptData {
   customerPhone?: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   items: {
+    id?: string;
     name: string;
     quantity: number;
     unitPrice: number;
@@ -119,3 +121,5 @@ export interface POSReceiptData {
     voucherTitle?: string;
   };
 }
+
+export type POSReceiptItem = POSReceiptData["items"][number];

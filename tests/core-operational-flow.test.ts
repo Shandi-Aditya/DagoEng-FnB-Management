@@ -41,7 +41,7 @@ describe("Core Operational Flow - End-to-End Integration", () => {
       paymentMethod: "QRIS",
       completedAt: completedTimestamp,
       statusHistory: [
-        ...initialOrder.statusHistory,
+        ...(initialOrder.statusHistory || []),
         {
           id: "h-test-complete",
           orderId: initialOrder.id,
@@ -57,7 +57,7 @@ describe("Core Operational Flow - End-to-End Integration", () => {
     expect(completedOrder.status).toBe("COMPLETED");
     expect(completedOrder.paymentStatus).toBe("PAID");
     expect(completedOrder.paymentMethod).toBe("QRIS");
-    expect(completedOrder.statusHistory.length).toBe(1);
+    expect(completedOrder.statusHistory?.length).toBe(1);
   });
 
   it("deducts inventory ingredients correctly based on Recipe/BOM for each product in order", () => {
@@ -205,7 +205,7 @@ describe("Core Operational Flow - End-to-End Integration", () => {
       ...activeOrder,
       status: "CANCELLED",
       statusHistory: [
-        ...activeOrder.statusHistory,
+        ...(activeOrder.statusHistory || []),
         {
           id: "h-cancel-1",
           orderId: activeOrder.id,
@@ -219,7 +219,7 @@ describe("Core Operational Flow - End-to-End Integration", () => {
     };
 
     expect(cancelledOrder.status).toBe("CANCELLED");
-    expect(cancelledOrder.statusHistory.length).toBe(1);
-    expect(cancelledOrder.statusHistory[0].toStatus).toBe("CANCELLED");
+    expect(cancelledOrder.statusHistory!.length).toBe(1);
+    expect(cancelledOrder.statusHistory![0].toStatus).toBe("CANCELLED");
   });
 });

@@ -265,10 +265,10 @@ export interface BuildReportParams {
   type: ReportType;
   scopeName: string;
   orders: OrderRecord[];
-  products: MasterProduct[];
-  shifts: ShiftRecord[];
-  ingredients: IngredientItem[];
-  logs: ActivityLogEntry[];
+  products?: MasterProduct[];
+  shifts?: ShiftRecord[];
+  ingredients?: IngredientItem[];
+  logs?: ActivityLogEntry[];
   promos?: PromoReference[];
   eventBookings?: EventTicketOrder[];
   coworkingBookings?: CoworkingBooking[];
@@ -448,10 +448,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     type,
     scopeName,
     orders: rawOrders,
-    products: rawProducts,
-    shifts,
-    ingredients,
-    logs,
+    products: rawProducts = [],
+    shifts = [],
+    ingredients = [],
+    logs = [],
     promos = [],
     eventBookings = [],
     coworkingBookings = [],

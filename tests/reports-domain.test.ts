@@ -84,7 +84,7 @@ describe("reports-domain", () => {
     },
   ];
 
-  const mockProducts: MasterProduct[] = [
+  const mockProducts: any[] = [
     {
       id: "prod-1",
       name: "Espresso",
@@ -101,7 +101,7 @@ describe("reports-domain", () => {
       unit: "cup",
       taxIncluded: true,
       serviceChargeIncluded: false,
-      grossMarginPercent: 72,
+      grossMarginPercent: 72 as any,
       createdAt: "2026-11-01T00:00:00Z",
       updatedAt: "2026-11-01T00:00:00Z",
     },
@@ -121,13 +121,13 @@ describe("reports-domain", () => {
       unit: "cup",
       taxIncluded: true,
       serviceChargeIncluded: false,
-      grossMarginPercent: 72,
+      grossMarginPercent: 72 as any,
       createdAt: "2026-11-01T00:00:00Z",
       updatedAt: "2026-11-01T00:00:00Z",
     },
   ];
 
-  const mockShifts: ShiftRecord[] = [
+  const mockShifts: any[] = [
     {
       id: "shift-1",
       shiftName: "Pagi",
@@ -146,7 +146,7 @@ describe("reports-domain", () => {
     },
   ];
 
-  const mockIngredients: IngredientItem[] = [
+  const mockIngredients: any[] = [
     {
       id: "ing-1",
       name: "Biji Kopi House Blend",
@@ -176,7 +176,7 @@ describe("reports-domain", () => {
     },
   ];
 
-  const mockEvents: EventTicketOrder[] = [
+  const mockEvents: any[] = [
     {
       id: "evt-1",
       ticketCode: "TCK-001",

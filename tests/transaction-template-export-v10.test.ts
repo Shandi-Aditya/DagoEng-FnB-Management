@@ -86,7 +86,7 @@ describe("Task V-10: Export laporan transaksi sama persis dengan template", () =
         tenantId: "tenant-ks",
         trackStock: false,
       },
-    ]);
+    ] as any);
     expect(cat1).toBe("Coffee & Espresso");
 
     const cat2 = resolveProductCategory(undefined, "Air Mineral");

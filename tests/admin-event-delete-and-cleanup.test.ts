@@ -17,6 +17,51 @@ import { DELETE as deleteEventRoute } from "@/app/api/events/[id]/route";
 import { DELETE as deleteBookingRoute } from "@/app/api/events/bookings/[id]/route";
 import { CommunityEvent, EventTicketOrder } from "@/types/event";
 
+
+function createMockEvent(override: any): CommunityEvent {
+  return {
+    category: "COMMUNITY",
+    description: "Test description",
+    startDate: "2026-12-01T10:00:00+08:00",
+    endDate: "2026-12-01T15:00:00+08:00",
+    location: "Dago Lab",
+    isPaid: false,
+    price: 0,
+    status: "APPROVED",
+    posterUrl: "https://example.com/poster.jpg",
+    organizerName: "Test Org",
+    organizerEmail: "test@dago.com",
+    organizerPhone: "081234567890",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...override,
+  };
+}
+function createMockBooking(override: any): EventTicketOrder {
+  return {
+    ticketCode: "DAGO-EVT-00001",
+    guestToken: "tok-1",
+    eventTitle: "Event With Booking",
+    eventDate: "2026-12-01T10:00:00+08:00",
+    eventLocation: "Dago Lab",
+    guestName: "Test User",
+    guestEmail: "user@test.com",
+    guestPhone: "081234567890",
+    ticketCount: 1,
+    unitPrice: 0,
+    totalPrice: 0,
+    platformFeePercent: 20,
+    platformFeeAmount: 0,
+    organizerRevenueAmount: 0,
+    paymentMethod: "FREE",
+    paymentStatus: "PAID",
+    checkInStatus: "REGISTERED",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...override,
+  };
+}
+
 describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Suite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -37,7 +82,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
 
     it("1.2 should strictly reject hard delete if event has associated bookings", async () => {
       // Mock an event and a booking
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-with-booking-001",
         title: "Event With Booking",
         category: "COMMUNITY",
@@ -49,11 +94,11 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Test Org",
-        organizerContact: "test@dago.com",
+        organizerPhone: "test@dago.com",
         createdAt: new Date().toISOString(),
-      };
+      });
 
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-test-rel-001",
         ticketCode: "DAGO-EVT-00001",
         guestToken: "tok-1",
@@ -75,7 +120,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkInStatus: "REGISTERED",
         checkedInQty: 0,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
       const originalBookings = loadBookingsFromDisk();
@@ -94,7 +139,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("1.3 should successfully delete an event that has 0 bookings and persist changes", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-zero-booking-999",
         title: "Clean Disposable Event",
         category: "CREATIVE",
@@ -106,9 +151,9 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Fixing Bug",
-        organizerContact: "clean@dago.com",
+        organizerPhone: "clean@dago.com",
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
 
@@ -130,7 +175,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("1.4 should reject deleteEvent if expectedUpdatedAt does not match (CAS optimistic locking)", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-cas-test-001",
         title: "CAS Guarded Event",
         category: "CREATIVE",
@@ -142,10 +187,10 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Fixing Bug",
-        organizerContact: "cas@dago.com",
+        organizerPhone: "cas@dago.com",
         createdAt: "2026-04-01T10:00:00.000Z",
         updatedAt: "2026-04-01T12:00:00.000Z",
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
 
@@ -171,7 +216,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("1.5 should prevent lost update when concurrent mutation changes updatedAt before delete", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-concurrent-cas-002",
         title: "Concurrent Target Event",
         category: "CREATIVE",
@@ -183,10 +228,10 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Fixing Bug",
-        organizerContact: "cas@dago.com",
+        organizerPhone: "cas@dago.com",
         createdAt: "2026-04-01T10:00:00.000Z",
         updatedAt: "2026-04-01T10:00:00.000Z",
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
 
@@ -222,7 +267,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("1.6 should fail-closed and abort deleteEvent when cloud database sync fails", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-db-fail-closed-001",
         title: "DB Fail-Closed Event",
         category: "COMMUNITY",
@@ -234,9 +279,9 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Admin Tester",
-        organizerContact: "admin@dago.com",
+        organizerPhone: "admin@dago.com",
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
       const prevEnv = process.env.DATABASE_URL;
@@ -274,7 +319,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("2.2 should strictly reject deleteEventBooking if booking status is PAID", async () => {
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-paid-guard-001",
         ticketCode: "DAGO-EVT-PAID01",
         guestToken: "tok-paid",
@@ -296,7 +341,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkInStatus: "REGISTERED",
         checkedInQty: 0,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalBookings = loadBookingsFromDisk();
 
@@ -312,7 +357,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("2.3 should strictly reject deleteEventBooking if attendee has checked in", async () => {
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-checked-in-001",
         ticketCode: "DAGO-EVT-CHK01",
         guestToken: "tok-chk",
@@ -334,7 +379,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkInStatus: "CHECKED_IN",
         checkedInQty: 2,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalBookings = loadBookingsFromDisk();
 
@@ -350,7 +395,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("2.4 should successfully delete an EXPIRED booking without payment proof, keeping parent event intact", async () => {
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-expired-disposable-001",
         ticketCode: "DAGO-EVT-EXP01",
         guestToken: "tok-exp",
@@ -373,7 +418,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkedInQty: 0,
         paymentProofUrl: null,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
       const originalBookings = loadBookingsFromDisk();
@@ -400,7 +445,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("2.5 should strictly reject deleteEventBooking if checkedInSeats has records even with REGISTERED status", async () => {
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-desync-seats-001",
         ticketCode: "DAGO-EVT-DSYNC01",
         guestToken: "tok-dsync",
@@ -423,7 +468,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkedInQty: 0,
         checkedInSeats: [1], // Desynced seat check-in record
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalBookings = loadBookingsFromDisk();
 
@@ -439,7 +484,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("2.6 should strictly reject deleteEventBooking if checkInStatus is PARTIALLY_CHECKED_IN", async () => {
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-partial-checkin-001",
         ticketCode: "DAGO-EVT-PART01",
         guestToken: "tok-part",
@@ -461,7 +506,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkInStatus: "PARTIALLY_CHECKED_IN",
         checkedInQty: 1,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalBookings = loadBookingsFromDisk();
 
@@ -477,7 +522,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("2.7 should fail-closed and abort deleteEventBooking when database sync fails", async () => {
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-fail-sync-001",
         ticketCode: "DAGO-EVT-FAIL01",
         guestToken: "tok-fail",
@@ -499,7 +544,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkInStatus: "REGISTERED",
         checkedInQty: 0,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalBookings = loadBookingsFromDisk();
       const prevEnv = process.env.DATABASE_URL;
@@ -529,7 +574,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
   // ===========================================================================
   describe("3. Ticket Quota Release on Cancellation", () => {
     it("3.1 should immediately release ticket quota when PAID voucher booking is CANCELLED", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-quota-test-001",
         title: "Quota Verification Event",
         category: "COMMUNITY",
@@ -542,11 +587,11 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Panji Sakti",
-        organizerContact: "panji@dago.com",
+        organizerPhone: "panji@dago.com",
         createdAt: new Date().toISOString(),
-      };
+      });
 
-      const mockBooking: EventTicketOrder = {
+      const mockBooking: EventTicketOrder = createMockBooking({
         id: "tkt-quota-booking-001",
         ticketCode: "DAGO-EVT-QTA01",
         guestToken: "tok-qta",
@@ -568,7 +613,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         checkInStatus: "REGISTERED",
         checkedInQty: 0,
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
       const originalBookings = loadBookingsFromDisk();
@@ -631,7 +676,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("4.3 should return HTTP 200 on DELETE /api/events/[id] when called by Super Admin for 0-booking event", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-admin-delete-test",
         title: "Admin Delete Test",
         category: "CREATIVE",
@@ -643,9 +688,9 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Admin Tester",
-        organizerContact: "admin@dago.com",
+        organizerPhone: "admin@dago.com",
         createdAt: new Date().toISOString(),
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
 
@@ -674,7 +719,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("4.4 should support CAS via If-Match header and return HTTP 409 on timestamp mismatch", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-cas-route-001",
         title: "Route CAS Test Event",
         category: "CREATIVE",
@@ -686,10 +731,10 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Admin Tester",
-        organizerContact: "admin@dago.com",
+        organizerPhone: "admin@dago.com",
         createdAt: "2026-04-01T10:00:00.000Z",
         updatedAt: "2026-04-01T12:00:00.000Z",
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
 
@@ -732,7 +777,7 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
     });
 
     it("4.5 should support CAS via expectedUpdatedAt query param and return HTTP 409 on mismatch", async () => {
-      const mockEvent: CommunityEvent = {
+      const mockEvent: CommunityEvent = createMockEvent({
         id: "evt-cas-query-002",
         title: "Query CAS Test Event",
         category: "CREATIVE",
@@ -744,10 +789,10 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Admin Tester",
-        organizerContact: "admin@dago.com",
+        organizerPhone: "admin@dago.com",
         createdAt: "2026-04-01T10:00:00.000Z",
         updatedAt: "2026-04-01T15:00:00.000Z",
-      };
+      });
 
       const originalEvents = loadEventsFromDisk();
 
@@ -841,10 +886,10 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         price: 0,
         status: "APPROVED",
         organizerName: "Admin Tester",
-        organizerContact: "admin@dago.com",
+        organizerPhone: "admin@dago.com",
         createdAt: "2026-04-01T10:00:00.000Z",
         // updatedAt deliberately undefined
-      };
+      } as unknown as CommunityEvent;
 
       const originalEvents = loadEventsFromDisk();
 

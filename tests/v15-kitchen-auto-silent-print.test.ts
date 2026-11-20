@@ -333,6 +333,8 @@ describe("Task V-15: Auto-Cetak Struk Kitchen Saat Kasir Mencetak Struk", () => 
         ],
         subtotal: 84000,
         tax: 8400,
+        serviceCharge: 0,
+        discount: 0,
         grandTotal: 92400,
         paymentMethod: "QRIS",
         amountPaid: 92400,

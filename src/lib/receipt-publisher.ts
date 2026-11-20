@@ -221,7 +221,7 @@ export function resolveCoworkingReceiptPublisher(
  */
 export function resolvePosReceiptPublisher(
   items: { tenantId?: string; tenantName?: string }[] = [],
-  activeOutlet?: { name?: string; address?: string; phone?: string } | null,
+  activeOutlet?: { id?: string; name?: string; address?: string; phone?: string } | null,
   fallbackTenantId?: string
 ): ReceiptPublisherInfo {
   const branchName = activeOutlet?.name || MASTER_HQ_OUTLET.name;

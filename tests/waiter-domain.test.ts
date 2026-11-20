@@ -12,11 +12,11 @@ import type { OrderRecord } from "@/types/order";
 
 describe("waiter-domain", () => {
   const sampleTables: TableItem[] = [
-    { id: "tbl-1", number: "Meja 1", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr" },
-    { id: "tbl-2", number: "Meja 2", cap: 4, status: "OCCUPIED", outletId: "outlet-sgr", customer: "Budi", total: "Rp 120.000" },
-    { id: "tbl-3", number: "Meja 3", cap: 4, status: "BILLING", outletId: "outlet-sgr", customer: "Siti", total: "Rp 85.000" },
-    { id: "tbl-4", number: "Meja 4", cap: 6, status: "CLEANING", outletId: "outlet-sgr" },
-    { id: "tbl-5", number: "Meja 5", cap: 2, status: "RESERVED", outletId: "outlet-sgr", customer: "Pak Made" },
+    { id: "tbl-1", number: "Meja 1", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
+    { id: "tbl-2", number: "Meja 2", cap: 4, status: "OCCUPIED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Budi", total: "Rp 120.000" },
+    { id: "tbl-3", number: "Meja 3", cap: 4, status: "BILLING", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Siti", total: "Rp 85.000" },
+    { id: "tbl-4", number: "Meja 4", cap: 6, status: "CLEANING", outletId: "outlet-sgr", outletName: "Singaraja" },
+    { id: "tbl-5", number: "Meja 5", cap: 2, status: "RESERVED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Pak Made" },
   ];
 
   it("returns humanized table status label and tone", () => {
@@ -101,7 +101,7 @@ describe("waiter-domain", () => {
         outletId: "outlet-sgr",
         tableNumber: "Meja 2",
         status: "COOKING",
-        items: [{ productName: "Kopi Dago", quantity: 2, price: 25000, tenantId: "t-1", tenantName: "Dago" }],
+        items: [{ id: "it-1", productName: "Kopi Dago", quantity: 2, unitPrice: 25000, price: 25000, tenantId: "t-1" }],
         total: 50000,
         type: "DINE_IN",
         paymentStatus: "PAID",
@@ -120,7 +120,7 @@ describe("waiter-domain", () => {
         paymentMethod: "CASH",
         createdAt: "2026-11-15T00:00:00Z",
       },
-    ];
+    ] as any;
 
     expect(findActiveOrderForTable(orders, "Meja 2", "tbl-2", "outlet-sgr")?.id).toBe("ord-1");
     // Completed order is ignored

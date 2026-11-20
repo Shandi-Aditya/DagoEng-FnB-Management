@@ -10,7 +10,7 @@ import {
 } from "@/features/customers/customers-report-pdf-domain";
 import type { LoyaltyMember } from "@/types/loyalty";
 
-const MOCK_MEMBERS: LoyaltyMember[] = [
+const MOCK_MEMBERS: any[] = [
   {
     id: "mem-1",
     name: "Ahmad Wijaya",
@@ -20,7 +20,7 @@ const MOCK_MEMBERS: LoyaltyMember[] = [
     points: 1250,
     totalSpend: 4500000,
     totalVisits: 18,
-    joinDate: "2026-01-10",
+    joinedDate: "2026-01-10",
   },
   {
     id: "mem-2",
@@ -31,7 +31,7 @@ const MOCK_MEMBERS: LoyaltyMember[] = [
     points: 600,
     totalSpend: 2200000,
     totalVisits: 9,
-    joinDate: "2026-02-14",
+    joinedDate: "2026-02-14",
   },
   {
     id: "mem-3",
@@ -42,7 +42,7 @@ const MOCK_MEMBERS: LoyaltyMember[] = [
     points: 150,
     totalSpend: 750000,
     totalVisits: 3,
-    joinDate: "2026-03-01",
+    joinedDate: "2026-03-01",
   },
 ];
 

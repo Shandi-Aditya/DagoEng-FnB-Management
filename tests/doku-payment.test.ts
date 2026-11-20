@@ -372,7 +372,7 @@ describe("DOKU Payment Gateway Integration & Production Readiness", () => {
         }),
       });
 
-      const res = await handleBookEvent(req, { params: { id: paidEvent.id } });
+      const res = await handleBookEvent(req, { params: Promise.resolve({ id: paidEvent.id }) });
       expect(res.status).toBe(201);
       const json = await res.json();
 

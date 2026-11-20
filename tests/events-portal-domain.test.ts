@@ -273,7 +273,7 @@ describe("events-portal-domain", () => {
         checkInStatus: "REGISTERED",
         createdAt: "2026-11-05T08:00:00Z",
       },
-    ];
+    ] as any;
 
     const rows = buildAttendeesExportRows(refundAndInvBookings);
     expect(rows).toHaveLength(2);

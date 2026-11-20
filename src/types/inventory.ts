@@ -2,11 +2,13 @@ export type StockStatus = "CRITICAL" | "LOW" | "SAFE";
 
 export interface IngredientItem {
   id: string;
+  sku?: string;
   name: string;
-  category: "Dairy" | "Coffee Beans" | "Syrup & Sweetener" | "Meat & Protein" | "Dry Goods" | "Packaging";
+  category: "Dairy" | "Coffee Beans" | "Syrup & Sweetener" | "Meat & Protein" | "Dry Goods" | "Packaging" | (string & {});
   stockNumber: number;
   unit: string; // e.g. "kg", "liter", "Kotak", "Botol", "Pcs"
   min: number; // Reorder point threshold
+  reorderAmount?: number;
   costPerUnit: number; // IDR per unit
   supplier: string;
   status: StockStatus;
@@ -50,7 +52,7 @@ export interface PurchaseOrder {
   total: number;
   status: "DRAFT" | "SENT" | "RECEIVED" | "CANCELLED";
   orderDate: string;
-  expectedDelivery: string;
+  expectedDelivery?: string;
   notes?: string;
 }
 

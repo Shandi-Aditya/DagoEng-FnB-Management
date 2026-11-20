@@ -19,6 +19,7 @@ describe("ai-insight-domain", () => {
       reorderAmount: 10,
       supplier: "Supplier A",
       sku: "BK-01",
+      status: "CRITICAL",
       lastUpdated: "2026-11-10",
     },
   ];

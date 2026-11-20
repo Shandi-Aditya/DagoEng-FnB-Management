@@ -472,7 +472,7 @@ describe("TASK S-07 — End-to-End Paid Event Lifecycle Test Suite", () => {
 
       const req = new NextRequest(`http://localhost:3000/api/events/tickets/${booking.guestToken}`);
       const res = await getTicketRoute(req, {
-        params: Promise.resolve({ token: booking.guestToken }),
+        params: Promise.resolve({ token: booking.guestToken! }),
       });
 
       expect(res.status).toBe(200);

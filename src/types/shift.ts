@@ -36,6 +36,7 @@ export interface ShiftRecord {
   outletName: string;
   assignedCashierId: string;
   assignedCashierName: string;
+  date?: string;
   startTime: string;
   endTime?: string;
   status: ShiftStatus;
@@ -51,4 +52,9 @@ export interface ShiftRecord {
   closingNotes?: string;
   closedAt?: string;
   closedBy?: string;
+  cashierId?: string;
+  totalSales?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  transactionsCount?: number;
 }

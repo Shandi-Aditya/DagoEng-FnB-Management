@@ -98,14 +98,14 @@ describe("StatusBadge", () => {
     ["info", "text-info"],
     ["destructive", "text-destructive"],
   ] as const)("maps %s to its token color", (status, expected) => {
-    const html = renderToStaticMarkup(createElement(StatusBadge, { status }, "Lunas"));
+    const html = renderToStaticMarkup(createElement(StatusBadge, { status, children: "Lunas" }));
 
     expect(html).toContain(expected);
     expect(html).toContain("Lunas");
   });
 
   it("uses the neutral secondary style for neutral status", () => {
-    const html = renderToStaticMarkup(createElement(StatusBadge, { status: "neutral" }, "Draf"));
+    const html = renderToStaticMarkup(createElement(StatusBadge, { status: "neutral", children: "Draf" }));
 
     expect(html).toContain("bg-secondary");
   });

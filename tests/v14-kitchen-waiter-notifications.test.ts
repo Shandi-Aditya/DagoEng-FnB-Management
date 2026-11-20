@@ -163,7 +163,8 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
       outletId: "outlet-sgr",
       outletName: "Singaraja",
       subtotal: 65000,
-      total: 71500,
+        tax: 0,
+        total: 71500,
       createdAt: "2026-11-17T11:10:00Z",
       items: [
         {
@@ -235,6 +236,7 @@ describe("Task V-14: Pop-up Notifikasi Pesanan Baru di Kitchen & Waiter", () => 
         paymentMethod: "CASH",
         outletId: "outlet-sgr",
         subtotal: 50000,
+        tax: 0,
         total: 55000,
         createdAt: new Date().toISOString(),
         items: [
