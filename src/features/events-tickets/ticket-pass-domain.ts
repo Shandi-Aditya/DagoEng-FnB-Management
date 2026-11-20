@@ -22,6 +22,7 @@ export interface TicketPassData {
   checkInStatus: "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
   checkedInQty?: number;
   checkedInSeats?: number[];
+  seatCheckInTimes?: Record<string, string> | null;
   checkInTime?: string | null;
   ticketTierId?: string | null;
   ticketTierName?: string | null;

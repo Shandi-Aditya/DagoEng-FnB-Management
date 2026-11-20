@@ -104,7 +104,7 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
 >
 > Karena sesi pengembang terhubung ke database Neon produksi (`DATABASE_URL`), aksi penulisan data uji coba alur berbayar (*booking*, unggah bukti transfer, persetujuan admin keuangan, dan *check-in* tiket) dilarang dijalankan secara langsung di browser oleh agen otomatis.
 >
-> Seluruh alur logika end-to-end telah terverifikasi 100% lulus melalui pengujian otomatis pada suite `tests/paid-event-flow.test.ts` (13 skenario lulus).
+> Seluruh alur logika end-to-end telah terverifikasi 100% lulus melalui pengujian otomatis pada suite `tests/paid-event-e2e.test.ts` (17 skenario lulus termasuk pengujian lapisan route `/api/events/tickets/[token]` dan regresi penanganan error pemindai tiket).
 >
 > **Panduan untuk Operator Manusia:**
 > Operator / penguji manusia diminta melengkapi 6 tangkapan layar UI asli (`1280x720` atau setara) pada environment staging lokal terisolasi yang aman dengan alur berikut:
