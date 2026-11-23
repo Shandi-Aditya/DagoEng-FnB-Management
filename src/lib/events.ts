@@ -4449,6 +4449,22 @@ export async function createEventBooking(
       // 2. Anti-duplicate Booking Protection (same email + same event within 3 minutes)
       const normalizedEmail = payload.guestEmail.trim().toLowerCase();
       const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
+      const recentRepeatWindow = Date.now() - 15 * 1000;
+
+      // Idempotency guard for rapid button clicks: converge to existing pending booking
+      const recentIdenticalBooking = activeBookings.find((b) => {
+        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
+        const isRecent = new Date(b.createdAt).getTime() > recentRepeatWindow;
+        const isSameTier = b.ticketTierId === (selectedTier?.id || undefined);
+        const isSameCount = b.ticketCount === Math.floor(payload.ticketCount);
+        return isSameEmail && isRecent && isSameTier && isSameCount && b.paymentStatus === "PENDING";
+      });
+
+      if (recentIdenticalBooking) {
+        committedBooking = recentIdenticalBooking;
+        return recentIdenticalBooking;
+      }
+
       const isDuplicate = activeBookings.some((b) => {
         const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
         const isRecent = new Date(b.createdAt).getTime() > threeMinutesAgo;

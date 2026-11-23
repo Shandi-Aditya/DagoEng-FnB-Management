@@ -53,19 +53,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       if (isManualTransfer) {
         // Direct attendee to payment & ticket page with destination bank snapshot
         paymentUrl = `/events/tickets/${booking.guestToken}`;
-        const allBookings = loadBookingsFromDisk();
-        const idx = allBookings.findIndex((b) => b.id === booking.id);
-        if (idx !== -1) {
-          allBookings[idx] = {
-            ...allBookings[idx],
-            paymentMethod: "MANUAL_TRANSFER",
-            dokuInvoiceNumber: null,
-            dokuPaymentUrl: null,
-            updatedAt: new Date().toISOString(),
-          };
-          await saveBookingsToDisk(allBookings);
-          booking = allBookings[idx];
-        }
       } else {
         // Initiate DOKU Checkout session
         try {

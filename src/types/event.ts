@@ -380,6 +380,7 @@ export interface EventTicketOrder {
   checkInTime?: string | null;
   dokuInvoiceNumber?: string | null;
   dokuPaymentUrl?: string | null;
+  paymentUrl?: string | null;
   paidAt?: string | null;
   expiresAt?: string | null;
   paymentProofUrl?: string | null;

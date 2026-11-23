@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -102,6 +102,7 @@ function MyTicketsNavAction({ user }: { user: AuthenticatedUser | null }) {
 }
 
 export default function EventDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const { user } = useAuth();
@@ -176,7 +177,7 @@ export default function EventDetailPage() {
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!event) return;
+    if (!event || isSubmittingBooking) return;
 
     const maxTickets = event.maxTicketsPerBooking || 5;
     const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
@@ -226,7 +227,8 @@ export default function EventDetailPage() {
 
       if (isEventPaidEffective(event) && orderData.totalPrice > 0) {
         setPendingTicket(orderData);
-        setIsPaymentModalOpen(true);
+        const targetUrl = orderData.paymentUrl || `/events/tickets/${orderData.guestToken}`;
+        router.push(targetUrl);
       } else {
         setIssuedTicket(orderData);
         setIsTicketModalOpen(true);
