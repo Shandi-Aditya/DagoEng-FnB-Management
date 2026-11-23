@@ -154,6 +154,7 @@ export default function SettingsPage() {
   const [cwTaxRate, setCwTaxRate] = useState(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
   const [cwTaxEnabled, setCwTaxEnabled] = useState(settings.categoryTax?.coworking?.isEnabled ?? false);
   const [serviceCharge, setServiceCharge] = useState(settings.serviceChargePercent);
+  const [qrSelfOrderQrisOnly, setQrSelfOrderQrisOnly] = useState<boolean>(settings?.qrSelfOrderQrisOnly !== false);
 
   // Loyalty thresholds
   const [silverPts, setSilverPts] = useState(settings.loyaltyTiers.silverMin);
@@ -379,6 +380,7 @@ export default function SettingsPage() {
     setCwTaxRate(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
     setCwTaxEnabled(settings.categoryTax?.coworking?.isEnabled ?? false);
     setServiceCharge(settings.serviceChargePercent);
+    setQrSelfOrderQrisOnly(settings.qrSelfOrderQrisOnly !== false);
     setSilverPts(settings.loyaltyTiers.silverMin);
     setGoldPts(settings.loyaltyTiers.goldMin);
     setPlatPts(settings.loyaltyTiers.platinumMin);
@@ -1098,6 +1100,7 @@ export default function SettingsPage() {
       taxRatePercent: Number(fnbTaxRate),
       isTaxEnabled: fnbTaxEnabled,
       serviceChargePercent: Number(serviceCharge),
+      qrSelfOrderQrisOnly,
       categoryTax: {
         fnb: {
           taxType: fnbTaxType,
@@ -1915,6 +1918,8 @@ export default function SettingsPage() {
               onFnbOpenTimeChange={setFnbOpenTime}
               fnbCloseTime={fnbCloseTime}
               onFnbCloseTimeChange={setFnbCloseTime}
+              qrSelfOrderQrisOnly={qrSelfOrderQrisOnly}
+              onQrSelfOrderQrisOnlyChange={setQrSelfOrderQrisOnly}
               cwWeekendClosed={cwWeekendClosed}
               onCwWeekendClosedChange={setCwWeekendClosed}
               cwNationalHolidaysClosed={cwNationalHolidaysClosed}

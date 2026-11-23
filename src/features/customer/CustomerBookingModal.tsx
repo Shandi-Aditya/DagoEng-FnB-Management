@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { useEffect } from "react";
 import { Check, Clock, Laptop, Users, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import type { PromoConfig } from "@/lib/promo";
 import { useSettings } from "@/contexts/SettingsContext";
+import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
 
 import {
@@ -102,6 +104,14 @@ export function CustomerBookingModal({
   coworkingHolidays,
 }: CustomerBookingModalProps) {
   const { settings } = useSettings();
+  const qrisOnly = isQrSelfOrderQrisOnly(settings);
+
+  useEffect(() => {
+    if (qrisOnly && paymentMethod !== "QRIS") {
+      onPaymentMethodChange("QRIS");
+    }
+  }, [qrisOnly, paymentMethod, onPaymentMethodChange]);
+
   if (!space) return null;
 
   const cwTaxConfig = settings?.categoryTax?.coworking;
@@ -321,24 +331,33 @@ export function CustomerBookingModal({
           {/* 5. Metode Bayar */}
           <div className="flex flex-col gap-2 rounded-lg border p-3">
             <Label className="text-xs">Metode pembayaran</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={paymentMethod === "QRIS" ? "default" : "outline"}
-                onClick={() => onPaymentMethodChange("QRIS")}
-              >
-                QRIS otomatis
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={paymentMethod === "CASHIER" ? "default" : "outline"}
-                onClick={() => onPaymentMethodChange("CASHIER")}
-              >
-                Bayar di resepsionis
-              </Button>
-            </div>
+            {qrisOnly ? (
+              <div className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2.5 text-xs">
+                <span className="font-medium text-foreground">QRIS otomatis</span>
+                <span className="text-muted-foreground">
+                  Pembayaran diproses lewat QRIS. Status lunas diperbarui otomatis setelah verifikasi.
+                </span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={paymentMethod === "QRIS" ? "default" : "outline"}
+                  onClick={() => onPaymentMethodChange("QRIS")}
+                >
+                  QRIS otomatis
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={paymentMethod === "CASHIER" ? "default" : "outline"}
+                  onClick={() => onPaymentMethodChange("CASHIER")}
+                >
+                  Bayar di resepsionis
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* 6. Rincian Biaya */}

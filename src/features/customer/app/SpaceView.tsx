@@ -15,6 +15,7 @@ import { COWORKING_MAX_HOURS, isWithinCoworkingHours } from "@/lib/operating-hou
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
 import { useSettings } from "@/contexts/SettingsContext";
+import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 
 const DAYS_AHEAD = 10;
@@ -69,6 +70,7 @@ interface Selection {
 /** Pick a day, see each room's free hours, tap one to book it. */
 export function SpaceView(props: SpaceViewProps) {
   const { settings } = useSettings();
+  const qrisOnly = isQrSelfOrderQrisOnly(settings);
   const cwTaxConfig = settings?.categoryTax?.coworking;
   const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
   const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
@@ -229,21 +231,30 @@ export function SpaceView(props: SpaceViewProps) {
                   </Field>
                   <Field>
                     <FieldLabel>Bayar</FieldLabel>
-                    <div role="group" aria-label="Metode bayar" className="flex gap-2">
-                      {(["QRIS", "CASHIER"] as const).map((method) => (
-                        <Button
-                          key={method}
-                          type="button"
-                          size="lg"
-                          variant={payment === method ? "default" : "outline"}
-                          aria-pressed={payment === method}
-                          onClick={() => setPayment(method)}
-                          className="h-10 flex-1 text-sm"
-                        >
-                          {method === "QRIS" ? "QRIS" : "Di kasir"}
-                        </Button>
-                      ))}
-                    </div>
+                    {qrisOnly ? (
+                      <div className="flex flex-col gap-1 rounded-xl border bg-muted/40 p-3 text-sm">
+                        <span className="font-medium text-foreground">QRIS</span>
+                        <span className="text-xs text-muted-foreground">
+                          Pembayaran diproses lewat QRIS. Status lunas diperbarui otomatis setelah verifikasi.
+                        </span>
+                      </div>
+                    ) : (
+                      <div role="group" aria-label="Metode bayar" className="flex gap-2">
+                        {(["QRIS", "CASHIER"] as const).map((method) => (
+                          <Button
+                            key={method}
+                            type="button"
+                            size="lg"
+                            variant={payment === method ? "default" : "outline"}
+                            aria-pressed={payment === method}
+                            onClick={() => setPayment(method)}
+                            className="h-10 flex-1 text-sm"
+                          >
+                            {method === "QRIS" ? "QRIS" : "Di kasir"}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </Field>
                 </FieldGroup>
                 <div className="flex justify-between text-xs text-muted-foreground px-1">
@@ -261,7 +272,15 @@ export function SpaceView(props: SpaceViewProps) {
                   className="w-full"
                   disabled={!canSubmit || props.isSubmitting}
                   onClick={() => {
-                    props.onBook({ space: selection.space, date, start: selection.start, hours, name, phone, payment });
+                    props.onBook({
+                      space: selection.space,
+                      date,
+                      start: selection.start,
+                      hours,
+                      name,
+                      phone,
+                      payment: qrisOnly ? "QRIS" : payment,
+                    });
                     setSelection(null);
                   }}
                 >

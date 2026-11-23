@@ -12,8 +12,6 @@ import {
   Clock,
   Copy,
   CreditCard,
-  QrCode,
-  RefreshCw,
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,7 +43,6 @@ interface PaymentWaitingModalProps {
   booking?: BookingLike | null;
   paymentItem?: UnifiedPaymentItem | null;
   onClose: () => void;
-  onPaymentSuccess: (payload: { type: "FNB" | "COWORKING"; id: string }) => void;
   onCancelPayment: (payload: { type: "FNB" | "COWORKING"; id: string }) => void;
   onExpired?: (payload: { type: "FNB" | "COWORKING"; id: string }) => void;
 }
@@ -56,27 +53,25 @@ export function PaymentWaitingModal({
   booking,
   paymentItem,
   onClose,
-  onPaymentSuccess,
   onCancelPayment,
   onExpired,
 }: PaymentWaitingModalProps) {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(DEFAULT_PAYMENT_EXPIRY_SECONDS);
-  const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
-  const [isPaidSuccess, setIsPaidSuccess] = useState<boolean>(false);
 
   // Normalize payment item across F&B and Co-working
   const activeItem = useMemo(() => {
     return normalizePaymentItem({ order, booking, paymentItem });
   }, [order, booking, paymentItem]);
 
+  // Payment status must come strictly from live server-backed data, never from a client click.
+  const isPaidSuccess = activeItem?.paymentStatus === "PAID";
+
   // Sync initial state when modal opens
   useEffect(() => {
     if (isOpen && activeItem) {
-      setIsPaidSuccess(activeItem.paymentStatus === "PAID");
       setShowCancelConfirm(false);
-      setIsVerifying(false);
 
       const remain = calculateSecondsRemaining(activeItem.createdAt, Date.now(), DEFAULT_PAYMENT_EXPIRY_SECONDS);
       setSecondsRemaining(remain);
@@ -112,16 +107,6 @@ export function PaymentWaitingModal({
     navigator.clipboard?.writeText(activeItem.itemCode);
     setCopiedRef(true);
     setTimeout(() => setCopiedRef(false), 2000);
-  };
-
-  const handleSimulateWebhookSuccess = () => {
-    if (!activeItem) return;
-    setIsVerifying(true);
-    setTimeout(() => {
-      setIsVerifying(false);
-      setIsPaidSuccess(true);
-      onPaymentSuccess({ type: activeItem.type, id: activeItem.id });
-    }, 600);
   };
 
   const methodDisplay = activeItem ? getPaymentMethodDisplay(activeItem.paymentMethod) : null;
@@ -397,25 +382,21 @@ export function PaymentWaitingModal({
                 </div>
               )}
 
-              {/* Action Buttons */}
+              {/* Read-only Status Banner & Action Buttons */}
               <div className="space-y-2 pt-1">
+                <div className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  <Clock className="size-4 shrink-0 text-primary mt-0.5" />
+                  <span>Menunggu konfirmasi otomatis gateway atau verifikasi kasir.</span>
+                </div>
+
                 <Button
+                  type="button"
+                  variant="outline"
                   size="lg"
-                  onClick={handleSimulateWebhookSuccess}
-                  disabled={isVerifying}
+                  onClick={onClose}
                   className="w-full"
                 >
-                  {isVerifying ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" />
-                      <span>Memverifikasi notifikasi pembayaran...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="size-4" />
-                      <span>Konfirmasi pembayaran berhasil</span>
-                    </>
-                  )}
+                  Tutup
                 </Button>
 
                 {showCancelConfirm ? (
