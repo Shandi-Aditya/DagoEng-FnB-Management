@@ -11,7 +11,13 @@ import { useProducts } from "@/contexts/ProductContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { calculateOrderPricing, calculateCoworkingPricing, validateVoucherCode, PromoConfig } from "@/lib/promo";
+import {
+  calculateOrderPricing,
+  calculateCoworkingPricing,
+  isPromoEligibleForItem,
+  validateVoucherCode,
+  PromoConfig,
+} from "@/lib/promo";
 import {
   allocateIntegerProRata,
   calculateMixedCartTaxAndService,
@@ -120,6 +126,40 @@ import {
   checkSlotAvailability as checkSlotAvailabilityHelper,
   coworkingEmptyStateMessage,
 } from "@/features/pos/pos-coworking";
+
+function resolveCartItemMetadata(
+  item: POSCartItem,
+  products: ReadonlyArray<{ id: string; tenantId?: string; category?: string }>
+) {
+  const isCw = isCoworkingOrderItem(item);
+  const prod = products.find((p) => p.id === item.productId);
+  const resolvedTenantId = isCw ? "DAGO_HUB" : item.tenantId || prod?.tenantId || "tenant-ks";
+  const resolvedTenantName = isCw
+    ? item.tenantName || "Dago Creative Hub (Co-Working)"
+    : item.tenantName || getTenantName(resolvedTenantId);
+  const resolvedCategory = isCw ? item.category || "Co-Working" : item.category || prod?.category;
+  return {
+    item,
+    isCw,
+    resolvedTenantId,
+    resolvedTenantName,
+    resolvedCategory,
+  };
+}
+
+function toPromoOrderItem(
+  item: POSCartItem,
+  products: ReadonlyArray<{ id: string; tenantId?: string; category?: string }>
+) {
+  const meta = resolveCartItemMetadata(item, products);
+  return {
+    productId: item.productId,
+    category: meta.resolvedCategory,
+    tenantId: meta.resolvedTenantId,
+    quantity: item.quantity,
+    unitPrice: item.unitFinalPrice,
+  };
+}
 
 export default function POSPage() {
   const { user } = useAuth();
@@ -410,40 +450,53 @@ export default function POSPage() {
   const hasFnbInCart = fnbCartItems.length > 0;
   const allCoworkingInCart = hasCoworkingInCart && !hasFnbInCart;
 
-  const promoDiscountAmount = useMemo(() => {
-    if (!activePromo || subtotal <= 0) return 0;
+  const { promoDiscountAmount, promoFnbDiscount, promoCwDiscount } = useMemo(() => {
+    if (!activePromo || subtotal <= 0) {
+      return { promoDiscountAmount: 0, promoFnbDiscount: 0, promoCwDiscount: 0 };
+    }
     if (activePromo.scope === "FNB") {
-      if (fnbCartItems.length === 0) return 0;
-      const items = fnbCartItems.map((c) => {
-        const prod = posProducts.find((p) => p.id === c.productId);
-        return {
-          productId: c.productId,
-          category: c.category || prod?.category,
-          tenantId: c.tenantId,
-          quantity: c.quantity,
-          unitPrice: c.unitFinalPrice,
-        };
-      });
-      return Math.round(calculateOrderPricing(items, activePromo, 0).discountAmount);
+      if (fnbCartItems.length === 0) {
+        return { promoDiscountAmount: 0, promoFnbDiscount: 0, promoCwDiscount: 0 };
+      }
+      const amt = Math.round(
+        calculateOrderPricing(
+          fnbCartItems.map((c) => toPromoOrderItem(c, posProducts)),
+          activePromo,
+          0
+        ).discountAmount
+      );
+      return { promoDiscountAmount: amt, promoFnbDiscount: amt, promoCwDiscount: 0 };
     }
     if (activePromo.scope === "COWORKING") {
-      if (coworkingSubtotalRaw <= 0) return 0;
-      return Math.round(
+      if (coworkingSubtotalRaw <= 0) {
+        return { promoDiscountAmount: 0, promoFnbDiscount: 0, promoCwDiscount: 0 };
+      }
+      const amt = Math.round(
         calculateCoworkingPricing(coworkingSubtotalRaw, activePromo, 0, "NON_TAX").discountAmount
       );
+      return { promoDiscountAmount: amt, promoFnbDiscount: 0, promoCwDiscount: amt };
     }
-    const items = cartItems.map((c) => {
-      const prod = posProducts.find((p) => p.id === c.productId);
-      return {
-        productId: c.productId,
-        category: c.category || prod?.category,
-        tenantId: c.tenantId,
-        quantity: c.quantity,
-        unitPrice: c.unitFinalPrice,
-      };
-    });
-    return Math.round(calculateOrderPricing(items, activePromo, 0).discountAmount);
-  }, [activePromo, subtotal, fnbCartItems, coworkingSubtotalRaw, cartItems, posProducts]);
+    const fnbMapped = fnbCartItems.map((c) => toPromoOrderItem(c, posProducts));
+    const cwMapped = coworkingCartItems.map((c) => toPromoOrderItem(c, posProducts));
+    const amt = Math.round(
+      calculateOrderPricing([...fnbMapped, ...cwMapped], activePromo, 0).discountAmount
+    );
+    const eligibleFnbSubtotal = fnbMapped
+      .filter((it) => isPromoEligibleForItem(it, activePromo))
+      .reduce((sum, it) => sum + Math.round(it.quantity * it.unitPrice), 0);
+    const eligibleCwSubtotal = cwMapped
+      .filter((it) => isPromoEligibleForItem(it, activePromo))
+      .reduce((sum, it) => sum + Math.round(it.quantity * it.unitPrice), 0);
+    const [fnbShare, cwShare] = allocateIntegerProRata(amt, [
+      eligibleFnbSubtotal,
+      eligibleCwSubtotal,
+    ]);
+    return {
+      promoDiscountAmount: amt,
+      promoFnbDiscount: fnbShare,
+      promoCwDiscount: cwShare,
+    };
+  }, [activePromo, subtotal, fnbCartItems, coworkingCartItems, coworkingSubtotalRaw, posProducts]);
 
   const voucherDiscountAmount = useMemo(() => {
     if (!appliedVoucher) return 0;
@@ -582,7 +635,6 @@ export default function POSPage() {
   const effectiveCwTaxEnabled = cwTaxCfg !== undefined ? cwTaxCfg.isEnabled : false;
   const effectiveCwTaxRatePercent = cwTaxCfg !== undefined ? cwTaxCfg.taxRatePercent : 0;
 
-  // Mixed-category tax & service charge calculation (V-33: F&B PB1+Service, Co-working category tax, 0 service)
   const cartTaxBreakdown = useMemo(() => {
     const taxItems = cartItems.map((c) => ({
       id: c.cartItemId,
@@ -596,35 +648,13 @@ export default function POSPage() {
       quantity: c.quantity,
     }));
 
-    const otherDiscount = Math.max(0, totalDiscount - promoDiscountAmount);
-    let scopedDiscountOptions: { discount?: number; fnbDiscount?: number; coworkingDiscount?: number } = {
-      discount: totalDiscount,
-    };
-
-    if (activePromo?.scope === "FNB" && promoDiscountAmount > 0) {
-      const [otherFnb, otherCw] =
-        otherDiscount > 0 && subtotal > 0
-          ? allocateIntegerProRata(otherDiscount, [fnbSubtotalRaw, coworkingSubtotalRaw])
-          : [0, 0];
-      scopedDiscountOptions = {
-        discount: totalDiscount,
-        fnbDiscount: Math.min(fnbSubtotalRaw, promoDiscountAmount + otherFnb),
-        coworkingDiscount: Math.min(coworkingSubtotalRaw, otherCw),
-      };
-    } else if (activePromo?.scope === "COWORKING" && promoDiscountAmount > 0) {
-      const [otherFnb, otherCw] =
-        otherDiscount > 0 && subtotal > 0
-          ? allocateIntegerProRata(otherDiscount, [fnbSubtotalRaw, coworkingSubtotalRaw])
-          : [0, 0];
-      scopedDiscountOptions = {
-        discount: totalDiscount,
-        fnbDiscount: Math.min(fnbSubtotalRaw, otherFnb),
-        coworkingDiscount: Math.min(coworkingSubtotalRaw, promoDiscountAmount + otherCw),
-      };
-    }
+    const otherDiscount = Math.max(0, totalDiscount - promoFnbDiscount - promoCwDiscount);
 
     return calculateMixedCartTaxAndService(taxItems, {
-      ...scopedDiscountOptions,
+      fnbDiscount: promoFnbDiscount,
+      coworkingDiscount: promoCwDiscount,
+      otherDiscount,
+      discount: totalDiscount,
       fnbTaxRatePercent: effectiveFnbTaxRatePercent,
       isFnbTaxEnabled: effectiveFnbTaxEnabled,
       fnbServiceChargePercent: effectiveServiceChargePercent,
@@ -636,11 +666,8 @@ export default function POSPage() {
   }, [
     cartItems,
     totalDiscount,
-    promoDiscountAmount,
-    activePromo?.scope,
-    subtotal,
-    fnbSubtotalRaw,
-    coworkingSubtotalRaw,
+    promoFnbDiscount,
+    promoCwDiscount,
     effectiveFnbTaxRatePercent,
     effectiveFnbTaxEnabled,
     effectiveServiceChargePercent,
@@ -670,29 +697,24 @@ export default function POSPage() {
     setIsModifierModalOpen(true);
   };
 
-  // Add Item to Cart
   const handleAddToCart = (item: POSCartItem) => {
-    const isCw = isCoworkingOrderItem(item);
-    const tId = isCw
-      ? "DAGO_HUB"
-      : item.tenantId ||
-        posProducts.find((p) => p.id === item.productId)?.tenantId ||
-        "tenant-ks";
-    if (!isCw) {
-      const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
+    const meta = resolveCartItemMetadata(item, posProducts);
+    if (!meta.isCw) {
+      const tenantOp = isTenantAcceptingOrders(meta.resolvedTenantId, settings?.tenantOperations);
       if (!tenantOp.isOpen) {
-        notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
+        notify.warning(
+          `${getTenantName(meta.resolvedTenantId) || "Mitra F&B"} tutup sementara`,
+          tenantClosedMessage(tenantOp)
+        );
         return;
       }
     }
     const resolvedItem: POSCartItem = {
       ...item,
-      tenantId: tId,
-      tenantName: isCw
-        ? item.tenantName || "Dago Creative Hub (Co-Working)"
-        : item.tenantName || getTenantName(tId),
-      itemType: isCw ? "COWORKING" : item.itemType ?? "FNB",
-      category: isCw ? item.category || "Co-Working" : item.category,
+      tenantId: meta.resolvedTenantId,
+      tenantName: meta.resolvedTenantName,
+      itemType: meta.isCw ? "COWORKING" : item.itemType ?? "FNB",
+      category: meta.resolvedCategory,
     };
     setCartItems((prev) => {
       const existingIdx = prev.findIndex(
@@ -713,7 +735,7 @@ export default function POSPage() {
           ...exist,
           quantity: newQty,
           itemTotal: exist.unitFinalPrice * newQty,
-          tenantId: exist.tenantId || tId,
+          tenantId: exist.tenantId || meta.resolvedTenantId,
         };
         return updated;
       }
@@ -823,7 +845,6 @@ export default function POSPage() {
     }
   };
 
-  // Process Successful Payment & Complete Business Actions
   const handlePaymentSuccess = async (paymentData: {
     method: POSPaymentMethod;
     amountPaid: number;
@@ -842,25 +863,7 @@ export default function POSPage() {
         timeStyle: "short",
       });
 
-      const resolvedCartMeta = cartItems.map((c) => {
-        const isCw = isCoworkingOrderItem(c);
-        const resolvedTenantId = isCw
-          ? "DAGO_HUB"
-          : c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks";
-        const resolvedTenantName = isCw
-          ? c.tenantName || "Dago Creative Hub (Co-Working)"
-          : c.tenantName || getTenantName(resolvedTenantId);
-        const resolvedCategory = isCw
-          ? c.category || "Co-Working"
-          : c.category || posProducts.find((p) => p.id === c.productId)?.category;
-        return {
-          item: c,
-          isCw,
-          resolvedTenantId,
-          resolvedTenantName,
-          resolvedCategory,
-        };
-      });
+      const resolvedCartMeta = cartItems.map((c) => resolveCartItemMetadata(c, posProducts));
 
       const primaryTenantId =
         resolvedCartMeta[0]?.resolvedTenantId ||
@@ -897,9 +900,13 @@ export default function POSPage() {
         customerPhone: selectedMember?.phone,
         orderType,
         subtotal,
-        discount: totalDiscount,
+        discount: cartTaxBreakdown.discount,
+        fnbDiscount: cartTaxBreakdown.fnbDiscount,
+        coworkingDiscount: cartTaxBreakdown.coworkingDiscount,
         promoId: selectedPromoId || undefined,
         tax: taxPB1,
+        fnbTax: cartTaxBreakdown.fnbPb1,
+        coworkingTax: cartTaxBreakdown.coworkingTax,
         serviceCharge: serviceCharge,
         taxRatePercent: cartTaxBreakdown.taxRatePercent,
         serviceChargePercent: cartTaxBreakdown.serviceChargePercent,
@@ -1091,11 +1098,15 @@ export default function POSPage() {
         })),
         subtotal,
         tax: taxPB1,
+        fnbTax: cartTaxBreakdown.fnbPb1,
+        coworkingTax: cartTaxBreakdown.coworkingTax,
         serviceCharge,
         promoName:
           activePromo?.name ||
           (appliedVoucher ? appliedVoucher.title : manualDiscount ? manualDiscount.reason : undefined),
-        discount: totalDiscount,
+        discount: cartTaxBreakdown.discount,
+        fnbDiscount: cartTaxBreakdown.fnbDiscount,
+        coworkingDiscount: cartTaxBreakdown.coworkingDiscount,
         grandTotal,
         paymentMethod: paymentData.method,
         amountPaid: paymentData.amountPaid,
@@ -1913,9 +1924,6 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* 2. CO-WORKING TRANSACTION MODE */}
-      {/* ==================================================== */}
       {!isTenantScoped && posMode === "COWORKING" && (
         <div className="space-y-4">
           <CoworkingToolbar
@@ -2134,7 +2142,7 @@ export default function POSPage() {
         subtotal={subtotal}
         tax={taxPB1}
         serviceCharge={serviceCharge}
-        discount={totalDiscount}
+        discount={cartTaxBreakdown.discount}
         grandTotal={grandTotal}
         tableNumber={selectedTable}
         customerName={selectedMember?.name || customerName.trim() || "Walk-in Guest"}

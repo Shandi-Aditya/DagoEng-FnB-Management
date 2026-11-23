@@ -12,10 +12,12 @@ import {
   getTenantRevenueSplit,
 } from "@/lib/settlement";
 import {
+  allocateCategoryDiscounts,
   allocateCategoryTaxAndService,
-  allocateIntegerProRata,
   isCoworkingOrderItem,
+  normalizeTenantId,
 } from "@/lib/tax-breakdown";
+import { filterOrdersByTenant } from "@/features/orders/orders-domain";
 import { getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 
@@ -133,9 +135,15 @@ export async function buildTransactionTemplateWorkbook(
   params: TransactionExportParams
 ): Promise<ExcelJS.Workbook> {
   const { orders, products = [], startDate, endDate, tenantSplits } = params;
+  const normalizedTargetTenant = params.tenantId
+    ? normalizeTenantId(params.tenantId) ?? params.tenantId
+    : undefined;
   const paidOrders = orders.filter((o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED");
+  const sheet1Orders = normalizedTargetTenant
+    ? filterOrdersByTenant(paidOrders, normalizedTargetTenant, true)
+    : paidOrders;
   const activeSplits = tenantSplits || getAllTenantRevenueSplits();
-  const periodLabel = formatPeriodRange(paidOrders, startDate, endDate);
+  const periodLabel = formatPeriodRange(sheet1Orders, startDate, endDate);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Dago POS";
@@ -218,7 +226,7 @@ export async function buildTransactionTemplateWorkbook(
   }
 
   // Data rows
-  paidOrders.forEach((o) => {
+  sheet1Orders.forEach((o) => {
     const isQris = o.paymentMethod === "QRIS";
     const subTotal = o.subtotal || 0;
     const taxTotal = o.tax || 0;
@@ -354,8 +362,8 @@ export async function buildTransactionTemplateWorkbook(
   // Pre-calculate items and merchant totals
   const tenantMapTotals = new Map<string, TenantShareSummaryRow>();
 
-  const allTenants = params.tenantId
-    ? getAllFnbTenants().filter((t) => t.id === params.tenantId)
+  const allTenants = normalizedTargetTenant
+    ? getAllFnbTenants().filter((t) => t.id === normalizedTargetTenant)
     : getAllFnbTenants();
   allTenants.forEach((t) => {
     const name = t.name || t.id;
@@ -385,17 +393,31 @@ export async function buildTransactionTemplateWorkbook(
       const price = Number(item.unitPrice) || 0;
       return Math.round(qty * price);
     });
-    const itemDiscounts = allocateIntegerProRata(o.discount || 0, itemGrosses);
+    const categoryItems = orderItems.map((item, idx) => ({
+      isCoworking: isCoworkingOrderItem(item),
+      subtotal: itemGrosses[idx] ?? 0,
+    }));
+    const itemDiscounts = allocateCategoryDiscounts(
+      categoryItems,
+      o.discount || 0,
+      o.fnbDiscount !== undefined || o.coworkingDiscount !== undefined
+        ? { fnbDiscount: o.fnbDiscount, coworkingDiscount: o.coworkingDiscount }
+        : undefined
+    );
     const categoryTaxAllocs = allocateCategoryTaxAndService(
-      orderItems.map((item, idx) => ({
-        isCoworking: isCoworkingOrderItem(item),
-        subtotal: itemGrosses[idx] ?? 0,
-      })),
+      categoryItems,
       o.tax || 0,
-      o.serviceCharge || 0
+      o.serviceCharge || 0,
+      o.fnbTax !== undefined || o.coworkingTax !== undefined
+        ? { fnbTax: o.fnbTax, coworkingTax: o.coworkingTax }
+        : undefined
     );
 
     orderItems.forEach((item, idx) => {
+      const tenantId = resolveItemTenantId(item, (o as { tenantId?: string }).tenantId);
+      if (normalizedTargetTenant && tenantId !== normalizedTargetTenant) {
+        return;
+      }
       const qty = Number(item.quantity) || 0;
       const price = Number(item.unitPrice) || 0;
       const itemSubtotal = itemGrosses[idx] ?? 0;
@@ -409,7 +431,6 @@ export async function buildTransactionTemplateWorkbook(
       const qrisTotal = isQris ? Math.round(itemTotal * 0.007 * 100) / 100 : 0;
       const itemGrandTotal = itemTotal - qrisTotal;
 
-      const tenantId = resolveItemTenantId(item, (o as { tenantId?: string }).tenantId);
       const tenantName =
         tenantId === "DAGO_HUB"
           ? "Dago Creative Hub"

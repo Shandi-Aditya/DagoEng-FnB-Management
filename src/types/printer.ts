@@ -1,8 +1,6 @@
 import type { RoleSlug } from "./auth";
 import type { OrderItemCategoryType } from "./order";
-import type { OutletReceiptCombineMode } from "./settings";
 
-export type { OutletReceiptCombineMode };
 export type { ReceiptLineItem } from "@/features/pos/types";
 
 export type PrinterConnectionType =
@@ -58,7 +56,6 @@ export interface POSPrintingSettings {
   silentKitchenPrint: boolean;
   splitKitchenTicketPerTenant: boolean;
   splitCustomerReceiptPerTenant?: boolean;
-  receiptCombineMode?: OutletReceiptCombineMode;
   silentPrintMethod?: "KIOSK_PRINTING" | "LOCAL_BRIDGE" | "QZ_TRAY" | "PRINTNODE";
   kitchenCopies: number;
   customerCopies: number;
@@ -169,7 +166,6 @@ export const DEFAULT_PRINTING_SETTINGS: POSPrintingSettings = {
   silentKitchenPrint: true,
   splitKitchenTicketPerTenant: true,
   splitCustomerReceiptPerTenant: false,
-  receiptCombineMode: "COMBINED",
   silentPrintMethod: "KIOSK_PRINTING",
   kitchenCopies: 1,
   customerCopies: 1,

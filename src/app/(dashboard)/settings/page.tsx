@@ -26,7 +26,6 @@ import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useOutlet } from "@/contexts/OutletContext";
-import { usePrinter } from "@/contexts/PrinterContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
@@ -131,7 +130,6 @@ export default function SettingsPage() {
   const { areas, addTable, updateTable, deleteTable, updateTableStatus } = useTables();
   const allTables = areas.flatMap((a) => a.tables.map((t) => ({ ...t, areaName: a.name })));
   const { settings, updateSettings, savePromos } = useSettings();
-  const { updateSettings: updatePrinterSettings } = usePrinter();
   const { outlets } = useOutlet();
 
   const isSuperAdmin = user?.role?.slug === "SUPER_ADMIN";
@@ -1157,7 +1155,6 @@ export default function SettingsPage() {
       },
       tenantOperations: tenantOps,
     });
-    updatePrinterSettings({ receiptCombineMode });
     notify.success("Pengaturan disimpan", "Seluruh konfigurasi platform berhasil disinkronkan.");
   };
 

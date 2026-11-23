@@ -8,8 +8,9 @@ import {
   KitchenTicketData,
   PrintPurpose,
   DEFAULT_PRINTER_DEVICES,
-  OutletReceiptCombineMode,
 } from "@/types/printer";
+import type { OutletReceiptCombineMode } from "@/types/settings";
+import { isCoworkingOrderItem } from "@/lib/tax-breakdown";
 import { POSReceiptData } from "@/features/pos/types";
 import type { RoleSlug } from "@/types/auth";
 import { OrderRecord } from "@/types/order";
@@ -440,11 +441,37 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       options?: { isManualReprint?: boolean; reprintedBy?: string; isSilent?: boolean }
     ): Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }> => {
       const targetPrinter = activeKitchenPrinter || DEFAULT_PRINTER_DEVICES[1];
+      const fnbItems = (ticket.items || []).filter((item) => !isCoworkingOrderItem(item));
+      if (purpose !== "TEST_PRINT" && fnbItems.length === 0) {
+        return {
+          success: true,
+          job: {
+            id: `job-prn-skipped-${Date.now()}`,
+            orderId: ticket.orderId,
+            orderNumber: ticket.orderNumber,
+            outletId: ticket.outletId || activeOutletId || "outlet-sgr",
+            printerId: targetPrinter.id,
+            printerName: targetPrinter.name,
+            receiptType: "KITCHEN_ORDER",
+            purpose,
+            payloadText: "",
+            status: "SENT_TO_SPOOLER",
+            attempts: 0,
+            createdAt: new Date().toISOString(),
+          },
+          jobs: [],
+          message: "Tidak ada item F&B untuk dicetak ke dapur.",
+        };
+      }
       const seqNo = ticket.sequenceNumber || 1;
       const isSilent = options?.isSilent !== undefined ? options.isSilent : settings.silentKitchenPrint;
 
       const shouldSplit = settings.splitKitchenTicketPerTenant !== false;
-      const ticketsToPrint = shouldSplit ? splitKitchenTicketByTenant(ticket) : [ticket];
+      const sanitizedTicket: KitchenTicketData =
+        purpose === "TEST_PRINT" ? ticket : { ...ticket, items: fnbItems };
+      const ticketsToPrint = shouldSplit
+        ? splitKitchenTicketByTenant(sanitizedTicket)
+        : [sanitizedTicket];
 
       const createdJobs: PrintJob[] = [];
       let allSuccess = true;
@@ -566,10 +593,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     ): Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }> => {
       const targetPrinter = activeCustomerPrinter || DEFAULT_PRINTER_DEVICES[0];
       const effectiveCombineMode: OutletReceiptCombineMode =
-        options?.receiptCombineMode ??
-        platformSettings.receiptCombineMode ??
-        settings.receiptCombineMode ??
-        "COMBINED";
+        options?.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED";
       const receiptsToPrint = splitCustomerReceiptByMode(receipt, {
         receiptCombineMode: effectiveCombineMode,
         splitCustomerReceiptPerTenant: Boolean(settings.splitCustomerReceiptPerTenant),
@@ -663,7 +687,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       activeCustomerPrinter,
       activeOutletId,
       platformSettings.receiptCombineMode,
-      settings.receiptCombineMode,
       settings.splitCustomerReceiptPerTenant,
     ]
   );
@@ -674,6 +697,29 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       purpose: PrintPurpose,
       options?: { cashierName?: string; reprintedBy?: string; sequenceNumber?: number }
     ) => {
+      const fnbItems = (order.items || []).filter((i) => !isCoworkingOrderItem(i));
+      if (fnbItems.length === 0) {
+        const targetPrinter = activeKitchenPrinter || DEFAULT_PRINTER_DEVICES[1];
+        return {
+          success: true,
+          job: {
+            id: `job-prn-skipped-${Date.now()}`,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            outletId: order.outletId || activeOutletId || "outlet-sgr",
+            printerId: targetPrinter.id,
+            printerName: targetPrinter.name,
+            receiptType: "KITCHEN_ORDER" as const,
+            purpose,
+            payloadText: "",
+            status: "SENT_TO_SPOOLER" as const,
+            attempts: 0,
+            createdAt: new Date().toISOString(),
+          },
+          message: "Pesanan co-working tidak memerlukan nota dapur.",
+        };
+      }
+
       const ticketData: KitchenTicketData = {
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -685,7 +731,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         purpose,
         sequenceNumber: options?.sequenceNumber,
         kitchenNotes: order.notes,
-        items: (order.items || []).map((i) => ({
+        items: fnbItems.map((i) => ({
           id: i.id,
           productName: i.productName,
           quantity: i.quantity,
@@ -693,6 +739,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           notes: i.notes,
           tenantId: i.tenantId,
           tenantName: getTenantName(i.tenantId),
+          itemType: i.itemType ?? "FNB",
         })),
         cashierName: options?.cashierName || order.cashierName || "Kasir / Staff",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
@@ -704,7 +751,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         reprintedBy: options?.reprintedBy,
       });
     },
-    [printKitchenOrder]
+    [activeKitchenPrinter, activeOutletId, printKitchenOrder]
   );
 
   const retryPrintJob = async (jobId: string): Promise<{ success: boolean; job: PrintJob; message: string }> => {

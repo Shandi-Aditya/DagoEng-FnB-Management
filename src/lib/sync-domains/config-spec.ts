@@ -1910,9 +1910,6 @@ export function defaultPrinterConfigState(): PrinterConfigDomainState {
     devices: DEFAULT_PRINTER_DEVICES.map((d) => ({ ...d })),
     settings: {
       ...DEFAULT_PRINTING_SETTINGS,
-      receiptCombineMode: normalizeReceiptCombineMode(
-        DEFAULT_PRINTING_SETTINGS.receiptCombineMode
-      ),
       cashierReceiptRoles: [
         ...(DEFAULT_PRINTING_SETTINGS.cashierReceiptRoles ?? []),
       ],
@@ -1969,12 +1966,6 @@ export function applyPrinterConfigCommand(
         ...current.settings,
         ...command.updates,
       };
-      nextSettings.receiptCombineMode = normalizeReceiptCombineMode(
-        "receiptCombineMode" in command.updates
-          ? command.updates.receiptCombineMode
-          : current.settings.receiptCombineMode,
-        normalizeReceiptCombineMode(current.settings.receiptCombineMode)
-      );
       return {
         ...current,
         settings: nextSettings,
@@ -2072,10 +2063,6 @@ function createPrinterConfigMirror(): LocalStorageMirrorAdapter<PrinterConfigDom
             settings = {
               ...fallback.settings,
               ...(parsed as Partial<POSPrintingSettings>),
-              receiptCombineMode: normalizeReceiptCombineMode(
-                (parsed as Partial<POSPrintingSettings>).receiptCombineMode,
-                normalizeReceiptCombineMode(fallback.settings.receiptCombineMode)
-              ),
             };
           }
         } catch {}

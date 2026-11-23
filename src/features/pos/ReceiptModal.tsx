@@ -19,6 +19,7 @@ import {
   formatReceiptOrderType,
   formatReceiptPaymentStatus,
   formatReceiptServiceChargeLabel,
+  type POSReceiptItem,
 } from "@/features/pos/pos-receipt";
 import type { POSReceiptData } from "@/features/pos/types";
 import type { KitchenTicketData } from "@/types/printer";
@@ -42,6 +43,45 @@ interface ReceiptModalProps {
   onViewKitchenTicket?: () => void;
 }
 
+function ReceiptItemRow({
+  item,
+  indented = false,
+}: {
+  item: POSReceiptItem;
+  indented?: boolean;
+}) {
+  return (
+    <div className={indented ? "space-y-0.5 text-xs pl-1" : "space-y-0.5 text-xs"}>
+      <div className="flex justify-between font-medium">
+        <span className="text-foreground">
+          {item.name} x{item.quantity}
+        </span>
+        <span className="font-mono tabular-nums text-foreground">
+          {formatCurrencyIDR(item.subtotal)}
+        </span>
+      </div>
+      {item.coworkingMeta && (
+        <p className="text-xs text-muted-foreground pl-2">
+          • {item.coworkingMeta.spaceName} ({item.coworkingMeta.durationHours} jam
+          {item.coworkingMeta.startTime && item.coworkingMeta.endTime
+            ? `, ${item.coworkingMeta.startTime}–${item.coworkingMeta.endTime}`
+            : ""}
+          )
+        </p>
+      )}
+      {item.variantName && (
+        <p className="text-xs text-muted-foreground pl-2">• {item.variantName}</p>
+      )}
+      {item.modifiers && item.modifiers.length > 0 && (
+        <p className="text-xs text-muted-foreground pl-2">• {item.modifiers.join(", ")}</p>
+      )}
+      {item.notes && (
+        <p className="text-xs text-muted-foreground pl-2">*Catatan: {item.notes}</p>
+      )}
+    </div>
+  );
+}
+
 export function ReceiptModal({
   isOpen = true,
   receiptData: rawReceiptData,
@@ -55,8 +95,7 @@ export function ReceiptModal({
   const { settings: platformSettings } = useSettings();
   const [selectedSplitIdx, setSelectedSplitIdx] = React.useState(0);
 
-  const effectiveCombineMode =
-    platformSettings.receiptCombineMode ?? printerSettings.receiptCombineMode ?? "COMBINED";
+  const effectiveCombineMode = platformSettings.receiptCombineMode ?? "COMBINED";
 
   const splitReceipts = React.useMemo(() => {
     if (!receiptData) return [];
@@ -127,50 +166,16 @@ export function ReceiptModal({
     }
   };
 
-  const normalizedActiveItems = (activeReceipt.items || []).map((item) =>
-    isCoworkingOrderItem(item)
-      ? {
-          ...item,
-          tenantId: "DAGO_HUB",
-          tenantName: item.tenantName || "Dago Creative Hub (Co-Working)",
-        }
-      : item
-  );
-
-  const hasCoworkingItems = normalizedActiveItems.some((i) => isCoworkingOrderItem(i));
-  const allCoworkingItems =
-    normalizedActiveItems.length > 0 && normalizedActiveItems.every((i) => isCoworkingOrderItem(i));
+  const activeItems = activeReceipt.items || [];
+  const groupedItems = calculateTenantReceiptGroups(activeItems);
+  const hasCoworkingItems = groupedItems.some((g) => g.isCoworking);
+  const allCoworkingItems = groupedItems.length > 0 && groupedItems.every((g) => g.isCoworking);
   const isCoworkingOnlyReceipt = activeReceipt.tenantId === "DAGO_HUB" || allCoworkingItems;
-
-  const tenantIdsInItems = Array.from(
-    new Set(
-      normalizedActiveItems
-        .map((i) =>
-          isCoworkingOrderItem(i)
-            ? "DAGO_HUB"
-            : i.tenantId ||
-              (i.tenantName
-                ? DEFAULT_FNB_TENANTS.find(
-                    (t) => t.name.toLowerCase() === i.tenantName?.toLowerCase()
-                  )?.id
-                : undefined)
-        )
-        .filter(Boolean)
-    )
-  );
-
-  const isMultiTenant = tenantIdsInItems.length > 1;
+  const isMultiTenant = groupedItems.length > 1;
 
   const primaryTenantId = isCoworkingOnlyReceipt
     ? "DAGO_HUB"
-    : activeReceipt.tenantId ||
-      normalizedActiveItems.find((i) => i.tenantId)?.tenantId ||
-      (normalizedActiveItems.find((i) => i.tenantName)
-        ? DEFAULT_FNB_TENANTS.find(
-            (t) => t.name.toLowerCase() === normalizedActiveItems[0]?.tenantName?.toLowerCase()
-          )?.id
-        : undefined) ||
-      "tenant-ks";
+    : activeReceipt.tenantId || groupedItems[0]?.tenantId || "tenant-ks";
 
   const allStoredSettings = typeof window !== "undefined" ? getAllStoredTenantSettings() : {};
   const storedTenantSettings = !isCoworkingOnlyReceipt ? allStoredSettings[primaryTenantId] : undefined;
@@ -207,8 +212,6 @@ export function ReceiptModal({
     activeReceipt.receiptFooter ||
     (!isMultiTenant && !isCoworkingOnlyReceipt ? storedTenantSettings?.receiptFooter : undefined) ||
     "Terima kasih atas kunjungan Anda";
-
-  const groupedItems = calculateTenantReceiptGroups(normalizedActiveItems);
 
   const simulatedWifiVoucher = (() => {
     if (!activeReceipt.orderNumber) return null;
@@ -371,36 +374,7 @@ export function ReceiptModal({
                         </span>
                       </div>
                       {group.items.map((item, idx) => (
-                        <div key={idx} className="space-y-0.5 text-xs pl-1">
-                          <div className="flex justify-between font-medium">
-                            <span className="text-foreground">
-                              {item.name} x{item.quantity}
-                            </span>
-                            <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(item.subtotal)}</span>
-                          </div>
-                          {item.coworkingMeta && (
-                            <p className="text-xs text-muted-foreground pl-2">
-                              • {item.coworkingMeta.spaceName} ({item.coworkingMeta.durationHours} jam
-                              {item.coworkingMeta.startTime && item.coworkingMeta.endTime
-                                ? `, ${item.coworkingMeta.startTime}–${item.coworkingMeta.endTime}`
-                                : ""}
-                              )
-                            </p>
-                          )}
-                          {item.variantName && (
-                            <p className="text-xs text-muted-foreground pl-2">• {item.variantName}</p>
-                          )}
-                          {item.modifiers && item.modifiers.length > 0 && (
-                            <p className="text-xs text-muted-foreground pl-2">
-                              • {item.modifiers.join(", ")}
-                            </p>
-                          )}
-                          {item.notes && (
-                            <p className="text-xs text-muted-foreground pl-2">
-                              *Catatan: {item.notes}
-                            </p>
-                          )}
-                        </div>
+                        <ReceiptItemRow key={idx} item={item} indented />
                       ))}
                       <div className="flex justify-between text-xs font-medium text-foreground pt-1 border-t border-dotted border-border pl-1">
                         <span className="text-muted-foreground">Subtotal ({group.tenantName}):</span>
@@ -409,38 +383,7 @@ export function ReceiptModal({
                     </div>
                   ))
                 ) : (
-                  normalizedActiveItems.map((item, idx) => (
-                    <div key={idx} className="space-y-0.5 text-xs">
-                      <div className="flex justify-between font-medium">
-                        <span className="text-foreground">
-                          {item.name} x{item.quantity}
-                        </span>
-                        <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(item.subtotal)}</span>
-                      </div>
-                      {item.coworkingMeta && (
-                        <p className="text-xs text-muted-foreground pl-2">
-                          • {item.coworkingMeta.spaceName} ({item.coworkingMeta.durationHours} jam
-                          {item.coworkingMeta.startTime && item.coworkingMeta.endTime
-                            ? `, ${item.coworkingMeta.startTime}–${item.coworkingMeta.endTime}`
-                            : ""}
-                          )
-                        </p>
-                      )}
-                      {item.variantName && (
-                        <p className="text-xs text-muted-foreground pl-2">• {item.variantName}</p>
-                      )}
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <p className="text-xs text-muted-foreground pl-2">
-                          • {item.modifiers.join(", ")}
-                        </p>
-                      )}
-                      {item.notes && (
-                        <p className="text-xs text-muted-foreground pl-2">
-                          *Catatan: {item.notes}
-                        </p>
-                      )}
-                    </div>
-                  ))
+                  activeItems.map((item, idx) => <ReceiptItemRow key={idx} item={item} />)
                 )}
               </div>
 
@@ -474,8 +417,10 @@ export function ReceiptModal({
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">
-                    {isCoworkingOnlyReceipt && activeReceipt.tax === 0
-                      ? "Pajak PB1 (co-working 0%):"
+                    {isCoworkingOnlyReceipt
+                      ? activeReceipt.tax === 0
+                        ? "Pajak PB1 (co-working 0%):"
+                        : "Pajak sewa co-working:"
                       : "Pajak restoran (PB1):"}
                   </span>
                   <span className="font-mono tabular-nums text-foreground">{activeReceipt.tax > 0 ? formatCurrencyIDR(activeReceipt.tax) : "Rp 0"}</span>

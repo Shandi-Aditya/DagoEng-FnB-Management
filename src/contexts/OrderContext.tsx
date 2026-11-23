@@ -25,11 +25,10 @@ import {
   syncSequenceFromOrderNumber,
 } from "@/lib/receipt-publisher";
 import {
-  isCoworkingOrderItem,
+  getOrderWorkflowTenants,
   isKdsGatedStatus,
   isOrderBeforeCooking,
   normalizeTenantId,
-  resolveNormalizedItemTenantId,
   toOrderBomItems,
 } from "@/features/orders/orders-domain";
 
@@ -605,11 +604,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     const normTenant = normalizeTenantId(paymentUpdate?.tenantId);
     const orderFallback = (target as { tenantId?: string }).tenantId;
-    const fnbItems = target.items.filter((it) => !isCoworkingOrderItem(it));
-    const statusItems = fnbItems.length > 0 ? fnbItems : target.items;
-    const itemTenants = Array.from(
-      new Set(statusItems.map((it) => resolveNormalizedItemTenantId(it, orderFallback)))
-    );
+    const itemTenants = getOrderWorkflowTenants(target.items, orderFallback);
 
     let nextTenantStatuses = target.tenantStatuses ? { ...target.tenantStatuses } : undefined;
     let resolvedOverallStatus: OrderStatus = nextStatus;

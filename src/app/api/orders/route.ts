@@ -20,7 +20,7 @@ import {
 } from "@/lib/qris-verification";
 import {
   filterOrdersByTenant,
-  isCoworkingOrderItem,
+  getOrderWorkflowTenants,
   isKdsGatedStatus,
   normalizeTenantId,
   resolveNormalizedItemTenantId,
@@ -90,11 +90,7 @@ function computeAggregateOrderStatus(
   tenantStatuses: Record<string, OrderStatus>,
   fallbackStatus: OrderStatus
 ): OrderStatus {
-  const fnbItems = items.filter((it) => !isCoworkingOrderItem(it));
-  const statusItems = fnbItems.length > 0 ? fnbItems : items;
-  const tenants = Array.from(
-    new Set(statusItems.map((it) => resolveNormalizedItemTenantId(it)))
-  );
+  const tenants = getOrderWorkflowTenants(items);
   if (tenants.length <= 1) {
     return (tenants[0] && tenantStatuses[tenants[0]]) || fallbackStatus;
   }
@@ -362,7 +358,11 @@ const OrderPayloadSchema = z.object({
   outletId: z.string().optional(),
   subtotal: z.number().finite().nonnegative(),
   discount: z.number().finite().nonnegative().optional(),
+  fnbDiscount: z.number().finite().nonnegative().optional(),
+  coworkingDiscount: z.number().finite().nonnegative().optional(),
   tax: z.number().finite().nonnegative().optional(),
+  fnbTax: z.number().finite().nonnegative().optional(),
+  coworkingTax: z.number().finite().nonnegative().optional(),
   serviceCharge: z.number().finite().nonnegative().optional(),
   total: z.number().finite().nonnegative(),
   items: z.array(OrderItemSchema).optional(),
@@ -436,7 +436,13 @@ function validateOrderPayload(orderData: OrderRecord):
     outletId: orderData.outletId,
     subtotal: Number(orderData.subtotal ?? 0),
     discount: orderData.discount !== undefined ? Number(orderData.discount) : undefined,
+    fnbDiscount: orderData.fnbDiscount !== undefined ? Number(orderData.fnbDiscount) : undefined,
+    coworkingDiscount:
+      orderData.coworkingDiscount !== undefined ? Number(orderData.coworkingDiscount) : undefined,
     tax: orderData.tax !== undefined ? Number(orderData.tax) : undefined,
+    fnbTax: orderData.fnbTax !== undefined ? Number(orderData.fnbTax) : undefined,
+    coworkingTax:
+      orderData.coworkingTax !== undefined ? Number(orderData.coworkingTax) : undefined,
     serviceCharge:
       orderData.serviceCharge !== undefined ? Number(orderData.serviceCharge) : undefined,
     total: Number(orderData.total ?? 0),
@@ -723,25 +729,19 @@ async function executeAuthorizedOrderWrite(params: {
         };
       }
 
-      const fnbExistingItems = existingOrder.items.filter((it) => !isCoworkingOrderItem(it));
-      const statusItems = fnbExistingItems.length > 0 ? fnbExistingItems : existingOrder.items;
-      const existingTenants = Array.from(
-        new Set(
-          statusItems.map((it) => resolveNormalizedItemTenantId(it, orderFallback))
-        )
-      );
+      const existingTenants = getOrderWorkflowTenants(existingOrder.items, orderFallback);
 
       const isClosed =
         existingOrder.status === "CANCELLED" || existingOrder.paymentStatus === "REFUNDED";
+      const explicitTenantStage =
+        action.mode === "PATCH"
+          ? action.rawPatch.tenantStatuses?.[scopedTenantId] ?? action.rawPatch.status
+          : action.mode === "UPSERT"
+          ? action.initialOrderData.tenantStatuses?.[scopedTenantId] ??
+            action.initialOrderData.status
+          : orderData.status;
       if (existingTenants.length > 1) {
         if (!isClosed) {
-          const explicitTenantStage =
-            action.mode === "PATCH"
-              ? action.rawPatch.tenantStatuses?.[scopedTenantId] ?? action.rawPatch.status
-              : action.mode === "UPSERT"
-              ? action.initialOrderData.tenantStatuses?.[scopedTenantId] ??
-                action.initialOrderData.status
-              : orderData.status;
           orderData = mergeTenantWorkflowStageUpdate(
             existingOrder,
             orderData,
@@ -750,13 +750,6 @@ async function executeAuthorizedOrderWrite(params: {
           );
         }
       } else if (!isClosed && !requestsReversal && (orderData.tenantStatuses || existingOrder.tenantStatuses)) {
-        const explicitTenantStage =
-          action.mode === "PATCH"
-            ? action.rawPatch.tenantStatuses?.[scopedTenantId] ?? action.rawPatch.status
-            : action.mode === "UPSERT"
-            ? action.initialOrderData.tenantStatuses?.[scopedTenantId] ??
-              action.initialOrderData.status
-            : orderData.status;
         const scopedStage = explicitTenantStage || orderData.tenantStatuses?.[scopedTenantId];
         orderData = {
           ...orderData,

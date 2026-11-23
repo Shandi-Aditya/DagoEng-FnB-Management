@@ -94,43 +94,31 @@ export function hasExplicitCoworkingMarker(item: CoworkingIdentifiableItem): boo
   if (item.itemType === "COWORKING" || Boolean(item.coworkingMeta)) {
     return true;
   }
-  if (item.itemType === "FNB") {
-    return false;
-  }
   if (/^co-?working$/i.test((item.category || "").trim())) {
     return true;
   }
+  if (item.itemType === "FNB") {
+    return false;
+  }
+  const normalizedTenant = normalizeTenantId(item.tenantId);
+  if (normalizedTenant === "DAGO_HUB") {
+    return true;
+  }
+  if (normalizedTenant) {
+    return false;
+  }
   const idLower = (item.id || "").trim().toLowerCase();
   const prodIdLower = (item.productId || "").trim().toLowerCase();
-  if (
+  return (
     idLower.startsWith("cw-") ||
     idLower.startsWith("sp-") ||
     prodIdLower.startsWith("cw-") ||
     prodIdLower.startsWith("sp-")
-  ) {
-    return true;
-  }
-  const rawTenantLower = (item.tenantId || "").trim().toLowerCase();
-  return rawTenantLower === "tenant-cowork" || rawTenantLower === "dago-cowork";
+  );
 }
 
 export function isCoworkingOrderItem(item: CoworkingIdentifiableItem): boolean {
-  if (hasExplicitCoworkingMarker(item)) {
-    return true;
-  }
-  if (item.itemType === "FNB") {
-    return false;
-  }
-  const rawTenantLower = (item.tenantId || "").trim().toLowerCase();
-  if (
-    rawTenantLower === "dago_hub" ||
-    rawTenantLower === "dago" ||
-    rawTenantLower === "tenant-cowork" ||
-    rawTenantLower === "dago-cowork"
-  ) {
-    return true;
-  }
-  return normalizeTenantId(item.tenantId) === "DAGO_HUB";
+  return hasExplicitCoworkingMarker(item);
 }
 
 export interface MixedCartTaxItem extends CoworkingIdentifiableItem {
@@ -143,6 +131,7 @@ export interface MixedCartTaxOptions {
   discount?: number;
   fnbDiscount?: number;
   coworkingDiscount?: number;
+  otherDiscount?: number;
   fnbTaxRatePercent?: number;
   isFnbTaxEnabled?: boolean;
   fnbServiceChargePercent?: number;
@@ -222,28 +211,141 @@ export function allocateIntegerProRata(
   return floors;
 }
 
+export interface CategoryTaxSplitHint {
+  fnbTax?: number;
+  coworkingTax?: number;
+  fnbServiceCharge?: number;
+  coworkingServiceCharge?: number;
+}
+
+export interface CategoryDiscountSplitHint {
+  fnbDiscount?: number;
+  coworkingDiscount?: number;
+}
+
+function allocateCappedTwoWay(amount: number, capA: number, capB: number): [number, number] {
+  const safeCapA = Math.max(0, capA);
+  const safeCapB = Math.max(0, capB);
+  const safeAmount = Math.max(0, Math.min(safeCapA + safeCapB, Math.round(amount || 0)));
+  if (safeAmount === 0) return [0, 0];
+  if (safeCapA <= 0) return [0, safeAmount];
+  if (safeCapB <= 0) return [safeAmount, 0];
+  const [rawA] = allocateIntegerProRata(safeAmount, [safeCapA, safeCapB]);
+  const a = Math.min(safeCapA, rawA);
+  const b = Math.min(safeCapB, safeAmount - a);
+  const finalA = a + Math.max(0, safeAmount - a - b);
+  return [finalA, safeAmount - finalA];
+}
+
+function distributeAmountWithinCategory(
+  groups: readonly { isCoworking: boolean; subtotal: number }[],
+  amount: number,
+  predicate: (g: { isCoworking: boolean; subtotal: number }) => boolean
+): number[] {
+  const indices: number[] = [];
+  const weights: number[] = [];
+  groups.forEach((g, idx) => {
+    if (predicate(g)) {
+      indices.push(idx);
+      weights.push(Math.max(0, g.subtotal));
+    }
+  });
+  const out = groups.map(() => 0);
+  if (indices.length === 0) return out;
+  const allocated = allocateIntegerProRata(amount, weights);
+  indices.forEach((origIdx, i) => {
+    out[origIdx] = allocated[i] ?? 0;
+  });
+  return out;
+}
+
+export function allocateCategoryDiscounts(
+  groups: readonly { isCoworking: boolean; subtotal: number }[],
+  totalDiscount: number,
+  explicitSplit?: CategoryDiscountSplitHint
+): number[] {
+  if (groups.length === 0) return [];
+  const safeTotalDiscount = Math.max(0, Math.round(totalDiscount || 0));
+  if (
+    explicitSplit &&
+    (explicitSplit.fnbDiscount !== undefined || explicitSplit.coworkingDiscount !== undefined)
+  ) {
+    const fnbCap = groups
+      .filter((g) => !g.isCoworking)
+      .reduce((sum, g) => sum + Math.max(0, g.subtotal), 0);
+    const cwCap = groups
+      .filter((g) => g.isCoworking)
+      .reduce((sum, g) => sum + Math.max(0, g.subtotal), 0);
+
+    let fnbTarget: number;
+    let cwTarget: number;
+    if (explicitSplit.fnbDiscount !== undefined && explicitSplit.coworkingDiscount !== undefined) {
+      fnbTarget = Math.min(fnbCap, Math.max(0, Math.round(explicitSplit.fnbDiscount)));
+      cwTarget = Math.min(cwCap, Math.max(0, Math.round(explicitSplit.coworkingDiscount)));
+    } else if (explicitSplit.fnbDiscount !== undefined) {
+      fnbTarget = Math.min(fnbCap, Math.max(0, Math.round(explicitSplit.fnbDiscount)));
+      const rem = Math.max(0, safeTotalDiscount - fnbTarget);
+      cwTarget = Math.min(cwCap, rem);
+      fnbTarget = Math.min(fnbCap, fnbTarget + Math.max(0, rem - cwTarget));
+    } else {
+      cwTarget = Math.min(cwCap, Math.max(0, Math.round(explicitSplit.coworkingDiscount ?? 0)));
+      const rem = Math.max(0, safeTotalDiscount - cwTarget);
+      fnbTarget = Math.min(fnbCap, rem);
+      cwTarget = Math.min(cwCap, cwTarget + Math.max(0, rem - fnbTarget));
+    }
+
+    const fnbAlloc = distributeAmountWithinCategory(groups, fnbTarget, (g) => !g.isCoworking);
+    const cwAlloc = distributeAmountWithinCategory(groups, cwTarget, (g) => g.isCoworking);
+    return groups.map((_, idx) => (fnbAlloc[idx] ?? 0) + (cwAlloc[idx] ?? 0));
+  }
+
+  return allocateIntegerProRata(
+    safeTotalDiscount,
+    groups.map((g) => Math.max(0, g.subtotal))
+  );
+}
+
 export function allocateCategoryTaxAndService(
   groups: readonly { isCoworking: boolean; subtotal: number }[],
   totalTax: number,
-  totalServiceCharge: number
+  totalServiceCharge: number,
+  explicitSplit?: CategoryTaxSplitHint
 ): { tax: number; serviceCharge: number }[] {
   if (groups.length === 0) return [];
 
   const hasFnbPositive = groups.some((g) => !g.isCoworking && g.subtotal > 0);
-  const weights = groups.map((g) => {
-    if (hasFnbPositive) {
-      return !g.isCoworking && g.subtotal > 0 ? g.subtotal : 0;
+  const defaultWeights = groups.map((g) =>
+    hasFnbPositive ? (!g.isCoworking ? Math.max(0, g.subtotal) : 0) : Math.max(0, g.subtotal)
+  );
+
+  const allocatePair = (
+    totalAmount: number,
+    explicitFnb?: number,
+    explicitCw?: number
+  ): number[] => {
+    if (explicitFnb !== undefined || explicitCw !== undefined) {
+      const safeTotal = Math.max(0, Math.round(totalAmount || 0));
+      const fnbTarget =
+        explicitFnb !== undefined
+          ? Math.max(0, Math.round(explicitFnb))
+          : Math.max(0, safeTotal - Math.max(0, Math.round(explicitCw ?? 0)));
+      const cwTarget =
+        explicitCw !== undefined
+          ? Math.max(0, Math.round(explicitCw))
+          : Math.max(0, safeTotal - fnbTarget);
+      const fnbAlloc = distributeAmountWithinCategory(groups, fnbTarget, (g) => !g.isCoworking);
+      const cwAlloc = distributeAmountWithinCategory(groups, cwTarget, (g) => g.isCoworking);
+      return groups.map((_, idx) => (fnbAlloc[idx] ?? 0) + (cwAlloc[idx] ?? 0));
     }
-    return Math.max(0, g.subtotal);
-  });
+    return allocateIntegerProRata(totalAmount, defaultWeights);
+  };
 
-  const allZero = weights.every((w) => w <= 0);
-  const finalWeights = allZero
-    ? groups.map((g) => (hasFnbPositive ? (!g.isCoworking ? 1 : 0) : 1))
-    : weights;
-
-  const taxes = allocateIntegerProRata(totalTax, finalWeights);
-  const serviceCharges = allocateIntegerProRata(totalServiceCharge, finalWeights);
+  const taxes = allocatePair(totalTax, explicitSplit?.fnbTax, explicitSplit?.coworkingTax);
+  const serviceCharges = allocatePair(
+    totalServiceCharge,
+    explicitSplit?.fnbServiceCharge,
+    explicitSplit?.coworkingServiceCharge
+  );
 
   return groups.map((_, idx) => ({
     tax: taxes[idx] ?? 0,
@@ -275,45 +377,55 @@ export function calculateMixedCartTaxAndService(
   let appliedFnbDiscount = 0;
   let appliedCoworkingDiscount = 0;
 
-  if (options.fnbDiscount !== undefined || options.coworkingDiscount !== undefined) {
-    appliedFnbDiscount = Math.max(0, Math.min(fnbSubtotal, Math.round(options.fnbDiscount ?? 0)));
-    const remainingFromTotal =
-      options.discount !== undefined
-        ? Math.max(0, Math.round(options.discount) - appliedFnbDiscount)
-        : 0;
-    appliedCoworkingDiscount = Math.max(
+  if (
+    options.fnbDiscount !== undefined ||
+    options.coworkingDiscount !== undefined ||
+    options.otherDiscount !== undefined
+  ) {
+    const baseFnb = Math.max(0, Math.min(fnbSubtotal, Math.round(options.fnbDiscount ?? 0)));
+    const baseCw = Math.max(
       0,
-      Math.min(
-        coworkingSubtotal,
-        Math.round(options.coworkingDiscount ?? remainingFromTotal)
-      )
+      Math.min(coworkingSubtotal, Math.round(options.coworkingDiscount ?? 0))
     );
-  } else {
-    const totalDiscount = Math.max(0, Math.min(subtotal, Math.round(options.discount ?? 0)));
-    if (totalDiscount > 0 && subtotal > 0) {
-      if (fnbSubtotal === 0) {
-        appliedCoworkingDiscount = totalDiscount;
-      } else if (coworkingSubtotal === 0) {
-        appliedFnbDiscount = totalDiscount;
-      } else {
-        const [fnbShare, cwShare] = allocateIntegerProRata(totalDiscount, [
-          fnbSubtotal,
-          coworkingSubtotal,
-        ]);
-        appliedFnbDiscount = Math.min(fnbSubtotal, fnbShare);
-        appliedCoworkingDiscount = Math.min(
-          coworkingSubtotal,
-          Math.max(0, totalDiscount - appliedFnbDiscount)
-        );
-        if (appliedFnbDiscount + appliedCoworkingDiscount < totalDiscount) {
-          appliedFnbDiscount = Math.min(
-            fnbSubtotal,
-            totalDiscount - appliedCoworkingDiscount
-          );
-        }
-        void cwShare;
-      }
+    const remainingFnbCap = Math.max(0, fnbSubtotal - baseFnb);
+    const remainingCwCap = Math.max(0, coworkingSubtotal - baseCw);
+
+    if (options.otherDiscount !== undefined) {
+      const [extraFnb, extraCw] = allocateCappedTwoWay(
+        options.otherDiscount,
+        remainingFnbCap,
+        remainingCwCap
+      );
+      appliedFnbDiscount = baseFnb + extraFnb;
+      appliedCoworkingDiscount = baseCw + extraCw;
+    } else if (options.fnbDiscount !== undefined && options.coworkingDiscount !== undefined) {
+      appliedFnbDiscount = baseFnb;
+      appliedCoworkingDiscount = baseCw;
+    } else if (options.fnbDiscount !== undefined) {
+      const rem =
+        options.discount !== undefined
+          ? Math.max(0, Math.round(options.discount) - baseFnb)
+          : 0;
+      const cwExtra = Math.min(remainingCwCap, rem);
+      const fnbOverflow = Math.min(remainingFnbCap, Math.max(0, rem - cwExtra));
+      appliedFnbDiscount = baseFnb + fnbOverflow;
+      appliedCoworkingDiscount = cwExtra;
+    } else {
+      const rem =
+        options.discount !== undefined
+          ? Math.max(0, Math.round(options.discount) - baseCw)
+          : 0;
+      const fnbExtra = Math.min(remainingFnbCap, rem);
+      const cwOverflow = Math.min(remainingCwCap, Math.max(0, rem - fnbExtra));
+      appliedFnbDiscount = fnbExtra;
+      appliedCoworkingDiscount = baseCw + cwOverflow;
     }
+  } else {
+    [appliedFnbDiscount, appliedCoworkingDiscount] = allocateCappedTwoWay(
+      options.discount ?? 0,
+      fnbSubtotal,
+      coworkingSubtotal
+    );
   }
 
   const discount = appliedFnbDiscount + appliedCoworkingDiscount;

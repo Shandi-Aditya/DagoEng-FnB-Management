@@ -12,6 +12,7 @@ import {
   averageOrderValue,
   buildUnitBreakdown,
   computeDashboardFnbRevenue,
+  partitionOrderRevenueByUnit,
   scopeDashboardOrders,
 } from "./dashboard-metrics";
 
@@ -140,9 +141,17 @@ export function useDashboardMetrics() {
     [filteredOrders, isTenantOwner, tenantId, isDateInRange],
   );
 
+  const orderUnitRevenue = useMemo(
+    () => partitionOrderRevenueByUnit(scopedOrders),
+    [scopedOrders],
+  );
+
   const fnbRevenue = useMemo(
-    () => computeDashboardFnbRevenue(scopedOrders, { isTenantOwner, tenantId }),
-    [scopedOrders, isTenantOwner, tenantId],
+    () =>
+      isTenantOwner
+        ? computeDashboardFnbRevenue(scopedOrders, { isTenantOwner, tenantId })
+        : orderUnitRevenue.fnbRevenue,
+    [scopedOrders, isTenantOwner, tenantId, orderUnitRevenue.fnbRevenue],
   );
 
   const paidCoworkingBookings = useMemo(
@@ -159,7 +168,8 @@ export function useDashboardMetrics() {
 
   const coworkingRevenue = isTenantOwner
     ? 0
-    : paidCoworkingBookings.reduce((sum, booking) => sum + (booking.paidAmount || booking.totalAmount || 0), 0);
+    : paidCoworkingBookings.reduce((sum, booking) => sum + (booking.paidAmount || booking.totalAmount || 0), 0) +
+      orderUnitRevenue.coworkingRevenue;
 
   const eventRevenue = isDagoOwner ? eventStats.platformRevenue : 0;
   const consolidatedRevenue = fnbRevenue + coworkingRevenue + eventRevenue;

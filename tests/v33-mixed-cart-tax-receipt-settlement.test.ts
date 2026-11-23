@@ -24,13 +24,19 @@ import {
 import {
   generateCustomerReceiptText,
   splitCustomerReceiptByMode,
+  splitKitchenTicketByTenant,
 } from "@/lib/printer";
 import {
   applyPlatformSettingsCommand,
-  applyPrinterConfigCommand,
   defaultPlatformSettingsState,
   defaultPrinterConfigState,
 } from "@/lib/sync-domains/config-spec";
+import {
+  computeDashboardFnbRevenue,
+  partitionOrderRevenueByUnit,
+} from "@/features/dashboard/dashboard-metrics";
+import { buildClosingReportData } from "@/features/employees/employees-domain";
+import { toOrderBomItems } from "@/features/orders/orders-domain";
 import type { OrderItemRecord, OrderRecord } from "@/types/order";
 
 function makeMixedOrder(overrides: Partial<OrderRecord> = {}): OrderRecord {
@@ -423,7 +429,7 @@ describe("V-33 Wave 1: Mixed Cart Tax, Receipt Split, Settlement, KDS Exclusion 
   });
 
   describe("5. Config Sync Spec (receiptCombineMode)", () => {
-    it("defaults receiptCombineMode to COMBINED and persists valid SEPARATE updates across platform-settings and printer-config", () => {
+    it("defaults receiptCombineMode to COMBINED on platform-settings and persists valid SEPARATE updates without storing a duplicate on printer-config", () => {
       const psDefault = defaultPlatformSettingsState();
       expect(psDefault.receiptCombineMode).toBe("COMBINED");
 
@@ -440,13 +446,213 @@ describe("V-33 Wave 1: Mixed Cart Tax, Receipt Split, Settlement, KDS Exclusion 
       expect(psInvalid.receiptCombineMode).toBe("SEPARATE");
 
       const prDefault = defaultPrinterConfigState();
-      expect(prDefault.settings.receiptCombineMode).toBe("COMBINED");
+      expect("receiptCombineMode" in prDefault.settings).toBe(false);
+    });
+  });
 
-      const prSeparate = applyPrinterConfigCommand(prDefault, {
-        op: "PATCH_SETTINGS",
-        updates: { receiptCombineMode: "SEPARATE" },
+  describe("6. Wave 3 Regression Fixes (Discounts, Co-Working PPN, Kitchen/BOM Exclusion & Dashboard/Closing Attribution)", () => {
+    it("allocates scoped FNB promo + manual discount without losing rupiah and matches (subtotal - discount) + pb1 + serviceCharge === total", () => {
+      // FNB 30.000 + CW 100.000 = 130.000; FNB promo = 25.000 + manual = 50.000 -> totalDiscount = 75.000
+      const calc = calculateMixedCartTaxAndService(
+        [
+          { id: "cw-1", productId: "sp-hot-1", itemType: "COWORKING", tenantId: "DAGO_HUB", price: 100000, quantity: 1 },
+          { id: "fnb-1", productId: "prod-101", itemType: "FNB", tenantId: "tenant-ks", price: 30000, quantity: 1 },
+        ],
+        {
+          fnbDiscount: 25000,
+          coworkingDiscount: 0,
+          otherDiscount: 50000,
+          discount: 75000,
+          orderType: "DINE_IN",
+          fnbTaxRatePercent: 10,
+          isFnbTaxEnabled: true,
+          fnbServiceChargePercent: 5,
+          isCoworkingTaxEnabled: false,
+          coworkingTaxRatePercent: 0,
+        }
+      );
+
+      expect(calc.discount).toBe(75000);
+      expect(calc.fnbDiscount + calc.coworkingDiscount).toBe(75000);
+      expect(calc.fnbDiscount).toBeLessThanOrEqual(30000);
+      expect(calc.coworkingDiscount).toBeLessThanOrEqual(100000);
+      expect((calc.subtotal - calc.discount) + calc.pb1 + calc.serviceCharge).toBe(calc.total);
+    });
+
+    it("honors explicit fnbDiscount/coworkingDiscount & coworkingTax (PPN 11%) on SEPARATE receipts and settlement", () => {
+      const mixedPpnOrder = makeMixedOrder({
+        discount: 10000,
+        fnbDiscount: 10000,
+        coworkingDiscount: 0,
+        fnbTax: 4000,
+        coworkingTax: 8250,
+        tax: 12250, // 4000 (10% of 40k FNB) + 8250 (11% of 75k CW)
+        serviceCharge: 2000, // 5% of 40k FNB
+        total: 129250, // (125000 - 10000) + 12250 + 2000
       });
-      expect(prSeparate.settings.receiptCombineMode).toBe("SEPARATE");
+
+      const receipt = buildOrderReceiptData(mixedPpnOrder);
+      const receipts = splitCustomerReceiptByMode(receipt, {
+        receiptCombineMode: "SEPARATE",
+        splitCustomerReceiptPerTenant: false,
+      });
+
+      expect(receipts).toHaveLength(2);
+      const [cwReceipt, fnbReceipt] = receipts;
+      expect(cwReceipt.discount).toBe(0);
+      expect(cwReceipt.tax).toBe(8250);
+      expect(cwReceipt.serviceCharge).toBe(0);
+      expect(cwReceipt.grandTotal).toBe(83250);
+
+      expect(fnbReceipt.discount).toBe(10000);
+      expect(fnbReceipt.tax).toBe(4000);
+      expect(fnbReceipt.serviceCharge).toBe(2000);
+      expect(fnbReceipt.grandTotal).toBe(46000);
+
+      const settlements = calculateSettlement([mixedPpnOrder]);
+      const dago = settlements.find((s) => s.tenantId === "DAGO_HUB");
+      const ks = settlements.find((s) => s.tenantId === "tenant-ks");
+      expect(dago?.discount).toBe(0);
+      expect(dago?.tax).toBe(8250);
+      expect(ks?.discount).toBe(10000);
+      expect(ks?.tax).toBe(4000);
+      expect(ks?.serviceCharge).toBe(2000);
+    });
+
+    it("forces DAGO_HUB profit sharing to 0% tenant / 100% Dago and does not misclassify F&B items with sp-/cw- IDs", () => {
+      expect(
+        isCoworkingOrderItem({
+          id: "sp-special-coffee",
+          productId: "sp-latte",
+          itemType: "FNB",
+          tenantId: "tenant-ks",
+          productName: "Special Latte",
+        })
+      ).toBe(false);
+      expect(
+        isCoworkingOrderItem({
+          id: "cw-123",
+          tenantId: "tenant-ks",
+          productName: "Cold Brew",
+        })
+      ).toBe(false);
+
+      const mixedOrder = makeMixedOrder();
+      const dagoPs = calculateTenantProfitSharing([mixedOrder], "DAGO_HUB", "Dago Hub");
+      expect(dagoPs.tenantSharePercent).toBe(0);
+      expect(dagoPs.commissionPercent).toBe(100);
+      expect(dagoPs.netPayout).toBe(0);
+    });
+
+    it("excludes co-working items from splitKitchenTicketByTenant and toOrderBomItems", () => {
+      const mixedOrder = makeMixedOrder();
+      const bomItems = toOrderBomItems(mixedOrder.items);
+      expect(bomItems).toHaveLength(2);
+      expect(bomItems.some((it) => it.productName.includes("Hot Desk"))).toBe(false);
+
+      const cwOnlyTickets = splitKitchenTicketByTenant({
+        orderId: "ord-cw",
+        orderNumber: "INV-CW-1",
+        outletId: "outlet-sgr",
+        outletName: "Singaraja",
+        tableNumber: "HD-01",
+        customerName: "Tamu",
+        orderType: "DINE_IN",
+        purpose: "NEW_ORDER",
+        cashierName: "Kasir",
+        timestamp: "10:00 WITA",
+        items: [
+          {
+            id: "cw-1",
+            productName: "Hot Desk Flex",
+            quantity: 1,
+            tenantId: "DAGO_HUB",
+            itemType: "COWORKING",
+          },
+        ],
+      });
+      expect(cwOnlyTickets).toHaveLength(0);
+
+      const mixedTickets = splitKitchenTicketByTenant({
+        orderId: "ord-mix",
+        orderNumber: "INV-MIX-1",
+        outletId: "outlet-sgr",
+        outletName: "Singaraja",
+        tableNumber: "HD-01",
+        customerName: "Tamu",
+        orderType: "DINE_IN",
+        purpose: "NEW_ORDER",
+        cashierName: "Kasir",
+        timestamp: "10:00 WITA",
+        items: [
+          {
+            id: "cw-1",
+            productName: "Hot Desk Flex",
+            quantity: 1,
+            tenantId: "DAGO_HUB",
+            itemType: "COWORKING",
+          },
+          {
+            id: "fnb-1",
+            productName: "Kopi Senja Aren",
+            quantity: 1,
+            tenantId: "tenant-ks",
+            tenantName: "Kopi Senja",
+            itemType: "FNB",
+          },
+        ],
+      });
+      expect(mixedTickets).toHaveLength(1);
+      expect(mixedTickets[0].items.map((i) => i.productName)).toEqual(["Kopi Senja Aren"]);
+    });
+
+    it("attributes DAGO_HUB co-working order revenue to coworking unit on dashboard and 100% Dago on shift closing report", () => {
+      const mixedOrder = makeMixedOrder();
+      const cwOnlyOrder = makeMixedOrder({
+        id: "ord-cw-only-2",
+        items: [mixedOrder.items[0]],
+        subtotal: 75000,
+        tax: 0,
+        serviceCharge: 0,
+        total: 75000,
+      });
+
+      const partitioned = partitionOrderRevenueByUnit([mixedOrder, cwOnlyOrder]);
+      expect(partitioned.fnbRevenue).toBe(57500);
+      expect(partitioned.coworkingRevenue).toBe(150000);
+      expect(computeDashboardFnbRevenue([mixedOrder, cwOnlyOrder], { isTenantOwner: false })).toBe(
+        57500
+      );
+
+      const closingCwOnly = buildClosingReportData(
+        {
+          id: "shf-cw-only",
+          shiftName: "Shift Co-Working",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          assignedCashierId: "emp-1",
+          assignedCashierName: "Kasir",
+          startTime: "2026-11-23T08:00:00.000Z",
+          status: "ACTIVE",
+          openingCash: 100000,
+          cashSales: 75000,
+          nonCashSales: 0,
+          refundAmount: 0,
+          expectedCash: 175000,
+          actualCash: 175000,
+          cashVariance: 0,
+        },
+        [cwOnlyOrder],
+        "Singaraja",
+        "Kasir"
+      );
+
+      expect(closingCwOnly.tenantTotalShare).toBe(0);
+      expect(closingCwOnly.dagoTotalShare).toBe(75000);
+      expect(closingCwOnly.tenantCashShare).toBe(0);
+      expect(closingCwOnly.dagoCashShare).toBe(75000);
+      expect(closingCwOnly.tenantSharePercent).toBe(0);
+      expect(closingCwOnly.dagoSharePercent).toBe(100);
     });
   });
 });

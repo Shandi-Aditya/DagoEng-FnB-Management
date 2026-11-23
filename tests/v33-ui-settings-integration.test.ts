@@ -191,6 +191,51 @@ describe("V-33 Wave 2B: Settings Struk Gabung/Pisah, Receipt, Reports, Excel & A
         expect(patchJson.order.status).toBe(stage);
       }
     });
+
+    it("accepts scoped F&B promo + manual discount combo when (subtotal - discount) + pb1 + serviceCharge === total", async () => {
+      const comboOrder = makeMixedOtsOrder({
+        id: "ord-v33-combo-1",
+        orderNumber: "INV-DAGO-20261123-0102",
+        items: [
+          {
+            id: "cw-hotdesk-1",
+            productId: "sp-hot-1",
+            productName: "Hot Desk Flex",
+            quantity: 1,
+            unitPrice: 100000,
+            tenantId: "DAGO_HUB",
+            itemType: "COWORKING",
+          },
+          {
+            id: "fnb-ks-1",
+            productId: "prod-101",
+            productName: "Kopi Senja Aren",
+            quantity: 1,
+            unitPrice: 30000,
+            tenantId: "tenant-ks",
+            itemType: "FNB",
+          },
+        ],
+        subtotal: 130000,
+        discount: 75000,
+        fnbDiscount: 30000,
+        coworkingDiscount: 45000,
+        tax: 0,
+        fnbTax: 0,
+        coworkingTax: 0,
+        serviceCharge: 0,
+        total: 55000,
+      });
+
+      const res = await postOrdersRoute(
+        makeOrderRequest("POST", { order: comboOrder }, CASHIER_COOKIE)
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.order.fnbDiscount).toBe(30000);
+      expect(json.order.coworkingDiscount).toBe(45000);
+    });
   });
 
   describe("2. /api/sync/platform-settings receiptCombineMode persistence & RBAC", () => {
@@ -347,33 +392,74 @@ describe("V-33 Wave 2B: Settings Struk Gabung/Pisah, Receipt, Reports, Excel & A
       expect(ksShare).toEqual(["Kopi Senja", 5000, 50000, 57500, 42500, 7500]);
       expect(grandtotalRow).toEqual(["Grandtotal", 5000, 125000, 132500, 42500, 82500]);
     });
+
+    it("preserves Co-Working PPN 11% in Excel workbook and filters orderItems when tenantId is provided", async () => {
+      const mixedPpnOrder = makeMixedOtsOrder({
+        paymentMethod: "CASH",
+        fnbTax: 5000,
+        coworkingTax: 8250,
+        tax: 13250,
+        serviceCharge: 2500,
+        total: 140750,
+      });
+
+      const hubWb = await buildTransactionTemplateWorkbook({
+        orders: [mixedPpnOrder],
+        startDate: "2026-11-23",
+        endDate: "2026-11-23",
+      });
+      const hubDetail = hubWb.getWorksheet("transactionDetail");
+      expect(hubDetail?.getRow(5).getCell(2).value).toBe("Dago Creative Hub");
+      expect(hubDetail?.getRow(5).getCell(7).value).toBe(8250);
+      expect(hubDetail?.getRow(5).getCell(10).value).toBe(83250);
+
+      const ksWb = await buildTransactionTemplateWorkbook({
+        orders: [mixedPpnOrder],
+        tenantId: "tenant-ks",
+        startDate: "2026-11-23",
+        endDate: "2026-11-23",
+      });
+      const ksDetail = ksWb.getWorksheet("transactionDetail");
+      const detailMerchants: unknown[] = [];
+      ksDetail?.eachRow((row, rowNum) => {
+        if (rowNum >= 5) {
+          detailMerchants.push(row.getCell(2).value);
+        }
+      });
+      expect(detailMerchants).toEqual(["Kopi Senja", "Kopi Senja"]);
+    });
   });
 
   describe("4. UI & Context contracts for Struk Gabung / Pisah", () => {
-    it("wires receiptCombineMode across settings page, PlatformConfigTab, PrinterSettingsTab, PrinterContext, and ReceiptModal", () => {
+    it("wires receiptCombineMode single source of truth via platform-settings across ReceiptCombineModeControl, PlatformConfigTab, PrinterSettingsTab, PrinterContext, and ReceiptModal", () => {
       const settingsPageSrc = readWorkspaceFile("src/app/(dashboard)/settings/page.tsx");
       expect(settingsPageSrc).toContain("receiptCombineMode");
-      expect(settingsPageSrc).toContain("updatePrinterSettings({ receiptCombineMode })");
+      expect(settingsPageSrc).not.toContain("updatePrinterSettings({ receiptCombineMode })");
+
+      const sharedControlSrc = readWorkspaceFile("src/features/settings/ReceiptCombineModeControl.tsx");
+      expect(sharedControlSrc).toContain("Gabung (1 struk: Dago & mitra)");
+      expect(sharedControlSrc).toContain("Pisah (struk co-working & F&B terpisah)");
 
       const platformTabSrc = readWorkspaceFile("src/features/settings/PlatformConfigTab.tsx");
       expect(platformTabSrc).toContain("Mode struk co-working dan F&B (gabung / pisah)");
-      expect(platformTabSrc).toContain("Gabung (1 struk: Dago & mitra)");
-      expect(platformTabSrc).toContain("Pisah (struk co-working & F&B terpisah)");
+      expect(platformTabSrc).toContain("ReceiptCombineModeControl");
 
       const printerTabSrc = readWorkspaceFile("src/features/settings/PrinterSettingsTab.tsx");
       expect(printerTabSrc).toContain("Mode struk co-working dan F&B (gabung / pisah)");
-      expect(printerTabSrc).toContain("Gabung (1 struk: Dago & mitra)");
-      expect(printerTabSrc).toContain("Pisah (struk co-working & F&B terpisah)");
+      expect(printerTabSrc).toContain("ReceiptCombineModeControl");
+      expect(printerTabSrc).toContain("Diatur oleh Owner / Super Admin pada Konfigurasi Platform.");
 
       const printerCtxSrc = readWorkspaceFile("src/contexts/PrinterContext.tsx");
       expect(printerCtxSrc).toContain("splitCustomerReceiptByMode");
       expect(printerCtxSrc).toContain("receiptCombineMode?: OutletReceiptCombineMode");
+      expect(printerCtxSrc).not.toContain("settings.receiptCombineMode");
 
       const receiptModalSrc = readWorkspaceFile("src/features/pos/ReceiptModal.tsx");
       expect(receiptModalSrc).toContain("splitCustomerReceiptByMode");
       expect(receiptModalSrc).toContain("effectiveCombineMode");
       expect(receiptModalSrc).toContain("Cetak (${splitReceipts.length} struk)");
       expect(receiptModalSrc).toContain("receiptCombineMode: effectiveCombineMode");
+      expect(receiptModalSrc).not.toContain("printerSettings.receiptCombineMode");
     });
   });
 });

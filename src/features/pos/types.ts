@@ -114,9 +114,13 @@ export interface POSReceiptData {
   }[];
   subtotal: number;
   tax: number;
+  fnbTax?: number;
+  coworkingTax?: number;
   serviceCharge: number;
   promoName?: string;
   discount: number;
+  fnbDiscount?: number;
+  coworkingDiscount?: number;
   grandTotal: number;
   paymentMethod: POSPaymentMethod;
   amountPaid: number;

@@ -7,6 +7,8 @@ import {
 } from "@/lib/receipt-publisher";
 import { resolveItemTenantId } from "@/lib/settlement";
 import {
+  allocateCategoryDiscounts,
+  allocateCategoryTaxAndService,
   getOrderTaxBreakdown,
   isCoworkingOrderItem,
   normalizeTenantId,
@@ -51,12 +53,14 @@ export function isOrderBeforeCooking(
 }
 
 export function toOrderBomItems(items: OrderRecord["items"]): OrderItemBOMInput[] {
-  return (items || []).map((item) => ({
-    productId: item.productId || item.id,
-    productName: item.productName,
-    quantity: item.quantity,
-    modifiers: item.modifiers,
-  }));
+  return (items || [])
+    .filter((item) => !isCoworkingOrderItem(item))
+    .map((item) => ({
+      productId: item.productId || item.id,
+      productName: item.productName,
+      quantity: item.quantity,
+      modifiers: item.modifiers,
+    }));
 }
 
 export function resolveNormalizedItemTenantId(
@@ -68,6 +72,17 @@ export function resolveNormalizedItemTenantId(
   }
   const resolved = resolveItemTenantId(item, orderFallbackTenantId);
   return normalizeTenantId(resolved) ?? resolved;
+}
+
+export function getOrderWorkflowTenants(
+  items: OrderRecord["items"],
+  orderFallbackTenantId?: string
+): string[] {
+  const fnbItems = (items || []).filter((it) => !isCoworkingOrderItem(it));
+  const statusItems = fnbItems.length > 0 ? fnbItems : items || [];
+  return Array.from(
+    new Set(statusItems.map((it) => resolveNormalizedItemTenantId(it, orderFallbackTenantId)))
+  );
 }
 
 export function projectOrderForTenant(
@@ -95,41 +110,62 @@ export function projectOrderForTenant(
   }
 
   const lineTotal = (it: OrderItemRecord) =>
-    (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0);
+    Math.round((Number(it.unitPrice) || 0) * (Number(it.quantity) || 0));
 
-  const totalGross = order.items.reduce((sum, it) => sum + lineTotal(it), 0);
-  const tenantSubtotal = Math.round(
-    matchingItems.reduce((sum, it) => sum + lineTotal(it), 0)
-  );
-  const ratio = totalGross > 0 ? tenantSubtotal / totalGross : 0;
+  const itemBuckets = order.items.map((it) => ({
+    isCoworking: isCoworkingOrderItem(it),
+    subtotal: lineTotal(it),
+    isMatch: resolveNormalizedItemTenantId(it, orderFallback) === normTenant,
+  }));
+
   const breakdown = getOrderTaxBreakdown(order);
-  const tenantDiscount = Math.round(breakdown.discount * ratio);
+  const explicitDiscountSplit =
+    order.fnbDiscount !== undefined || order.coworkingDiscount !== undefined
+      ? { fnbDiscount: order.fnbDiscount, coworkingDiscount: order.coworkingDiscount }
+      : undefined;
+  const explicitTaxSplit =
+    order.fnbTax !== undefined || order.coworkingTax !== undefined
+      ? { fnbTax: order.fnbTax, coworkingTax: order.coworkingTax }
+      : undefined;
 
-  const fnbGross = order.items
-    .filter((it) => !isCoworkingOrderItem(it))
-    .reduce((sum, it) => sum + lineTotal(it), 0);
-  const cwGross = order.items
-    .filter((it) => isCoworkingOrderItem(it))
-    .reduce((sum, it) => sum + lineTotal(it), 0);
+  const itemDiscounts = allocateCategoryDiscounts(
+    itemBuckets,
+    breakdown.discount,
+    explicitDiscountSplit
+  );
+  const itemTaxes = allocateCategoryTaxAndService(
+    itemBuckets,
+    breakdown.pb1,
+    breakdown.serviceCharge,
+    explicitTaxSplit
+  );
 
-  let tenantTax: number;
-  let tenantServiceCharge: number;
-  if (fnbGross > 0 && cwGross > 0) {
-    const matchingFnbGross = matchingItems
-      .filter((it) => !isCoworkingOrderItem(it))
-      .reduce((sum, it) => sum + lineTotal(it), 0);
-    if (matchingFnbGross <= 0) {
-      tenantTax = 0;
-      tenantServiceCharge = 0;
+  let tenantSubtotal = 0;
+  let tenantDiscount = 0;
+  let tenantTax = 0;
+  let tenantServiceCharge = 0;
+  let tenantFnbDiscount = 0;
+  let tenantCwDiscount = 0;
+  let tenantFnbTax = 0;
+  let tenantCwTax = 0;
+
+  itemBuckets.forEach((bucket, idx) => {
+    if (!bucket.isMatch) return;
+    const disc = Math.min(bucket.subtotal, itemDiscounts[idx] ?? 0);
+    const tax = itemTaxes[idx]?.tax ?? 0;
+    const svc = itemTaxes[idx]?.serviceCharge ?? 0;
+    tenantSubtotal += bucket.subtotal;
+    tenantDiscount += disc;
+    tenantTax += tax;
+    tenantServiceCharge += svc;
+    if (bucket.isCoworking) {
+      tenantCwDiscount += disc;
+      tenantCwTax += tax;
     } else {
-      const fnbRatio = matchingFnbGross / fnbGross;
-      tenantTax = Math.round(breakdown.pb1 * fnbRatio);
-      tenantServiceCharge = Math.round(breakdown.serviceCharge * fnbRatio);
+      tenantFnbDiscount += disc;
+      tenantFnbTax += tax;
     }
-  } else {
-    tenantTax = Math.round(breakdown.pb1 * ratio);
-    tenantServiceCharge = Math.round(breakdown.serviceCharge * ratio);
-  }
+  });
 
   const tenantTotal =
     Math.max(0, tenantSubtotal - tenantDiscount) + tenantTax + tenantServiceCharge;
@@ -140,7 +176,11 @@ export function projectOrderForTenant(
     items: matchingItems,
     subtotal: tenantSubtotal,
     discount: order.discount !== undefined ? tenantDiscount : undefined,
+    ...(order.fnbDiscount !== undefined ? { fnbDiscount: tenantFnbDiscount } : {}),
+    ...(order.coworkingDiscount !== undefined ? { coworkingDiscount: tenantCwDiscount } : {}),
     tax: tenantTax,
+    ...(order.fnbTax !== undefined ? { fnbTax: tenantFnbTax } : {}),
+    ...(order.coworkingTax !== undefined ? { coworkingTax: tenantCwTax } : {}),
     serviceCharge: order.serviceCharge !== undefined ? tenantServiceCharge : undefined,
     total: tenantTotal,
   };
@@ -371,9 +411,13 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
     items: mappedItems,
     subtotal: order.subtotal,
     tax: getOrderTaxBreakdown(order).pb1,
+    fnbTax: order.fnbTax,
+    coworkingTax: order.coworkingTax,
     serviceCharge: getOrderTaxBreakdown(order).serviceCharge,
     promoName: order.promoId,
     discount: getOrderTaxBreakdown(order).discount,
+    fnbDiscount: order.fnbDiscount,
+    coworkingDiscount: order.coworkingDiscount,
     grandTotal: order.total,
     paymentMethod: (order.paymentMethod as POSReceiptData["paymentMethod"]) || "QRIS",
     amountPaid: order.total,

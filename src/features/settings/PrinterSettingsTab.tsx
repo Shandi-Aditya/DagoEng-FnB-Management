@@ -60,6 +60,7 @@ import {
   printJobStatusLabel,
   printJobStatusTone,
 } from "./settings-domain";
+import { ReceiptCombineModeControl } from "./ReceiptCombineModeControl";
 
 export function PrinterSettingsTab() {
   const { user } = useAuth();
@@ -86,24 +87,17 @@ export function PrinterSettingsTab() {
     user?.scopeLevel === "PLATFORM";
   const canManageReceiptRoles = canManageSettlementAndReceiptPolicy(user);
 
-  // Local Form state for operational settings
   const [localSettings, setLocalSettings] = useState<POSPrintingSettings>(() => ({
     ...settings,
-    receiptCombineMode:
-      settings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED",
   }));
   const [savedSettingsSuccess, setSavedSettingsSuccess] = useState(false);
 
   useEffect(() => {
-    setLocalSettings({
-      ...settings,
-      receiptCombineMode:
-        settings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED",
-    });
-  }, [settings, platformSettings.receiptCombineMode]);
+    setLocalSettings({ ...settings });
+  }, [settings]);
 
   const effectiveCombineMode: OutletReceiptCombineMode =
-    localSettings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED";
+    platformSettings.receiptCombineMode ?? "COMBINED";
 
   const cashierReceiptRoles =
     localSettings.cashierReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles;
@@ -220,27 +214,15 @@ export function PrinterSettingsTab() {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    const nextCombineMode: OutletReceiptCombineMode =
-      localSettings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED";
-    const nextPrinterSettings: POSPrintingSettings = {
-      ...localSettings,
-      receiptCombineMode: nextCombineMode,
-    };
     updateSettings(
       canManageReceiptRoles
-        ? nextPrinterSettings
+        ? localSettings
         : {
-            ...nextPrinterSettings,
+            ...localSettings,
             cashierReceiptRoles: settings.cashierReceiptRoles,
             kitchenReceiptRoles: settings.kitchenReceiptRoles,
           }
     );
-    if (
-      canManageReceiptRoles &&
-      nextCombineMode !== (platformSettings.receiptCombineMode ?? "COMBINED")
-    ) {
-      updatePlatformSettings({ receiptCombineMode: nextCombineMode });
-    }
     setSavedSettingsSuccess(true);
     notify.success(
       "Aturan cetak disimpan",
@@ -606,36 +588,20 @@ export function PrinterSettingsTab() {
                   Menentukan apakah pesanan campuran co-working dan F&B dicetak sebagai satu struk gabungan atau dua struk terpisah.
                 </p>
               </div>
-              <div
-                role="group"
-                aria-label="Mode struk co-working dan F&B (gabung / pisah)"
-                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-              >
-                <Button
-                  type="button"
-                  size="lg"
-                  variant={effectiveCombineMode === "COMBINED" ? "default" : "outline"}
-                  aria-pressed={effectiveCombineMode === "COMBINED"}
-                  onClick={() =>
-                    setLocalSettings((prev) => ({ ...prev, receiptCombineMode: "COMBINED" }))
+              <ReceiptCombineModeControl
+                value={effectiveCombineMode}
+                disabled={!canManageReceiptRoles}
+                onChange={(mode) => {
+                  if (canManageReceiptRoles) {
+                    updatePlatformSettings({ receiptCombineMode: mode });
                   }
-                  className="w-full justify-start"
-                >
-                  Gabung (1 struk: Dago & mitra)
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  variant={effectiveCombineMode === "SEPARATE" ? "default" : "outline"}
-                  aria-pressed={effectiveCombineMode === "SEPARATE"}
-                  onClick={() =>
-                    setLocalSettings((prev) => ({ ...prev, receiptCombineMode: "SEPARATE" }))
-                  }
-                  className="w-full justify-start"
-                >
-                  Pisah (struk co-working & F&B terpisah)
-                </Button>
-              </div>
+                }}
+                helperText={
+                  !canManageReceiptRoles
+                    ? "Diatur oleh Owner / Super Admin pada Konfigurasi Platform."
+                    : undefined
+                }
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -448,12 +448,22 @@ export function buildClosingReportData(
       ? "Kas fisik cocok sempurna dengan sistem POS."
       : `Selisih kas ${cashDifference >= 0 ? "+" : ""}Rp ${Math.abs(cashDifference).toLocaleString("id-ID")}`);
 
-  // Aggregate tenant shares
-  const totalTenantShare =
-    tenantBreakdowns.length > 0
-      ? tenantBreakdowns.reduce((acc, t) => acc + t.tenantShareAmount, 0)
-      : Math.round(netSalesAfterTax * 0.85);
-  const totalDagoShare = netSalesAfterTax - totalTenantShare;
+  const hasSettlements = settlements.length > 0;
+  const totalTenantShare = hasSettlements
+    ? tenantBreakdowns.reduce((acc, t) => acc + t.tenantShareAmount, 0)
+    : 0;
+  const totalDagoShare = Math.max(0, netSalesAfterTax - totalTenantShare);
+  const tenantRatio =
+    hasSettlements && netSalesAfterTax > 0
+      ? Math.min(1, Math.max(0, totalTenantShare / netSalesAfterTax))
+      : 0;
+  const tenantSharePercent = hasSettlements ? Math.round(tenantRatio * 100) : 0;
+  const dagoSharePercent = 100 - tenantSharePercent;
+  const qrisSales = shift?.nonCashSales || 0;
+  const tenantQrisShare = Math.round(qrisSales * tenantRatio);
+  const dagoQrisShare = Math.max(0, qrisSales - tenantQrisShare);
+  const tenantCashShare = Math.round(totalCashSales * tenantRatio);
+  const dagoCashShare = Math.max(0, totalCashSales - tenantCashShare);
 
   return {
     reportNumber: `RPT-CLS-${Date.now().toString().slice(-6)}`,
@@ -465,7 +475,7 @@ export function buildClosingReportData(
     shiftName: shift?.shiftName || "Shift Pagi",
     initialCash,
     totalCashSales,
-    qrisSales: shift?.nonCashSales || 0,
+    qrisSales,
     edcSales: 0,
     totalTransactionsCount: closingTaxAgg.orderCount,
     totalGrossSales: shiftGrossSales,
@@ -475,14 +485,14 @@ export function buildClosingReportData(
     totalTax: storedTaxTotal,
     totalServiceCharge: storedServiceTotal,
     totalNetSales: netSalesAfterTax,
-    tenantSharePercent: 85,
-    dagoSharePercent: 15,
+    tenantSharePercent,
+    dagoSharePercent,
     tenantTotalShare: totalTenantShare,
     dagoTotalShare: totalDagoShare,
-    tenantQrisShare: Math.round((shift?.nonCashSales || 0) * 0.85),
-    dagoQrisShare: Math.round((shift?.nonCashSales || 0) * 0.15),
-    tenantCashShare: Math.round(totalCashSales * 0.85),
-    dagoCashShare: Math.round(totalCashSales * 0.15),
+    tenantQrisShare,
+    dagoQrisShare,
+    tenantCashShare,
+    dagoCashShare,
     expectedCash,
     actualCashEnding,
     cashDifference,

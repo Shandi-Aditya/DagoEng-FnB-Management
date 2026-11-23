@@ -67,8 +67,12 @@ export interface OrderRecord {
   items: OrderItemRecord[];
   subtotal: number;
   discount?: number;
+  fnbDiscount?: number;
+  coworkingDiscount?: number;
   promoId?: string;
   tax: number;
+  fnbTax?: number;
+  coworkingTax?: number;
   serviceCharge?: number;
   taxRatePercent?: number;
   serviceChargePercent?: number;
