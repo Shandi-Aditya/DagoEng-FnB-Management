@@ -63,11 +63,13 @@ interface InventoryContextType {
     modifiers?: string[]
   ) => { success: boolean; message: string };
   deductOrderBOM: (
-    items: OrderItemBOMInput[]
+    items: OrderItemBOMInput[],
+    orderId?: string
   ) => { success: boolean; deductedCount: number };
   restoreOrderBOM: (
     items: OrderItemBOMInput[],
-    orderNumber?: string
+    orderNumber?: string,
+    orderId?: string
   ) => { success: boolean; restoredCount: number };
   recordOrderWasteBOM: (
     items: OrderItemBOMInput[],
@@ -102,8 +104,18 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
   const ingredientsRef = useRef<IngredientItem[]>(ingredients);
   const recipesRef = useRef<RecipeBOM[]>(recipes);
+  const appliedOpIdsRef = useRef<Set<string>>(new Set(invState.appliedOpIds || []));
   ingredientsRef.current = ingredients;
   recipesRef.current = recipes;
+
+  useEffect(() => {
+    appliedOpIdsRef.current = new Set(invState.appliedOpIds || []);
+  }, [invState.appliedOpIds]);
+
+  const hasAppliedOpId = (opId: string): boolean => {
+    const snapshotApplied = inventorySyncClient.getSnapshot().appliedOpIds || [];
+    return appliedOpIdsRef.current.has(opId) || snapshotApplied.includes(opId);
+  };
 
   useEffect(() => {
     if (process.env.NODE_ENV === "test") {
@@ -290,18 +302,26 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const deductOrderBOM = (items: OrderItemBOMInput[]) => {
+  const deductOrderBOM = (items: OrderItemBOMInput[], orderId?: string) => {
+    const cleanOrderId = orderId?.trim();
+    const opId = cleanOrderId
+      ? `bom-deduct-${cleanOrderId}`
+      : nextInventoryOpId("inv-bom-deduct");
+    if (cleanOrderId && hasAppliedOpId(opId)) {
+      return { success: false, deductedCount: 0 };
+    }
+
     const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
       ingredientsRef.current,
       recipesRef.current,
       items
     );
     if (deductedCount > 0) {
+      appliedOpIdsRef.current.add(opId);
       ingredientsRef.current = updatedStock;
       const deltas = deductionLogs
         .filter((l) => l.delta !== 0)
         .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
-      const opId = nextInventoryOpId("inv-bom-deduct");
       const command: InventoryCommand = {
         op: "APPLY_BOM_DELTAS",
         opId,
@@ -317,7 +337,19 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     return { success: deductedCount > 0, deductedCount };
   };
 
-  const restoreOrderBOM = (items: OrderItemBOMInput[], orderNumber?: string) => {
+  const restoreOrderBOM = (
+    items: OrderItemBOMInput[],
+    orderNumber?: string,
+    orderId?: string
+  ) => {
+    const cleanOrderId = orderId?.trim();
+    const opId = cleanOrderId
+      ? `bom-restore-${cleanOrderId}`
+      : nextInventoryOpId("inv-bom-restore");
+    if (cleanOrderId && hasAppliedOpId(opId)) {
+      return { success: false, restoredCount: 0 };
+    }
+
     const { updatedStock, logs: restoreLogs, restoredCount } = restoreOrderItemsBOM(
       ingredientsRef.current,
       recipesRef.current,
@@ -325,11 +357,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       orderNumber
     );
     if (restoredCount > 0) {
+      appliedOpIdsRef.current.add(opId);
       ingredientsRef.current = updatedStock;
       const deltas = restoreLogs
         .filter((l) => l.delta !== 0)
         .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
-      const opId = nextInventoryOpId("inv-bom-restore");
       const command: InventoryCommand = {
         op: "APPLY_BOM_DELTAS",
         opId,
@@ -626,6 +658,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     const freshState = inventoryDomainSpec.defaultState();
     ingredientsRef.current = freshState.ingredients;
     recipesRef.current = freshState.recipes;
+    appliedOpIdsRef.current = new Set();
     mutateInventory(() => inventoryDomainSpec.defaultState(), {
       id: "inventory-reset",
       command: { op: "RESET_INVENTORY" },

@@ -6,7 +6,9 @@ import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useDateFilter } from "./DateFilterContext";
 import { useActivityLog } from "./ActivityLogContext";
+import { useInventory } from "./InventoryContext";
 import { useNotifications } from "./NotificationContext";
+import { notify } from "@/components/app/notify";
 import {
   ensureGlobalOutboxAutoFlush,
   flushOutbox,
@@ -20,6 +22,7 @@ import {
   generateSequentialReceiptNumber,
   resolvePosReceiptPublisher,
   resolvePublisherCode,
+  syncSequenceFromOrderNumber,
 } from "@/lib/receipt-publisher";
 import {
   normalizeTenantId,
@@ -36,12 +39,86 @@ function isSelfOrderRole(roleSlug?: string | null): boolean {
 
 function hasOrderStateChanged(prev: OrderRecord, next: OrderRecord): boolean {
   return (
+    prev.orderNumber !== next.orderNumber ||
     prev.status !== next.status ||
     prev.paymentStatus !== next.paymentStatus ||
     prev.total !== next.total ||
+    Boolean(prev.bomDeducted) !== Boolean(next.bomDeducted) ||
+    Boolean(prev.bomRestored) !== Boolean(next.bomRestored) ||
     (prev.statusHistory?.length ?? 0) !== (next.statusHistory?.length ?? 0) ||
     JSON.stringify(prev.tenantStatuses) !== JSON.stringify(next.tenantStatuses)
   );
+}
+
+const PRE_COOK_DISALLOWED_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  "COOKING",
+  "READY",
+  "SERVED",
+  "COMPLETED",
+]);
+
+const KDS_AND_BEYOND_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  "KITCHEN_RECEIVED",
+  "COOKING",
+  "READY",
+  "SERVED",
+  "COMPLETED",
+]);
+
+/** Client-safe check matching server pre-cook boundary (no fs imports). */
+export function isClientOrderBeforeCooking(
+  order: Pick<OrderRecord, "status" | "cookingStartedAt">
+): boolean {
+  return !order.cookingStartedAt && !PRE_COOK_DISALLOWED_STATUSES.has(order.status);
+}
+
+/** Restores BOM only for pre-cook orders that deducted BOM and have not yet restored it. */
+export function shouldRestoreClientOrderBOM(
+  order: Pick<OrderRecord, "status" | "cookingStartedAt" | "bomDeducted" | "bomRestored">
+): boolean {
+  return (
+    isClientOrderBeforeCooking(order) &&
+    order.bomDeducted === true &&
+    !order.bomRestored
+  );
+}
+
+/** Enforces paymentStatus === "PAID" before entering KDS or downstream fulfillment stages. */
+export function canAdvanceOrderStatus(
+  order: Pick<OrderRecord, "paymentStatus">,
+  nextStatus: OrderStatus,
+  paymentStatusOverride?: OrderRecord["paymentStatus"]
+): { allowed: true } | { allowed: false; reason: string } {
+  const effectivePaymentStatus = paymentStatusOverride || order.paymentStatus;
+  if (KDS_AND_BEYOND_STATUSES.has(nextStatus) && effectivePaymentStatus !== "PAID") {
+    return {
+      allowed: false,
+      reason: "Pesanan belum lunas tidak dapat masuk dapur / KDS.",
+    };
+  }
+  return { allowed: true };
+}
+
+/** Maps an order's current status to the next status after cashier payment settles. */
+export function resolvePostPaymentOrderStatus(currentStatus: OrderStatus): OrderStatus {
+  switch (currentStatus) {
+    case "NEW":
+    case "CONFIRMED":
+      return "CONFIRMED";
+    case "SERVED":
+      return "COMPLETED";
+    default:
+      return currentStatus;
+  }
+}
+
+function toOrderBomItems(items: OrderRecord["items"]) {
+  return (items || []).map((it) => ({
+    productId: it.productId || it.id,
+    productName: it.productName,
+    quantity: it.quantity,
+    modifiers: it.modifiers,
+  }));
 }
 
 const KITCHEN_STAGE_RANK: Record<OrderStatus, number> = {
@@ -84,6 +161,7 @@ export interface OrderActionServerSyncResult {
   synced: boolean;
   rejected: boolean;
   error?: string;
+  order?: OrderRecord;
 }
 
 export interface OrderMutationResult {
@@ -113,6 +191,10 @@ interface OrderContextType {
   ) => void;
   createOrder: (order: Partial<OrderRecord>) => OrderRecord;
   createPosOrder: (order: Partial<OrderRecord>) => OrderRecord;
+  createPosOrderWithSync: (order: Partial<OrderRecord>) => {
+    order: OrderRecord;
+    serverSync: Promise<OrderActionServerSyncResult>;
+  };
   refundOrder: (
     orderId: string,
     params: {
@@ -144,6 +226,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();
   const { isDateInRange } = useDateFilter();
   const { logActivity } = useActivityLog();
+  const { deductOrderBOM, restoreOrderBOM } = useInventory();
   const { addNotification } = useNotifications();
 
   const [orders, setOrders] = useState<OrderRecord[]>(INITIAL_ORDERS);
@@ -187,7 +270,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   const syncOrderToServer = async (
     order: OrderRecord,
     extraPayload: Record<string, unknown> = {},
-    rollbackSnapshot?: OrderRecord
+    rollbackSnapshot?: OrderRecord,
+    wireOrderOverride?: OrderRecord
   ): Promise<OrderActionServerSyncResult> => {
     if (typeof window === "undefined") return { synced: true, rejected: false };
 
@@ -201,20 +285,34 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         id: orderSyncId(order.id),
         endpoint: targetEndpoint,
         method: "POST",
-        payload: { id: order.id, order, ...extraPayload },
+        payload: { id: order.id, order: wireOrderOverride ?? order, ...extraPayload },
       });
 
       if (result.synced) {
         const serverOrder = result.data?.order as OrderRecord | undefined;
         if (serverOrder?.id) {
+          if (serverOrder.orderNumber) {
+            syncSequenceFromOrderNumber(serverOrder.orderNumber);
+          }
           updateOrdersState((prev) =>
             prev.map((o) =>
-              o.id === serverOrder.id ? { ...serverOrder, syncStatus: "SYNCED" } : o
+              o.id === serverOrder.id
+                ? {
+                    ...serverOrder,
+                    ...(serverOrder.bomDeducted === undefined && o.bomDeducted
+                      ? { bomDeducted: true }
+                      : {}),
+                    ...(serverOrder.bomRestored === undefined && o.bomRestored
+                      ? { bomRestored: true }
+                      : {}),
+                    syncStatus: "SYNCED",
+                  }
+                : o
             )
           );
-        } else {
-          markOrderSync(order.id, "SYNCED");
+          return { synced: true, rejected: false, order: serverOrder };
         }
+        markOrderSync(order.id, "SYNCED");
         return { synced: true, rejected: false };
       }
 
@@ -273,14 +371,24 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     const localMap = new Map(localOrders.map((o) => [o.id, o]));
 
     const adjustedServer = effectiveBase.map((srvOrder) => {
+      const localExisting = localMap.get(srvOrder.id);
       if (
         (pendingSyncOrderIdsRef.current.has(srvOrder.id) ||
           pendingOutbox.has(srvOrder.id)) &&
-        localMap.has(srvOrder.id)
+        localExisting
       ) {
-        return localMap.get(srvOrder.id)!;
+        return localExisting;
       }
-      return srvOrder;
+      if (!localExisting) return srvOrder;
+      return {
+        ...srvOrder,
+        ...(srvOrder.bomDeducted === undefined && localExisting.bomDeducted
+          ? { bomDeducted: true }
+          : {}),
+        ...(srvOrder.bomRestored === undefined && localExisting.bomRestored
+          ? { bomRestored: true }
+          : {}),
+      };
     });
 
     const reconciled = reconcileCollectionWithOutbox<OrderRecord>({
@@ -335,6 +443,11 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (cancelled || !data || !Array.isArray(data.orders)) return;
+          for (const srvOrder of data.orders as OrderRecord[]) {
+            if (srvOrder.orderNumber) {
+              syncSequenceFromOrderNumber(srvOrder.orderNumber);
+            }
+          }
           updateOrdersState((prev) => {
             const next = reconcileStaffServerOrders(data.orders, prev);
             if (
@@ -362,6 +475,11 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
           if (cancelled || !data || !Array.isArray(data.orders) || data.orders.length === 0) {
             return;
           }
+          for (const srvOrder of data.orders as OrderRecord[]) {
+            if (srvOrder.orderNumber) {
+              syncSequenceFromOrderNumber(srvOrder.orderNumber);
+            }
+          }
           const pendingOutbox = getPendingOutboxOrderIds();
           updateOrdersState((prev) => {
             const srvMap = new Map<string, OrderRecord>(
@@ -378,7 +496,16 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
               const srvOrder = srvMap.get(localOrder.id);
               if (srvOrder && hasOrderStateChanged(localOrder, srvOrder)) {
                 changed = true;
-                return { ...srvOrder, syncStatus: "SYNCED" as const };
+                return {
+                  ...srvOrder,
+                  ...(srvOrder.bomDeducted === undefined && localOrder.bomDeducted
+                    ? { bomDeducted: true }
+                    : {}),
+                  ...(srvOrder.bomRestored === undefined && localOrder.bomRestored
+                    ? { bomRestored: true }
+                    : {}),
+                  syncStatus: "SYNCED" as const,
+                };
               }
               return localOrder;
             });
@@ -505,6 +632,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     const target = ordersRef.current.find((o) => o.id === orderId);
     if (!target) return;
 
+    const gate = canAdvanceOrderStatus(target, nextStatus, paymentUpdate?.paymentStatus);
+    if (!gate.allowed) {
+      notify.error(gate.reason);
+      return;
+    }
+
     const nowIso = new Date().toISOString();
     const actorName = user?.name || "Staf Operasional";
 
@@ -607,9 +740,29 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const becamePaid = target.paymentStatus !== "PAID" && updated.paymentStatus === "PAID";
+    const wireOrder =
+      becamePaid && !target.bomDeducted ? { ...updated, bomDeducted: undefined } : updated;
+
+    if (becamePaid && !target.bomDeducted) {
+      deductOrderBOM(toOrderBomItems(updated.items), updated.id);
+      updated.bomDeducted = true;
+    }
+
     updateOrdersState((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
 
-    syncOrderToServer(updated);
+    const serverSync = syncOrderToServer(updated, {}, target, wireOrder);
+
+    if (nextStatus === "CANCELLED" && shouldRestoreClientOrderBOM(target)) {
+      serverSync.then((syncRes) => {
+        if (!syncRes.rejected) {
+          restoreOrderBOM(toOrderBomItems(target.items), target.orderNumber, target.id);
+          updateOrdersState((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, bomRestored: true } : o))
+          );
+        }
+      });
+    }
 
     const isRefund =
       nextStatus === "CANCELLED" &&
@@ -698,6 +851,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       ],
     };
 
+    const shouldRestore = shouldRestoreClientOrderBOM(target);
     updateOrdersState((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
     const serverSync = syncOrderToServer(
       updatedOrder,
@@ -707,6 +861,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     serverSync.then((syncRes) => {
       if (!syncRes.rejected) {
+        if (shouldRestore) {
+          restoreOrderBOM(toOrderBomItems(target.items), target.orderNumber, target.id);
+          updateOrdersState((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, bomRestored: true } : o))
+          );
+        }
         logActivity({
           module: "POS",
           action: "REFUND_ORDER",
@@ -782,6 +942,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       ],
     };
 
+    const shouldRestore = shouldRestoreClientOrderBOM(target);
     updateOrdersState((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
     const serverSync = syncOrderToServer(
       updatedOrder,
@@ -791,6 +952,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     serverSync.then((syncRes) => {
       if (!syncRes.rejected) {
+        if (shouldRestore) {
+          restoreOrderBOM(toOrderBomItems(target.items), target.orderNumber, target.id);
+          updateOrdersState((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, bomRestored: true } : o))
+          );
+        }
         logActivity({
           module: "POS",
           action: "VOID_ORDER",
@@ -872,26 +1039,40 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       ...newOrderData,
     };
 
-    updateOrdersState((prev) => [newOrder, ...prev]);
+    const shouldDeductNow = newOrder.paymentStatus === "PAID" && !newOrder.bomDeducted;
+    const wireOrder = shouldDeductNow ? { ...newOrder, bomDeducted: undefined } : newOrder;
+    const localOrder = shouldDeductNow ? { ...newOrder, bomDeducted: true } : newOrder;
 
-    syncOrderToServer(newOrder);
+    if (shouldDeductNow) {
+      deductOrderBOM(toOrderBomItems(newOrder.items), newOrder.id);
+    }
+
+    updateOrdersState((prev) => [localOrder, ...prev]);
+
+    syncOrderToServer(localOrder, {}, undefined, wireOrder);
 
     logActivity({
       module: "POS",
       action: "CREATE_ORDER",
-      recordId: newOrder.orderNumber,
-      newValue: `${newOrder.customerName} - ${newOrder.items.length} Menu (Rp ${newOrder.total.toLocaleString()})`,
-      description: `Order baru dibuat via QR Meja ${newOrder.tableNumber}`,
+      recordId: localOrder.orderNumber,
+      newValue: `${localOrder.customerName} - ${localOrder.items.length} Menu (Rp ${localOrder.total.toLocaleString()})`,
+      description: `Order baru dibuat via QR Meja ${localOrder.tableNumber}`,
       reason: "Self-Order Tamu",
       status: "SUCCESS",
       outletId: targetOutletId,
       outletName: targetOutletName,
     });
 
-    return newOrder;
+    return localOrder;
   };
 
-  const createPosOrder = (newOrderData: Partial<OrderRecord>): OrderRecord => {
+  const createPosOrderInternal = (
+    newOrderData: Partial<OrderRecord>,
+    options?: { deferBomDeduction?: boolean }
+  ): {
+    order: OrderRecord;
+    serverSync: Promise<OrderActionServerSyncResult>;
+  } => {
     const nowIso = new Date().toISOString();
     const newId = `ord-pos-${Date.now()}`;
     const newNo = resolveOrderNumber(newOrderData.items || [], newOrderData.orderNumber, "INV");
@@ -954,23 +1135,57 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       ...newOrderData,
     };
 
-    updateOrdersState((prev) => [newOrder, ...prev]);
+    const shouldDeduct = newOrder.paymentStatus === "PAID" && !newOrder.bomDeducted;
+    const wireOrder = shouldDeduct ? { ...newOrder, bomDeducted: undefined } : newOrder;
+    const localOrder =
+      shouldDeduct && !options?.deferBomDeduction ? { ...newOrder, bomDeducted: true } : newOrder;
 
-    syncOrderToServer(newOrder, { customerKey: newOrder.customerName });
+    if (shouldDeduct && !options?.deferBomDeduction) {
+      deductOrderBOM(toOrderBomItems(newOrder.items), newOrder.id);
+    }
 
-    logActivity({
-      module: "POS",
-      action: "POS_TRANSACTION",
-      recordId: newOrder.orderNumber,
-      newValue: `Total: Rp ${newOrder.total.toLocaleString()} (${newOrder.paymentMethod} - LUNAS)`,
-      description: `Transaksi kasir POS selesai: ${newOrder.orderNumber} (Meja ${newOrder.tableNumber})`,
-      reason: "Pembayaran kasir berhasil",
-      status: "SUCCESS",
-      outletId: targetOutletId,
-      outletName: targetOutletName,
+    updateOrdersState((prev) => [localOrder, ...prev]);
+
+    const rawSync = syncOrderToServer(
+      localOrder,
+      { customerKey: localOrder.customerName },
+      undefined,
+      wireOrder
+    );
+
+    const serverSync = rawSync.then((syncRes) => {
+      const effectiveOrder = syncRes.order ?? localOrder;
+      if (!syncRes.rejected && effectiveOrder.paymentStatus === "PAID") {
+        if (options?.deferBomDeduction && !newOrderData.bomDeducted) {
+          deductOrderBOM(toOrderBomItems(effectiveOrder.items), effectiveOrder.id);
+          updateOrdersState((prev) =>
+            prev.map((o) => (o.id === effectiveOrder.id ? { ...o, bomDeducted: true } : o))
+          );
+        }
+        logActivity({
+          module: "POS",
+          action: "POS_TRANSACTION",
+          recordId: effectiveOrder.orderNumber,
+          newValue: `Total: Rp ${effectiveOrder.total.toLocaleString()} (${effectiveOrder.paymentMethod} - LUNAS)`,
+          description: `Transaksi kasir POS selesai: ${effectiveOrder.orderNumber} (Meja ${effectiveOrder.tableNumber})`,
+          reason: "Pembayaran kasir berhasil",
+          status: "SUCCESS",
+          outletId: targetOutletId,
+          outletName: targetOutletName,
+        });
+      }
+      return syncRes;
     });
 
-    return newOrder;
+    return { order: localOrder, serverSync };
+  };
+
+  const createPosOrder = (newOrderData: Partial<OrderRecord>): OrderRecord => {
+    return createPosOrderInternal(newOrderData).order;
+  };
+
+  const createPosOrderWithSync = (newOrderData: Partial<OrderRecord>) => {
+    return createPosOrderInternal(newOrderData, { deferBomDeduction: true });
   };
 
   const getOrderById = (orderId: string) => {
@@ -1003,6 +1218,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         advanceOrderStatus,
         createOrder,
         createPosOrder,
+        createPosOrderWithSync,
         refundOrder,
         voidOrder,
         getOrderById,
