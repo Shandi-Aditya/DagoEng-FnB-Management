@@ -1,13 +1,14 @@
 "use client";
 
 import type React from "react";
-import { Building, Calendar, Globe, Plus, Receipt, Save, Trash2 } from "lucide-react";
+import { Building, Calendar, Globe, Plus, QrCode, Receipt, Save, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { INDONESIAN_NATIONAL_HOLIDAYS_2026, type HolidayOverrideDate } from "@/lib/operating-hours";
 import type { CategoryTaxType } from "@/types/settings";
@@ -61,6 +62,9 @@ export interface PlatformConfigTabProps {
   onFnbOpenTimeChange: (val: string) => void;
   fnbCloseTime: string;
   onFnbCloseTimeChange: (val: string) => void;
+  // Self-Order QR Policy
+  qrSelfOrderQrisOnly: boolean;
+  onQrSelfOrderQrisOnlyChange: (value: boolean) => void;
   // Holidays & Overrides
   cwWeekendClosed: boolean;
   onCwWeekendClosedChange: (val: boolean) => void;
@@ -117,6 +121,8 @@ export function PlatformConfigTab(props: PlatformConfigTabProps) {
     onFnbOpenTimeChange,
     fnbCloseTime,
     onFnbCloseTimeChange,
+    qrSelfOrderQrisOnly,
+    onQrSelfOrderQrisOnlyChange,
     cwWeekendClosed,
     onCwWeekendClosedChange,
     cwNationalHolidaysClosed,
@@ -391,6 +397,36 @@ export function PlatformConfigTab(props: PlatformConfigTabProps) {
                 className="font-mono tabular-nums"
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Metode Bayar Self-Order QR */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <QrCode className="size-4 text-muted-foreground" />
+            <span>Metode bayar self-order QR</span>
+          </CardTitle>
+          <CardDescription>
+            Atur apakah pelanggan yang memindai QR meja hanya dapat membayar lewat QRIS atau boleh memilih bayar di kasir.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-3.5">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="qrSelfOrderQrisOnly" className="text-sm font-medium text-foreground">
+                Self-order QR hanya QRIS
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Sembunyikan opsi bayar di kasir di halaman pelanggan (/customer) dan tolak pesanan tunai dari self-order QR.
+              </p>
+            </div>
+            <Switch
+              id="qrSelfOrderQrisOnly"
+              checked={qrSelfOrderQrisOnly}
+              onCheckedChange={onQrSelfOrderQrisOnlyChange}
+            />
           </div>
         </CardContent>
       </Card>
