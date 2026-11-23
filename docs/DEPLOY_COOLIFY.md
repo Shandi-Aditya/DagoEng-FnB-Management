@@ -1,6 +1,6 @@
-# Cara deploy aplikasi ke Coolify
+# Cara deploy aplikasi ke Coolify (Staging dan Produksi)
 
-Panduan ini menjelaskan langkah men-deploy branch `develop` ke VPS dengan Coolify dan database Neon PostgreSQL. Dokumen ini tidak memuat nilai rahasia.
+Panduan ini menjelaskan langkah men-deploy aplikasi ke VPS dengan Coolify dan database Neon PostgreSQL untuk dua lingkungan: **Staging** (branch `develop`) dan **Produksi** (branch `main`). Aturan siklus rilis dan alur kerja mingguan mengacu pada [SOP Rilis dan Staging](./SOP_RILIS_DAN_STAGING.md). Dokumen ini tidak memuat nilai rahasia.
 
 ## 1. Pasang deploy key GitLab
 
@@ -10,13 +10,23 @@ Panduan ini menjelaskan langkah men-deploy branch `develop` ke VPS dengan Coolif
 
 ## 2. Buat aplikasi di Coolify
 
-Atur konfigurasi sumber aplikasi sebagai berikut:
+Buat dua aplikasi terpisah di Coolify sesuai lingkungan:
 
-- **Resource.** Pilih **Private Repository (with Deploy Key)**.
-- **Repository.** Isi `git@gitlab.com:devdagoeng/dagoeng-management.git`.
-- **Branch.** Isi `develop`.
-- **Build pack.** Pilih `Nixpacks`.
-- **Port.** Isi `3000`.
+- **Lingkungan Staging (UAT / Pengujian)**:
+  - **Resource**: Pilih **Private Repository (with Deploy Key)**.
+  - **Repository**: Isi `git@gitlab.com:devdagoeng/dagoeng-management.git`.
+  - **Branch**: Isi `develop`.
+  - **Build pack**: Pilih `Nixpacks`.
+  - **Port**: Isi `3000`.
+  - **Domains**: `https://staging.pos.veryyyy.com`.
+
+- **Lingkungan Produksi (Operasional Outlet)**:
+  - **Resource**: Pilih **Private Repository (with Deploy Key)**.
+  - **Repository**: Isi `git@gitlab.com:devdagoeng/dagoeng-management.git`.
+  - **Branch**: Isi `main`.
+  - **Build pack**: Pilih `Nixpacks`.
+  - **Port**: Isi `3000`.
+  - **Domains**: `https://pos.veryyyy.com`.
 
 Berkas `nixpacks.toml` di akar repositori mengunci snapshot `nixpkgs` ke Node `22.20.0`. Snapshot bawaan Nixpacks hanya menyediakan Node `22.11.0`, sedangkan Tailwind CSS v4 memerlukan Node `22.12` ke atas agar kompilasi `next/font` tidak gagal dengan galat `ERR_REQUIRE_ESM`. Pertahankan berkas `nixpacks.toml` tersebut.
 
@@ -59,9 +69,15 @@ Buka menu **Persistent Storage**, lalu tambahkan volume dengan tujuan `/app/data
 
 Arahkan **A record** DNS `<subdomain>` ke alamat IP VPS. Pada pengaturan aplikasi Coolify, isi kolom **Domains** dengan `https://<subdomain>.<domain>`, dan pastikan port `80` serta `443` terbuka pada firewall server.
 
-## 6. Aktifkan auto-deploy saat merge ke `develop`
+## 6. Aktifkan auto-deploy via Webhook GitLab
 
-1. Di Coolify, buka aplikasi, pilih **Webhooks**, lalu **Manual Git Webhooks**, isi **GitLab Webhook Secret**, dan klik **Save**.
-2. Di GitLab, buka **Settings**, lalu **Webhooks**, masukkan URL GitLab dari Coolify beserta token rahasia yang sama, centang **Push events**, dan isi filter branch dengan `develop`.
+Pasang Webhook pada masing-masing aplikasi di Coolify:
 
-Tombol **Test** untuk **Push events** di GitLab mengirim contoh payload dari branch `main`, sehingga Coolify membalas `Nothing to do`. Untuk menguji auto-deploy secara nyata, lakukan push atau merge langsung ke branch `develop`.
+1. **Aplikasi Staging (branch `develop`)**:
+   - Di Coolify aplikasi Staging, buka **Webhooks**, lalu **Manual Git Webhooks**, salin URL Webhook dan Secret.
+   - Di GitLab, buka **Settings** -> **Webhooks**, tambahkan webhook baru dengan URL dan Secret tersebut, centang **Push events**, dan isi filter branch dengan `develop`.
+2. **Aplikasi Produksi (branch `main`)**:
+   - Di Coolify aplikasi Produksi, buka **Webhooks**, lalu **Manual Git Webhooks**, salin URL Webhook dan Secret.
+   - Di GitLab, buka **Settings** -> **Webhooks**, tambahkan webhook baru dengan URL dan Secret tersebut, centang **Push events**, dan isi filter branch dengan `main`.
+
+Saat penggabungan rilis mingguan dilakukan dari `develop` ke `main` setiap Senin, Coolify Produksi akan otomatis mendeteksi push pada branch `main` dan melakukan build aplikasi produksi secara terisolasi.
