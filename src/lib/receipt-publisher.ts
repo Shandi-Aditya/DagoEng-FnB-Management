@@ -158,7 +158,7 @@ function writeStoredSequenceMap(map: Record<string, number>): void {
   }
 }
 
-const SEQUENTIAL_ORDER_NUMBER_PATTERN = /^([A-Z]+)-([A-Z0-9]+)-(\d{8})-(\d+)$/i;
+export const SEQUENTIAL_ORDER_NUMBER_PATTERN = /^([A-Z]+)-([A-Z0-9]+)-(\d{8})-(\d+)$/i;
 const CUSTOM_ORDER_NUMBER_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)+$/i;
 
 function parseYmdToUtcDate(ymd: string): Date | undefined {
@@ -286,25 +286,12 @@ export function ensureUniqueSequentialOrderNumber(
   const resolvedDate =
     params.date ?? (seqMatch ? parseYmdToUtcDate(seqMatch[3]) : undefined);
 
-  const workingExisting = [...existingList];
-  let candidate = generateSequentialReceiptNumber({
+  return generateSequentialReceiptNumber({
     publisherCode: resolvedPublisherCode,
-    existingNumbers: workingExisting,
+    existingNumbers: existingList,
     date: resolvedDate,
     prefix: resolvedPrefix,
   });
-
-  while (existingNormalized.has(candidate.toUpperCase())) {
-    workingExisting.push(candidate);
-    candidate = generateSequentialReceiptNumber({
-      publisherCode: resolvedPublisherCode,
-      existingNumbers: workingExisting,
-      date: resolvedDate,
-      prefix: resolvedPrefix,
-    });
-  }
-
-  return candidate;
 }
 
 /**

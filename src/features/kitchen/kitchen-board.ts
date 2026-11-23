@@ -128,7 +128,6 @@ function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
   return order.orderType === "TAKEAWAY" || order.orderType === "DELIVERY";
 }
 
-/** Only paid, non-cancelled orders may enter the KDS queue or incoming kitchen alerts. */
 export function isOrderEligibleForKds(
   order: Pick<OrderRecord, "paymentStatus" | "status">
 ): boolean {

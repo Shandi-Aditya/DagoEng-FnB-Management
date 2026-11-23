@@ -4,9 +4,10 @@ import {
   getPersistentProductsData,
   getPersistentQrisSession,
   isVerifiedQrisStatus,
+  mutatePersistentOrders,
   readSeededPersistentData,
-  savePersistentOrder,
   savePersistentQrisSession,
+  upsertOrderInList,
 } from "@/lib/persistent-storage";
 import { POS_PRODUCTS } from "@/features/pos/mock-data";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
@@ -143,21 +144,40 @@ export async function POST(req: NextRequest) {
     }
 
     const nowIso = new Date().toISOString();
-    const existingOrders = await getPersistentOrders();
-    const existingOrder = existingOrders.find((o) => o.id === orderId);
-    if (existingOrder) {
-      if (
-        existingOrder.status === "CANCELLED" ||
-        existingOrder.paymentStatus === "REFUNDED" ||
-        existingOrder.paymentStatus === "PAID"
-      ) {
-        return NextResponse.json(
-          { error: "FORBIDDEN: Pesanan yang sudah lunas, dibatalkan, atau di-refund tidak dapat diubah." },
-          { status: 403 }
-        );
-      }
+    const isCancelRequest = rawOrder.status === "CANCELLED";
 
-      if (rawOrder.status === "CANCELLED") {
+    if (isCancelRequest) {
+      const cancelOutcome = await mutatePersistentOrders<
+        | { ok: true; order: OrderRecord }
+        | { ok: false; status: number; error: string }
+      >((existingOrders) => {
+        const existingOrder = existingOrders.find((o) => o.id === orderId);
+        if (!existingOrder) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              status: 404,
+              error: `NOT_FOUND: Pesanan [${orderId}] tidak ditemukan.`,
+            },
+          };
+        }
+        if (
+          existingOrder.status === "CANCELLED" ||
+          existingOrder.paymentStatus === "REFUNDED" ||
+          existingOrder.paymentStatus === "PAID"
+        ) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              status: 403,
+              error:
+                "FORBIDDEN: Pesanan yang sudah lunas, dibatalkan, atau di-refund tidak dapat diubah.",
+            },
+          };
+        }
+
         const cancelledOrder: OrderRecord = {
           ...existingOrder,
           status: "CANCELLED",
@@ -165,7 +185,7 @@ export async function POST(req: NextRequest) {
           statusHistory: [
             ...(existingOrder.statusHistory ?? []),
             {
-              id: `h-cancel-${Date.now()}`,
+              id: `h-cancel-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               orderId,
               fromStatus: existingOrder.status,
               toStatus: "CANCELLED",
@@ -175,14 +195,17 @@ export async function POST(req: NextRequest) {
             },
           ],
         };
-        const savedOrder = await savePersistentOrder(cancelledOrder);
-        return NextResponse.json({ success: true, order: savedOrder });
-      }
+        const { nextOrders, savedOrder } = upsertOrderInList(existingOrders, cancelledOrder);
+        return { nextOrders, result: { ok: true, order: savedOrder } };
+      });
 
-      return NextResponse.json(
-        { error: "FORBIDDEN: Pesanan yang sudah dibuat tidak dapat diubah oleh pelanggan." },
-        { status: 403 }
-      );
+      if (!cancelOutcome.ok) {
+        return NextResponse.json(
+          { error: cancelOutcome.error },
+          { status: cancelOutcome.status }
+        );
+      }
+      return NextResponse.json({ success: true, order: cancelOutcome.order });
     }
 
     if (!Array.isArray(rawOrder.items) || rawOrder.items.length === 0) {
@@ -402,7 +425,48 @@ export async function POST(req: NextRequest) {
       statusHistory,
     };
 
-    const savedOrder = await savePersistentOrder(orderToSave);
+    const createOutcome = await mutatePersistentOrders<
+      | { ok: true; order: OrderRecord }
+      | { ok: false; status: number; error: string }
+    >((existingOrders) => {
+      const existingOrder = existingOrders.find((o) => o.id === orderId);
+      if (existingOrder) {
+        if (
+          existingOrder.status === "CANCELLED" ||
+          existingOrder.paymentStatus === "REFUNDED" ||
+          existingOrder.paymentStatus === "PAID"
+        ) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              status: 403,
+              error:
+                "FORBIDDEN: Pesanan yang sudah lunas, dibatalkan, atau di-refund tidak dapat diubah.",
+            },
+          };
+        }
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            status: 403,
+            error: "FORBIDDEN: Pesanan yang sudah dibuat tidak dapat diubah oleh pelanggan.",
+          },
+        };
+      }
+
+      const { nextOrders, savedOrder } = upsertOrderInList(existingOrders, orderToSave);
+      return { nextOrders, result: { ok: true, order: savedOrder } };
+    });
+
+    if (!createOutcome.ok) {
+      return NextResponse.json(
+        { error: createOutcome.error },
+        { status: createOutcome.status }
+      );
+    }
+    const savedOrder = createOutcome.order;
 
     if (savedOrder.paymentMethod === "QRIS" && breakdown.total > 0) {
       const existingQrisSession = await getPersistentQrisSession(savedOrder.orderNumber);

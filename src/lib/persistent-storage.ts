@@ -30,13 +30,17 @@ import type { ServerAuthResult } from "@/lib/server-auth";
 import {
   ensureUniqueSequentialOrderNumber,
   resolvePublisherCode,
+  SEQUENTIAL_ORDER_NUMBER_PATTERN,
 } from "@/lib/receipt-publisher";
+import {
+  isOrderBeforeCooking,
+  toOrderBomItems,
+} from "@/features/orders/orders-domain";
 import {
   deductOrderItemsBOM,
   INITIAL_INGREDIENTS,
   INITIAL_RECIPES,
   restoreOrderItemsBOM,
-  type OrderItemBOMInput,
 } from "@/features/inventory/inventory-data";
 import { inventoryDomainSpec } from "@/lib/sync-domains/inventory-spec";
 import type { RecipeBOM } from "@/types/inventory";
@@ -333,9 +337,6 @@ export async function saveCoworkingBooking(booking: any): Promise<boolean> {
   return true;
 }
 
-const SEQUENTIAL_ORDER_RE = /^[A-Z]+-[A-Z0-9]+-\d{8}-\d+$/i;
-const PRE_COOK_DISALLOWED_STATUSES = new Set(["COOKING", "READY", "SERVED", "COMPLETED"]);
-
 const SYSTEM_INVENTORY_AUTH: ServerAuthResult = {
   isAuthenticated: true,
   role: "SUPER_ADMIN",
@@ -347,7 +348,7 @@ function inferOrderPublisherCode(
   order: Pick<OrderRecord, "orderNumber" | "tenantId" | "items">
 ): string | undefined {
   const raw = typeof order.orderNumber === "string" ? order.orderNumber.trim() : "";
-  if (SEQUENTIAL_ORDER_RE.test(raw)) {
+  if (SEQUENTIAL_ORDER_NUMBER_PATTERN.test(raw)) {
     return undefined;
   }
   const itemTenants = Array.from(
@@ -422,62 +423,66 @@ export async function updatePersistentOrderIf(
   });
 }
 
-export async function savePersistentOrder(order: OrderRecord): Promise<OrderRecord> {
-  return mutatePersistentOrders((existing) => {
-    const index = existing.findIndex((o) => o.id === order.id);
-    const otherNumbers = existing
-      .filter((o) => o.id !== order.id)
-      .map((o) => o.orderNumber);
+export function upsertOrderInList(
+  existing: OrderRecord[],
+  order: OrderRecord
+): { nextOrders: OrderRecord[]; savedOrder: OrderRecord } {
+  const index = existing.findIndex((o) => o.id === order.id);
+  const otherNumbers = existing
+    .filter((o) => o.id !== order.id)
+    .map((o) => o.orderNumber);
 
-    if (index >= 0) {
-      const prev = existing[index];
-      const candidateNumber =
-        typeof order.orderNumber === "string" && order.orderNumber.trim()
-          ? order.orderNumber
-          : prev.orderNumber;
-      const resolvedOrderNumber = ensureUniqueSequentialOrderNumber({
-        orderNumber: candidateNumber,
-        publisherCode: inferOrderPublisherCode({
-          ...order,
-          orderNumber: candidateNumber,
-        }),
-        existingNumbers: otherNumbers,
-        date: order.createdAt || prev.createdAt,
-        allowCustomFormat: true,
-      });
-
-      const savedOrder: OrderRecord = {
-        ...order,
-        orderNumber: resolvedOrderNumber,
-        ...(prev.loyaltyPointsCredited ? { loyaltyPointsCredited: true } : {}),
-        ...(prev.bomDeducted ? { bomDeducted: true } : {}),
-        ...(prev.bomRestored ? { bomRestored: true } : {}),
-      };
-      const updated = [...existing];
-      updated[index] = savedOrder;
-      return { nextOrders: updated, result: savedOrder };
-    }
-
+  if (index >= 0) {
+    const prev = existing[index];
+    const candidateNumber =
+      typeof order.orderNumber === "string" && order.orderNumber.trim()
+        ? order.orderNumber
+        : prev.orderNumber;
     const resolvedOrderNumber = ensureUniqueSequentialOrderNumber({
-      orderNumber: order.orderNumber,
-      publisherCode: inferOrderPublisherCode(order),
+      orderNumber: candidateNumber,
+      publisherCode: inferOrderPublisherCode({
+        ...order,
+        orderNumber: candidateNumber,
+      }),
       existingNumbers: otherNumbers,
-      date: order.createdAt,
+      date: order.createdAt || prev.createdAt,
       allowCustomFormat: true,
     });
+
     const savedOrder: OrderRecord = {
       ...order,
       orderNumber: resolvedOrderNumber,
+      ...(prev.loyaltyPointsCredited ? { loyaltyPointsCredited: true } : {}),
+      ...(prev.bomDeducted ? { bomDeducted: true } : {}),
+      ...(prev.bomRestored ? { bomRestored: true } : {}),
     };
-    return { nextOrders: [savedOrder, ...existing], result: savedOrder };
+    const updated = [...existing];
+    updated[index] = savedOrder;
+    return { nextOrders: updated, savedOrder };
+  }
+
+  const resolvedOrderNumber = ensureUniqueSequentialOrderNumber({
+    orderNumber: order.orderNumber,
+    publisherCode: inferOrderPublisherCode(order),
+    existingNumbers: otherNumbers,
+    date: order.createdAt,
+    allowCustomFormat: true,
+  });
+  const savedOrder: OrderRecord = {
+    ...order,
+    orderNumber: resolvedOrderNumber,
+  };
+  return { nextOrders: [savedOrder, ...existing], savedOrder };
+}
+
+export async function savePersistentOrder(order: OrderRecord): Promise<OrderRecord> {
+  return mutatePersistentOrders((existing) => {
+    const { nextOrders, savedOrder } = upsertOrderInList(existing, order);
+    return { nextOrders, result: savedOrder };
   });
 }
 
-export function isOrderBeforeCooking(
-  order: Pick<OrderRecord, "status" | "cookingStartedAt">
-): boolean {
-  return !order.cookingStartedAt && !PRE_COOK_DISALLOWED_STATUSES.has(order.status);
-}
+export { isOrderBeforeCooking };
 
 function mergeRecipesWithInitial(recipes: RecipeBOM[] | undefined): RecipeBOM[] {
   const stored = Array.isArray(recipes) ? recipes : [];
@@ -506,15 +511,6 @@ function normalizeInventoryState(current: InventoryDomainState): InventoryDomain
   };
 }
 
-function toOrderBomItems(items: OrderRecord["items"]): OrderItemBOMInput[] {
-  return (items || []).map((item) => ({
-    productId: item.productId || item.id,
-    productName: item.productName,
-    quantity: item.quantity,
-    modifiers: item.modifiers,
-  }));
-}
-
 async function markOrderBomFlag(
   orderId: string,
   flag: "bomDeducted" | "bomRestored"
@@ -528,7 +524,7 @@ async function markOrderBomFlag(
 
 export async function deductPersistentOrderBOM(
   order: OrderRecord,
-  options?: { tenantId?: string; outletId?: string; reason?: string }
+  options?: { reason?: string }
 ): Promise<{ applied: boolean; deductedItems: number }> {
   if (
     order.bomDeducted === true ||
@@ -542,7 +538,11 @@ export async function deductPersistentOrderBOM(
 
   const storedOrders = await getPersistentOrders();
   const storedOrder = storedOrders.find((o) => o.id === order.id);
-  if (storedOrder?.bomDeducted === true) {
+  if (
+    storedOrder?.bomDeducted === true ||
+    storedOrder?.status === "CANCELLED" ||
+    storedOrder?.paymentStatus === "REFUNDED"
+  ) {
     return { applied: false, deductedItems: 0 };
   }
 

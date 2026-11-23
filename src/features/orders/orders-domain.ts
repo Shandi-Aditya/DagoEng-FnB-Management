@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/app/status-badge";
+import type { OrderItemBOMInput } from "@/features/inventory/inventory-data";
 import type { POSReceiptData, SplitGuestBill } from "@/features/pos/types";
 import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 import { resolveItemTenantId } from "@/lib/settlement";
@@ -6,6 +7,47 @@ import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { getTenantName } from "@/lib/tenant";
 import type { OrderItemRecord, OrderRecord, OrderStatus } from "@/types/order";
 import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
+
+export const KDS_GATED_STATUSES: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "KITCHEN_RECEIVED",
+  "COOKING",
+  "READY",
+  "SERVED",
+  "COMPLETED",
+]);
+
+const PRE_COOK_DISALLOWED_STATUSES: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "COOKING",
+  "READY",
+  "SERVED",
+  "COMPLETED",
+]);
+
+export function isKdsGatedStatus(status: OrderStatus): boolean {
+  return KDS_GATED_STATUSES.has(status);
+}
+
+export function isOrderBeforeCooking(
+  order: Pick<OrderRecord, "status" | "cookingStartedAt" | "tenantStatuses">
+): boolean {
+  if (order.cookingStartedAt) return false;
+  if (PRE_COOK_DISALLOWED_STATUSES.has(order.status)) return false;
+  if (order.tenantStatuses) {
+    for (const stage of Object.values(order.tenantStatuses)) {
+      if (PRE_COOK_DISALLOWED_STATUSES.has(stage)) return false;
+    }
+  }
+  return true;
+}
+
+export function toOrderBomItems(items: OrderRecord["items"]): OrderItemBOMInput[] {
+  return (items || []).map((item) => ({
+    productId: item.productId || item.id,
+    productName: item.productName,
+    quantity: item.quantity,
+    modifiers: item.modifiers,
+  }));
+}
 
 const TENANT_ID_ALIASES: Record<string, string> = {
   "tenant-kopi-senja": "tenant-ks",

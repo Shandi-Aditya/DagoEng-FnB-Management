@@ -10,9 +10,7 @@ import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { normalizeLoyaltyPhone, useLoyalty } from "@/contexts/LoyaltyContext";
 import {
-  isClientOrderBeforeCooking,
   resolvePostPaymentOrderStatus,
-  shouldRestoreClientOrderBOM,
   useOrders,
 } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -38,7 +36,9 @@ import {
   buildOrderReceiptData,
   buildReprintKitchenTicket,
   filterOrdersByTenant,
+  isOrderBeforeCooking,
   paymentMethodLabel,
+  toOrderBomItems,
 } from "@/features/orders/orders-domain";
 import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
 import { OrdersTable } from "@/features/orders/OrdersTable";
@@ -50,7 +50,7 @@ export default function OrdersPage() {
   const { startDate, endDate } = useDateFilter();
   const { activeOutletId, activeOutlet } = useOutlet();
   const { filteredOrders, advanceOrderStatus, refundOrder, voidOrder } = useOrders();
-  const { deductOrderBOM, restoreOrderBOM, recordOrderWasteBOM } = useInventory();
+  const { recordOrderWasteBOM } = useInventory();
   const { members, addPoints, reverseTransactionPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
@@ -192,7 +192,7 @@ export default function OrdersPage() {
     }
   };
 
-  const handlePaymentSuccess = (paymentData: {
+  const handlePaymentSuccess = async (paymentData: {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
@@ -224,7 +224,7 @@ export default function OrdersPage() {
 
       const nextStatus = resolvePostPaymentOrderStatus(paymentOrder.status);
 
-      advanceOrderStatus(
+      const syncRes = await advanceOrderStatus(
         paymentOrder.id,
         nextStatus,
         `Pembayaran lunas via ${paymentData.method} (${formatCurrencyIDR(paymentOrder.total)})`,
@@ -239,6 +239,15 @@ export default function OrdersPage() {
         }
       );
 
+      if (syncRes.rejected) {
+        notify.error(
+          "Pembayaran ditolak server",
+          syncRes.error || "Pembayaran tidak dapat diselesaikan."
+        );
+        setIsPaymentModalOpen(false);
+        return;
+      }
+
       const cashPortion =
         paymentData.method === "SPLIT"
           ? (paymentData.splitDetails || [])
@@ -248,16 +257,6 @@ export default function OrdersPage() {
             ? paymentOrder.total
             : 0;
       recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
-
-      const bomItems = paymentOrder.items.map((it) => ({
-        productId: it.productId || it.id,
-        productName: it.productName,
-        quantity: it.quantity,
-        modifiers: it.modifiers,
-      }));
-      if (!paymentOrder.bomDeducted) {
-        deductOrderBOM(bomItems, paymentOrder.id);
-      }
 
       const orderNormPhone = paymentOrder.customerPhone
         ? normalizeLoyaltyPhone(paymentOrder.customerPhone)
@@ -318,20 +317,16 @@ export default function OrdersPage() {
       setIsPaymentModalOpen(false);
 
       if (selectedOrder?.id === paymentOrder.id) {
-        setSelectedOrder((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: nextStatus,
-                paymentStatus: "PAID",
-                paymentMethod: chosenMethod,
-                bomDeducted: true,
-                qrisVerification: paymentData.qrisVerification ?? prev.qrisVerification,
-                splitDetails: mappedSplitDetails ?? prev.splitDetails,
-                cashierName: user?.name || prev.cashierName,
-              }
-            : null
-        );
+        const resolvedOrder = syncRes.order ?? {
+          ...paymentOrder,
+          status: nextStatus,
+          paymentStatus: "PAID" as const,
+          paymentMethod: chosenMethod,
+          qrisVerification: paymentData.qrisVerification ?? paymentOrder.qrisVerification,
+          splitDetails: mappedSplitDetails ?? paymentOrder.splitDetails,
+          cashierName: user?.name || paymentOrder.cashierName,
+        };
+        setSelectedOrder(resolvedOrder);
       }
     } finally {
       paymentSubmittingRef.current = false;
@@ -429,14 +424,14 @@ export default function OrdersPage() {
     refundSubmittingRef.current = true;
     try {
       const isVoid = refundModalMode === "VOID";
-      const result = isVoid
-        ? voidOrder(refundOrderTarget.id, {
+      const syncRes = isVoid
+        ? await voidOrder(refundOrderTarget.id, {
             reason: params.reason,
             supervisorName: params.supervisorName,
             supervisorRole: params.supervisorRole,
             supervisorPin: params.supervisorPin,
           })
-        : refundOrder(refundOrderTarget.id, {
+        : await refundOrder(refundOrderTarget.id, {
             reason: params.reason,
             supervisorName: params.supervisorName,
             supervisorRole: params.supervisorRole,
@@ -444,111 +439,77 @@ export default function OrdersPage() {
             refundMethod: "CASH",
           });
 
-      if (!result.success) {
-        notify.error(isVoid ? "Gagal membatalkan pesanan" : "Gagal melakukan refund", result.error);
-        return { ok: false, error: result.error };
+      if (syncRes.rejected) {
+        const errorMessage =
+          syncRes.error ||
+          (isVoid
+            ? "Otorisasi pembatalan pesanan ditolak oleh server."
+            : "Otorisasi refund pesanan ditolak oleh server.");
+        notify.error(
+          isVoid ? "Pembatalan pesanan ditolak" : "Refund pesanan ditolak",
+          errorMessage
+        );
+        return { ok: false, error: errorMessage };
       }
 
-      if (result.serverSync) {
-        const syncResult = await result.serverSync;
-        if (syncResult.rejected) {
-          const errorMessage = syncResult.error || "Otorisasi supervisor ditolak oleh server.";
-          notify.error(
-            isVoid ? "Pembatalan pesanan ditolak" : "Refund pesanan ditolak",
-            errorMessage
-          );
-          return { ok: false, error: errorMessage };
-        }
-      }
+      const resolvedOrder = syncRes.order ?? refundOrderTarget;
 
       if (!isVoid) {
         recordShiftRefund(
-          refundOrderTarget.total,
-          refundOrderTarget.id,
-          refundOrderTarget.outletId
+          resolvedOrder.total,
+          resolvedOrder.id,
+          resolvedOrder.outletId
         );
       }
 
-      const bomItems = refundOrderTarget.items.map((it) => ({
-        productId: it.productId || it.id,
-        productName: it.productName,
-        quantity: it.quantity,
-        modifiers: it.modifiers,
-      }));
-      const isBeforeCooking = isClientOrderBeforeCooking(refundOrderTarget);
-      const shouldRestoreBom = shouldRestoreClientOrderBOM(refundOrderTarget);
-
-      if (!isBeforeCooking) {
+      const isPostCook =
+        !isOrderBeforeCooking(refundOrderTarget) || !isOrderBeforeCooking(resolvedOrder);
+      if (isPostCook) {
         recordOrderWasteBOM(
-          bomItems,
-          refundOrderTarget.paymentStatus !== "PAID",
-          refundOrderTarget.orderNumber
+          toOrderBomItems(resolvedOrder.items),
+          refundOrderTarget.paymentStatus !== "PAID" && !resolvedOrder.bomDeducted,
+          resolvedOrder.orderNumber
         );
-      } else if (shouldRestoreBom) {
-        restoreOrderBOM(bomItems, refundOrderTarget.orderNumber, refundOrderTarget.id);
       }
 
-      const targetNormPhone = refundOrderTarget.customerPhone
-        ? normalizeLoyaltyPhone(refundOrderTarget.customerPhone)
+      const targetNormPhone = resolvedOrder.customerPhone
+        ? normalizeLoyaltyPhone(resolvedOrder.customerPhone)
         : "";
       const matchingMember =
         (targetNormPhone
           ? members.find((m) => normalizeLoyaltyPhone(m.phone) === targetNormPhone)
           : undefined) ??
         members.find(
-          (m) => m.name.toLowerCase().trim() === refundOrderTarget.customerName.toLowerCase().trim()
+          (m) => m.name.toLowerCase().trim() === resolvedOrder.customerName.toLowerCase().trim()
         );
       if (matchingMember) {
         reverseTransactionPoints(
           matchingMember.id,
-          refundOrderTarget.id,
-          `${isVoid ? "Pembatalan" : "Refund"} pesanan #${refundOrderTarget.orderNumber}: ${params.reason}`,
-          !isVoid ? refundOrderTarget.total : 0
+          resolvedOrder.id,
+          `${isVoid ? "Pembatalan" : "Refund"} pesanan #${resolvedOrder.orderNumber}: ${params.reason}`,
+          !isVoid ? resolvedOrder.total : 0
         );
       }
 
       if (
-        refundOrderTarget.orderType === "DINE_IN" &&
-        refundOrderTarget.tableNumber &&
-        refundOrderTarget.tableNumber !== "TAKEAWAY"
+        resolvedOrder.orderType === "DINE_IN" &&
+        resolvedOrder.tableNumber &&
+        resolvedOrder.tableNumber !== "TAKEAWAY"
       ) {
-        releaseTableToAvailable(refundOrderTarget.tableNumber);
+        releaseTableToAvailable(resolvedOrder.tableNumber);
       }
 
       notify.success(
         isVoid
-          ? `Pesanan ${refundOrderTarget.orderNumber} dibatalkan`
-          : `Pesanan ${refundOrderTarget.orderNumber} di-refund`,
+          ? `Pesanan ${resolvedOrder.orderNumber} dibatalkan`
+          : `Pesanan ${resolvedOrder.orderNumber} di-refund`,
         isVoid
           ? `Alasan: ${params.reason}`
-          : `Uang tunai ${formatCurrencyIDR(refundOrderTarget.total)} dikembalikan ke pelanggan`
+          : `Uang tunai ${formatCurrencyIDR(resolvedOrder.total)} dikembalikan ke pelanggan`
       );
 
       if (selectedOrder?.id === refundOrderTarget.id) {
-        setSelectedOrder((prev) =>
-          prev
-            ? {
-                ...(result.order || {
-                  ...prev,
-                  status: "CANCELLED",
-                  ...(isVoid
-                    ? {
-                        voidReason: params.reason,
-                        voidApprovedBy: params.supervisorName,
-                        voidedAt: new Date().toISOString(),
-                      }
-                    : {
-                        paymentStatus: "REFUNDED",
-                        refundReason: params.reason,
-                        refundApprovedBy: params.supervisorName,
-                        refundedAt: new Date().toISOString(),
-                        refundMethod: "CASH",
-                      }),
-                }),
-                ...(shouldRestoreBom ? { bomRestored: true } : {}),
-              }
-            : null
-        );
+        setSelectedOrder(resolvedOrder);
       }
 
       setIsRefundModalOpen(false);

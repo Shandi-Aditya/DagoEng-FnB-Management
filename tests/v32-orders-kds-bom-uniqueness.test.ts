@@ -12,6 +12,7 @@ import { INITIAL_INGREDIENTS } from "@/features/inventory/inventory-data";
 import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 import {
   getPersistentOrders,
+  isOrderBeforeCooking,
   readPersistentDomainState,
   savePersistentOrder,
 } from "@/lib/persistent-storage";
@@ -26,6 +27,8 @@ const CASHIER_COOKIE = "dagoeng_active_persona=CASHIER_SGR";
 const MANAGER_COOKIE = "dagoeng_active_persona=HUB_MANAGER";
 const WAITER_COOKIE = "dagoeng_active_persona=WAITER_SGR";
 const KITCHEN_COOKIE = "dagoeng_active_persona=KITCHEN_SGR";
+const TENANT_KS_COOKIE = "dagoeng_active_persona=TENANT_OWNER_KS";
+const TENANT_KITCHEN_COOKIE = "dagoeng_active_persona=TENANT_OWNER_KITCHEN";
 
 const ALL_KDS_FILTERS: KitchenFilters = {
   type: "ALL",
@@ -818,5 +821,402 @@ describe("V-32 Wave 2A: KDS Payment Gate, BOM Lifecycle & Canonical Order Unique
       statusHistory: [],
     });
     expect(pre.orderNumber).toBe("ORD-KS-20261123-0001");
+  });
+
+  describe("5. Wave 3 Concurrency, Multi-Tenant PATCH & Paid DELETE Fixes", () => {
+    it("rejects concurrent double payment on POST /api/orders with 403 ORDER_ALREADY_PAID and deducts BOM once", async () => {
+      const initialMilk = INITIAL_INGREDIENTS.find((i) => i.id === "ing-1")!.stockNumber;
+
+      const createPending = await ordersRoute.POST(
+        makeReq(
+          "/api/orders",
+          "POST",
+          {
+            order: makeOrderPayload("ord-race-pay-1", {
+              status: "NEW",
+              paymentStatus: "PENDING",
+              items: [
+                {
+                  id: "it-race-1",
+                  productId: KS_PRODUCT.id,
+                  tenantId: KS_PRODUCT.tenantId,
+                  productName: KS_PRODUCT.name,
+                  quantity: 1,
+                  unitPrice: KS_PRODUCT.basePrice,
+                },
+              ],
+              subtotal: KS_PRODUCT.basePrice,
+              tax: Math.round(KS_PRODUCT.basePrice * 0.1),
+              serviceCharge: Math.round(KS_PRODUCT.basePrice * 0.05),
+              total:
+                KS_PRODUCT.basePrice +
+                Math.round(KS_PRODUCT.basePrice * 0.1) +
+                Math.round(KS_PRODUCT.basePrice * 0.05),
+            }),
+          },
+          WAITER_COOKIE
+        )
+      );
+      expect(createPending.status).toBe(200);
+      const pendingOrder: OrderRecord = (await createPending.json()).order;
+
+      const [resA, resB] = await Promise.all([
+        ordersRoute.POST(
+          makeReq(
+            "/api/orders",
+            "POST",
+            {
+              order: {
+                ...pendingOrder,
+                status: "CONFIRMED",
+                paymentStatus: "PAID",
+                paymentMethod: "CASH",
+                statusHistory: [
+                  ...(pendingOrder.statusHistory ?? []),
+                  {
+                    id: "h-cashier-a",
+                    orderId: pendingOrder.id,
+                    fromStatus: "NEW",
+                    toStatus: "CONFIRMED",
+                    timestamp: "2026-11-23T10:01:00.000Z",
+                    actorName: "Kasir A",
+                  },
+                ],
+              },
+            },
+            CASHIER_COOKIE
+          )
+        ),
+        ordersRoute.POST(
+          makeReq(
+            "/api/orders",
+            "POST",
+            {
+              order: {
+                ...pendingOrder,
+                status: "CONFIRMED",
+                paymentStatus: "PAID",
+                paymentMethod: "EDC",
+                statusHistory: [
+                  ...(pendingOrder.statusHistory ?? []),
+                  {
+                    id: "h-cashier-b",
+                    orderId: pendingOrder.id,
+                    fromStatus: "NEW",
+                    toStatus: "CONFIRMED",
+                    timestamp: "2026-11-23T10:01:00.001Z",
+                    actorName: "Kasir B",
+                  },
+                ],
+              },
+            },
+            CASHIER_COOKIE
+          )
+        ),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort((a, b) => a - b);
+      expect(statuses).toEqual([200, 403]);
+      const rejectedBody = await (resA.status === 403 ? resA : resB).json();
+      expect(rejectedBody.error).toContain("ORDER_ALREADY_PAID");
+
+      const invState = await readPersistentDomainState(inventoryDomainSpec);
+      expect(invState.ingredients.find((i) => i.id === "ing-1")!.stockNumber).toBeCloseTo(
+        initialMilk - 0.12,
+        3
+      );
+    });
+
+    it("serializes COOKING vs CANCELLED race and blocks self-order cancellation once webhook settles PAID", async () => {
+      const initialMilk = INITIAL_INGREDIENTS.find((i) => i.id === "ing-1")!.stockNumber;
+
+      const paidRes = await ordersRoute.POST(
+        makeReq(
+          "/api/orders",
+          "POST",
+          {
+            order: makeOrderPayload("ord-cook-cancel-race", {
+              status: "KITCHEN_RECEIVED",
+              paymentStatus: "PAID",
+              items: [
+                {
+                  id: "it-race-cc",
+                  productId: KS_PRODUCT.id,
+                  tenantId: KS_PRODUCT.tenantId,
+                  productName: KS_PRODUCT.name,
+                  quantity: 1,
+                  unitPrice: KS_PRODUCT.basePrice,
+                },
+              ],
+              subtotal: KS_PRODUCT.basePrice,
+              tax: Math.round(KS_PRODUCT.basePrice * 0.1),
+              serviceCharge: Math.round(KS_PRODUCT.basePrice * 0.05),
+              total:
+                KS_PRODUCT.basePrice +
+                Math.round(KS_PRODUCT.basePrice * 0.1) +
+                Math.round(KS_PRODUCT.basePrice * 0.05),
+            }),
+          },
+          CASHIER_COOKIE
+        )
+      );
+      expect(paidRes.status).toBe(200);
+
+      const [cookRes, cancelRes] = await Promise.all([
+        callOrdersPatch({ id: "ord-cook-cancel-race", status: "COOKING" }, KITCHEN_COOKIE),
+        ordersRoute.DELETE(
+          makeReq("/api/orders?id=ord-cook-cancel-race", "DELETE", undefined, MANAGER_COOKIE)
+        ),
+      ]);
+
+      expect(cookRes.status === 200 || cookRes.status === 403).toBe(true);
+      expect(cancelRes.status).toBe(200);
+      const persisted = (await getPersistentOrders()).find((o) => o.id === "ord-cook-cancel-race")!;
+      expect(persisted.status).toBe("CANCELLED");
+
+      const invState = await readPersistentDomainState(inventoryDomainSpec);
+      if (persisted.cookingStartedAt) {
+        expect(persisted.bomRestored).toBeFalsy();
+        expect(invState.ingredients.find((i) => i.id === "ing-1")!.stockNumber).toBeCloseTo(
+          initialMilk - 0.12,
+          3
+        );
+      } else {
+        expect(persisted.bomRestored).toBe(true);
+        expect(invState.ingredients.find((i) => i.id === "ing-1")!.stockNumber).toBeCloseTo(
+          initialMilk,
+          3
+        );
+      }
+
+      // Self-order settled by webhook cannot be cancelled back to PENDING
+      const soRes = await selfOrderPost(
+        makeReq("/api/orders/self-order", "POST", {
+          order: {
+            id: "ord-so-settled-cancel-1",
+            tableNumber: "T-12",
+            customerName: "Tamu Webhook",
+            paymentMethod: "QRIS",
+            items: [
+              {
+                id: "it-so-set-1",
+                productId: KS_PRODUCT.id,
+                productName: KS_PRODUCT.name,
+                quantity: 1,
+                unitPrice: KS_PRODUCT.basePrice,
+              },
+            ],
+          },
+        })
+      );
+      expect(soRes.status).toBe(200);
+      const soOrder: OrderRecord = (await soRes.json()).order;
+
+      const sig = signQrisWebhookPayload({
+        invoiceNumber: soOrder.orderNumber,
+        amount: soOrder.total,
+        transactionStatus: "SUCCESS",
+      });
+      const whRes = await qrisVerifyPost(
+        makeReq(
+          "/api/pos/qris/verify",
+          "POST",
+          {
+            mode: "WEBHOOK",
+            invoiceNumber: soOrder.orderNumber,
+            amount: soOrder.total,
+            transactionStatus: "SUCCESS",
+          },
+          undefined,
+          { "x-dago-signature": sig }
+        )
+      );
+      expect(whRes.status).toBe(200);
+
+      const customerCancelAfterPaid = await selfOrderPost(
+        makeReq("/api/orders/self-order", "POST", {
+          order: {
+            id: "ord-so-settled-cancel-1",
+            status: "CANCELLED",
+          },
+        })
+      );
+      expect(customerCancelAfterPaid.status).toBe(403);
+      const afterOrder = (await getPersistentOrders()).find(
+        (o) => o.id === "ord-so-settled-cancel-1"
+      )!;
+      expect(afterOrder.paymentStatus).toBe("PAID");
+      expect(afterOrder.status).toBe("CONFIRMED");
+    });
+
+    it("isolates multi-tenant PATCH without items, stamps cookingStartedAt on tenant COOKING, and blocks pre-cook BOM restore", async () => {
+      const initialMilk = INITIAL_INGREDIENTS.find((i) => i.id === "ing-1")!.stockNumber;
+      const subtotal = KS_PRODUCT.basePrice + KITCHEN_PRODUCT.basePrice;
+      const tax = Math.round(subtotal * 0.1);
+      const serviceCharge = Math.round(subtotal * 0.05);
+
+      const createMulti = await ordersRoute.POST(
+        makeReq(
+          "/api/orders",
+          "POST",
+          {
+            order: makeOrderPayload("ord-multi-patch-1", {
+              status: "CONFIRMED",
+              paymentStatus: "PAID",
+              subtotal,
+              tax,
+              serviceCharge,
+              total: subtotal + tax + serviceCharge,
+              items: [
+                {
+                  id: "it-mt-ks",
+                  productId: KS_PRODUCT.id,
+                  tenantId: KS_PRODUCT.tenantId,
+                  productName: KS_PRODUCT.name,
+                  quantity: 1,
+                  unitPrice: KS_PRODUCT.basePrice,
+                },
+                {
+                  id: "it-mt-kitchen",
+                  productId: KITCHEN_PRODUCT.id,
+                  tenantId: KITCHEN_PRODUCT.tenantId,
+                  productName: KITCHEN_PRODUCT.name,
+                  quantity: 1,
+                  unitPrice: KITCHEN_PRODUCT.basePrice,
+                },
+              ],
+            }),
+          },
+          CASHIER_COOKIE
+        )
+      );
+      expect(createMulti.status).toBe(200);
+
+      // Tenant KS omits `items` in PATCH and sets status: COOKING
+      const ksCookingRes = await callOrdersPatch(
+        { id: "ord-multi-patch-1", status: "COOKING" },
+        TENANT_KS_COOKIE
+      );
+      expect(ksCookingRes.status).toBe(200);
+      const ksCookingOrder: OrderRecord = (await ksCookingRes.json()).order;
+      expect(ksCookingOrder.tenantStatuses?.["tenant-ks"]).toBe("COOKING");
+      expect(ksCookingOrder.tenantStatuses?.["tenant-kitchen"]).toBeUndefined();
+      expect(ksCookingOrder.status).toBe("CONFIRMED");
+      expect(ksCookingOrder.cookingStartedAt).toBeTruthy();
+      expect(isOrderBeforeCooking(ksCookingOrder)).toBe(false);
+      expect(
+        isOrderBeforeCooking({
+          status: ksCookingOrder.status,
+          tenantStatuses: ksCookingOrder.tenantStatuses,
+        })
+      ).toBe(false);
+
+      // Tenant KS advances to READY without items -> overall order still CONFIRMED because kitchen is not READY
+      const ksReadyRes = await callOrdersPatch(
+        { id: "ord-multi-patch-1", status: "READY" },
+        TENANT_KS_COOKIE
+      );
+      expect(ksReadyRes.status).toBe(200);
+      const ksReadyOrder: OrderRecord = (await ksReadyRes.json()).order;
+      expect(ksReadyOrder.tenantStatuses?.["tenant-ks"]).toBe("READY");
+      expect(ksReadyOrder.status).toBe("CONFIRMED");
+
+      // Tenant KS cannot cancel multi-tenant order
+      const ksCancelRes = await callOrdersPatch(
+        { id: "ord-multi-patch-1", status: "CANCELLED" },
+        TENANT_KS_COOKIE
+      );
+      expect(ksCancelRes.status).toBe(403);
+
+      // Tenant Kitchen advances to READY without items -> aggregate order becomes READY
+      const kitchenReadyRes = await callOrdersPatch(
+        { id: "ord-multi-patch-1", status: "READY" },
+        TENANT_KITCHEN_COOKIE
+      );
+      expect(kitchenReadyRes.status).toBe(200);
+      const kitchenReadyOrder: OrderRecord = (await kitchenReadyRes.json()).order;
+      expect(kitchenReadyOrder.tenantStatuses).toEqual({
+        "tenant-ks": "READY",
+        "tenant-kitchen": "READY",
+      });
+      expect(kitchenReadyOrder.status).toBe("READY");
+
+      // Manager refunds after tenant cooking started -> BOM must NOT be restored
+      const managerRefundRes = await callOrdersPatch(
+        {
+          id: "ord-multi-patch-1",
+          status: "CANCELLED",
+          paymentStatus: "REFUNDED",
+          refundReason: "Dibatalkan pasca tenant masak",
+        },
+        MANAGER_COOKIE
+      );
+      expect(managerRefundRes.status).toBe(200);
+      const refundedJson = await managerRefundRes.json();
+      expect(refundedJson.order.bomRestored).toBeFalsy();
+      expect(refundedJson.bomRestoration.restored).toBe(false);
+
+      const invState = await readPersistentDomainState(inventoryDomainSpec);
+      expect(invState.ingredients.find((i) => i.id === "ing-1")!.stockNumber).toBeCloseTo(
+        initialMilk - 0.12,
+        3
+      );
+    });
+
+    it("DELETE /api/orders?id=... on a PAID pre-cook order sets paymentStatus REFUNDED and restores BOM once", async () => {
+      const initialMilk = INITIAL_INGREDIENTS.find((i) => i.id === "ing-1")!.stockNumber;
+
+      const createPaid = await ordersRoute.POST(
+        makeReq(
+          "/api/orders",
+          "POST",
+          {
+            order: makeOrderPayload("ord-del-paid-refund-1", {
+              status: "CONFIRMED",
+              paymentStatus: "PAID",
+              items: [
+                {
+                  id: "it-del-paid",
+                  productId: KS_PRODUCT.id,
+                  tenantId: KS_PRODUCT.tenantId,
+                  productName: KS_PRODUCT.name,
+                  quantity: 1,
+                  unitPrice: KS_PRODUCT.basePrice,
+                },
+              ],
+              subtotal: KS_PRODUCT.basePrice,
+              tax: Math.round(KS_PRODUCT.basePrice * 0.1),
+              serviceCharge: Math.round(KS_PRODUCT.basePrice * 0.05),
+              total:
+                KS_PRODUCT.basePrice +
+                Math.round(KS_PRODUCT.basePrice * 0.1) +
+                Math.round(KS_PRODUCT.basePrice * 0.05),
+            }),
+          },
+          CASHIER_COOKIE
+        )
+      );
+      expect(createPaid.status).toBe(200);
+
+      const delRes = await ordersRoute.DELETE(
+        makeReq(
+          "/api/orders?id=ord-del-paid-refund-1",
+          "DELETE",
+          { voidReason: "Batal sebelum masak via DELETE" },
+          MANAGER_COOKIE
+        )
+      );
+      expect(delRes.status).toBe(200);
+      const delJson = await delRes.json();
+      expect(delJson.order.status).toBe("CANCELLED");
+      expect(delJson.order.paymentStatus).toBe("REFUNDED");
+      expect(delJson.order.bomRestored).toBe(true);
+
+      const invState = await readPersistentDomainState(inventoryDomainSpec);
+      expect(invState.ingredients.find((i) => i.id === "ing-1")!.stockNumber).toBeCloseTo(
+        initialMilk,
+        3
+      );
+    });
   });
 });

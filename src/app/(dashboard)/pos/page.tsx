@@ -43,7 +43,6 @@ import {
   resolveCoworkingReceiptPublisher,
   resolvePosReceiptPublisher,
   resolvePublisherCode,
-  syncSequenceFromOrderNumber,
 } from "@/lib/receipt-publisher";
 import {
   getNextOpenCoworkingDate,
@@ -124,7 +123,7 @@ export default function POSPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
   const { orders, createPosOrderWithSync } = useOrders();
   const { getAvailableTables, occupyTableWithOrder, areas, filteredAreas } = useTables();
-  const { simulateBOMDeduction, deductOrderBOM, checkProductStockStatus } = useInventory();
+  const { simulateBOMDeduction, checkProductStockStatus } = useInventory();
   const { filteredProducts: masterProducts, categories } = useProducts();
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
@@ -775,9 +774,6 @@ export default function POSPage() {
       }
 
       const createdOrder = syncResult.order ?? optimisticOrder;
-      if (createdOrder.orderNumber) {
-        syncSequenceFromOrderNumber(createdOrder.orderNumber);
-      }
 
       const kitchenTicket: KitchenTicketData = {
         orderId: createdOrder.id,
@@ -822,19 +818,6 @@ export default function POSPage() {
             });
           }
         });
-      }
-
-      const bomItems = cartItems.map((c) => ({
-        productId: c.productId,
-        productName: c.productName,
-        quantity: c.quantity,
-        modifiers: [
-          ...(c.selectedVariant ? [c.selectedVariant.name] : []),
-          ...c.selectedModifiers.map((m) => m.name),
-        ],
-      }));
-      if (createdOrder.paymentStatus === "PAID") {
-        deductOrderBOM(bomItems, createdOrder.id);
       }
 
       if (orderType === "DINE_IN" && selectedTable) {

@@ -3,7 +3,8 @@ import { z } from "zod";
 import {
   getPersistentOrders,
   resetPersistentOrders,
-  savePersistentOrder,
+  mutatePersistentOrders,
+  upsertOrderInList,
   getPersistentLoyaltyPoints,
   updatePersistentLoyaltyPoints,
   claimQrisSessionForOrder,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/qris-verification";
 import {
   filterOrdersByTenant,
+  isKdsGatedStatus,
   normalizeTenantId,
   resolveNormalizedItemTenantId,
 } from "@/features/orders/orders-domain";
@@ -124,8 +126,7 @@ function mergeStatusHistory(
   return [...existing, ...appended];
 }
 
-// Client-side bookkeeping and server-managed fields that must never be set directly by clients.
-const CLIENT_ONLY_FIELDS = [
+const STRIPPED_CLIENT_ORDER_FIELDS = [
   "syncStatus",
   "syncError",
   "supervisorPin",
@@ -134,22 +135,14 @@ const CLIENT_ONLY_FIELDS = [
   "bomRestored",
 ] as const;
 
-const KDS_GATED_STATUSES = new Set<OrderStatus>([
-  "KITCHEN_RECEIVED",
-  "COOKING",
-  "READY",
-  "SERVED",
-  "COMPLETED",
-]);
-
 function targetsKdsStage(
   order: Pick<OrderRecord, "status" | "tenantStatuses">
 ): boolean {
   if (order.status === "CANCELLED") return false;
-  if (KDS_GATED_STATUSES.has(order.status)) return true;
+  if (isKdsGatedStatus(order.status)) return true;
   if (order.tenantStatuses) {
     return Object.values(order.tenantStatuses).some((stage) =>
-      KDS_GATED_STATUSES.has(stage)
+      isKdsGatedStatus(stage)
     );
   }
   return false;
@@ -157,7 +150,7 @@ function targetsKdsStage(
 
 function withoutClientFields(order: OrderRecord): OrderRecord {
   const copy: Record<string, unknown> = { ...order };
-  for (const field of CLIENT_ONLY_FIELDS) delete copy[field];
+  for (const field of STRIPPED_CLIENT_ORDER_FIELDS) delete copy[field];
   return copy as unknown as OrderRecord;
 }
 
@@ -195,12 +188,13 @@ type OrderWriteDecision =
 function mergeTenantWorkflowStageUpdate(
   existingOrder: OrderRecord,
   orderData: OrderRecord,
-  scopedTenantId: string
+  scopedTenantId: string,
+  explicitTenantStage?: OrderStatus
 ): OrderRecord {
-  const nextTenantStage = orderData.tenantStatuses?.[scopedTenantId] || orderData.status;
+  const nextTenantStage =
+    explicitTenantStage || orderData.tenantStatuses?.[scopedTenantId] || orderData.status;
   const mergedTenantStatuses: Record<string, OrderStatus> = {
     ...(existingOrder.tenantStatuses || {}),
-    ...(orderData.tenantStatuses || {}),
     [scopedTenantId]: nextTenantStage,
   };
   return {
@@ -512,155 +506,404 @@ async function authorizeOrderRouteWrite(req: NextRequest): Promise<
   return { ok: true, auth: auth as ServerAuthResult & { role: RoleSlug } };
 }
 
+type OrderWriteAction =
+  | {
+      mode: "UPSERT";
+      initialOrderData: OrderRecord;
+    }
+  | {
+      mode: "PATCH";
+      targetId: string;
+      rawPatch: Partial<OrderRecord>;
+    }
+  | {
+      mode: "CANCEL_DELETE";
+      targetId: string;
+      voidReason: string;
+    };
+
+type OrderMutationOutcome =
+  | { ok: false; response: NextResponse }
+  | {
+      ok: true;
+      savedOrder: OrderRecord;
+      priorOrder: OrderRecord | undefined;
+      auditPaidChange: boolean;
+      validatedTotal: number;
+      isCancelOrRefund: boolean;
+      shouldAttemptRestore: boolean;
+      cancelReason: string;
+      creditsLoyalty: boolean;
+      customerKey: string;
+      serverEarnedPoints: number;
+    };
+
+function buildOrderCandidateForWrite(
+  action: OrderWriteAction,
+  existingOrder: OrderRecord | undefined,
+  auth: ServerAuthResult & { role: RoleSlug }
+): { ok: true; orderData: OrderRecord } | { ok: false; response: NextResponse } {
+  if (action.mode === "UPSERT") {
+    return { ok: true, orderData: action.initialOrderData };
+  }
+
+  if (!existingOrder) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: `NOT_FOUND: Pesanan [${action.targetId}] tidak ditemukan.` },
+        { status: 404 }
+      ),
+    };
+  }
+
+  if (action.mode === "CANCEL_DELETE") {
+    const nowIso = new Date().toISOString();
+    const nextPaymentStatus =
+      existingOrder.paymentStatus === "PAID"
+        ? ("REFUNDED" as const)
+        : existingOrder.paymentStatus;
+    return {
+      ok: true,
+      orderData: {
+        ...existingOrder,
+        status: "CANCELLED",
+        paymentStatus: nextPaymentStatus,
+        voidReason: action.voidReason,
+        voidedAt: existingOrder.voidedAt || nowIso,
+        ...(nextPaymentStatus === "REFUNDED"
+          ? {
+              refundReason: existingOrder.refundReason || action.voidReason,
+              refundedAt: existingOrder.refundedAt || nowIso,
+            }
+          : {}),
+        statusHistory:
+          existingOrder.status === "CANCELLED"
+            ? existingOrder.statusHistory
+            : [
+                ...(existingOrder.statusHistory ?? []),
+                {
+                  id: `h-del-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  orderId: existingOrder.id,
+                  fromStatus: existingOrder.status,
+                  toStatus: "CANCELLED",
+                  timestamp: nowIso,
+                  actorId: auth.userId ?? undefined,
+                  actorName: auth.name || auth.role,
+                  note: action.voidReason,
+                },
+              ],
+      },
+    };
+  }
+
+  const patchEntries = Object.entries(action.rawPatch as unknown as Record<string, unknown>).filter(
+    ([, value]) => value !== undefined
+  );
+  const mergedOrder: OrderRecord = {
+    ...existingOrder,
+    ...(Object.fromEntries(patchEntries) as Partial<OrderRecord>),
+    id: existingOrder.id,
+  };
+
+  const rawHasHistory =
+    Array.isArray(action.rawPatch.statusHistory) && action.rawPatch.statusHistory.length > 0;
+  if (!rawHasHistory && mergedOrder.status && mergedOrder.status !== existingOrder.status) {
+    const nowIso = new Date().toISOString();
+    mergedOrder.statusHistory = [
+      ...(existingOrder.statusHistory ?? []),
+      {
+        id: `h-patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        orderId: existingOrder.id,
+        fromStatus: existingOrder.status,
+        toStatus: mergedOrder.status,
+        timestamp: nowIso,
+        actorId: auth.userId ?? undefined,
+        actorName: auth.name || auth.role,
+        note:
+          mergedOrder.status === "CANCELLED"
+            ? mergedOrder.voidReason || mergedOrder.refundReason || "Pesanan dibatalkan"
+            : `Status diubah menjadi ${mergedOrder.status}`,
+      },
+    ];
+  }
+
+  return { ok: true, orderData: mergedOrder };
+}
+
 async function executeAuthorizedOrderWrite(params: {
   auth: ServerAuthResult & { role: RoleSlug };
-  existingOrder: OrderRecord | undefined;
-  initialOrderData: OrderRecord;
+  action: OrderWriteAction;
   supervisorPin: string;
 }): Promise<NextResponse> {
-  const { auth, existingOrder, supervisorPin } = params;
-  let orderData = params.initialOrderData;
+  const { auth, action, supervisorPin } = params;
 
-  const validation = validateOrderPayload(orderData);
-  if (!validation.ok) return validation.response;
-  const validatedTotal = validation.total;
+  if (action.mode === "UPSERT") {
+    const preValidation = validateOrderPayload(action.initialOrderData);
+    if (!preValidation.ok) return preValidation.response;
+  }
 
   const scopedTenantId =
     (auth.scopeLevel === "TENANT" || auth.role === "KITCHEN_STAFF") && auth.tenantId
       ? normalizeTenantId(auth.tenantId)
       : undefined;
 
-  if (existingOrder && scopedTenantId) {
-    const orderFallback = (existingOrder as { tenantId?: string }).tenantId;
-    const existingTenants = Array.from(
-      new Set(
-        existingOrder.items.map((it) => resolveNormalizedItemTenantId(it, orderFallback))
-      )
-    );
-    if (!existingTenants.includes(scopedTenantId)) {
-      return NextResponse.json(
-        { error: "FORBIDDEN: Pesanan ini tidak memiliki item untuk tenant Anda." },
-        { status: 403 }
-      );
+  const outcome = await mutatePersistentOrders<OrderMutationOutcome>(async (existingOrders) => {
+    const targetId =
+      action.mode === "UPSERT" ? action.initialOrderData.id : action.targetId;
+    const existingOrder = existingOrders.find((o) => o.id === targetId);
+
+    const candidate = buildOrderCandidateForWrite(action, existingOrder, auth);
+    if (!candidate.ok) {
+      return { nextOrders: existingOrders, result: candidate };
     }
 
-    if (existingTenants.length > 1) {
-      const requestsReversal =
-        orderData.status === "CANCELLED" ||
-        orderData.paymentStatus === "REFUNDED" ||
-        Boolean(orderData.voidReason);
-      if (requestsReversal) {
-        return NextResponse.json(
-          {
-            error:
-              "FORBIDDEN: Pembatalan atau refund pesanan multi-mitra harus diproses oleh kasir atau supervisor hub.",
+    let orderData = candidate.orderData;
+    const validation = validateOrderPayload(orderData);
+    if (!validation.ok) {
+      return { nextOrders: existingOrders, result: { ok: false, response: validation.response } };
+    }
+    const validatedTotal = validation.total;
+
+    if (existingOrder && scopedTenantId) {
+      const orderFallback = (existingOrder as { tenantId?: string }).tenantId;
+      const existingTenants = Array.from(
+        new Set(
+          existingOrder.items.map((it) => resolveNormalizedItemTenantId(it, orderFallback))
+        )
+      );
+      if (!existingTenants.includes(scopedTenantId)) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              { error: "FORBIDDEN: Pesanan ini tidak memiliki item untuk tenant Anda." },
+              { status: 403 }
+            ),
           },
-          { status: 403 }
-        );
+        };
       }
 
-      const clientItemsMatchTenant =
-        Array.isArray(orderData.items) &&
-        orderData.items.length > 0 &&
-        orderData.items.every(
-          (it) => resolveNormalizedItemTenantId(it, orderFallback) === scopedTenantId
-        );
+      if (existingTenants.length > 1) {
+        const requestsReversal =
+          orderData.status === "CANCELLED" ||
+          orderData.paymentStatus === "REFUNDED" ||
+          Boolean(orderData.voidReason);
+        if (requestsReversal) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              response: NextResponse.json(
+                {
+                  error:
+                    "FORBIDDEN: Pembatalan atau refund pesanan multi-mitra harus diproses oleh kasir atau supervisor hub.",
+                },
+                { status: 403 }
+              ),
+            },
+          };
+        }
 
-      if (clientItemsMatchTenant) {
-        orderData = mergeTenantWorkflowStageUpdate(existingOrder, orderData, scopedTenantId);
+        const isClosed =
+          existingOrder.status === "CANCELLED" || existingOrder.paymentStatus === "REFUNDED";
+        if (!isClosed) {
+          const explicitTenantStage =
+            action.mode === "PATCH"
+              ? action.rawPatch.tenantStatuses?.[scopedTenantId] ?? action.rawPatch.status
+              : action.mode === "UPSERT"
+              ? action.initialOrderData.tenantStatuses?.[scopedTenantId] ??
+                action.initialOrderData.status
+              : orderData.status;
+          orderData = mergeTenantWorkflowStageUpdate(
+            existingOrder,
+            orderData,
+            scopedTenantId,
+            explicitTenantStage
+          );
+        }
+      } else if (orderData.tenantStatuses) {
+        const scopedStage = orderData.tenantStatuses[scopedTenantId];
+        orderData = {
+          ...orderData,
+          tenantStatuses: {
+            ...(existingOrder.tenantStatuses || {}),
+            ...(scopedStage ? { [scopedTenantId]: scopedStage } : {}),
+          },
+        };
       }
     }
-  }
 
-  if (existingOrder) {
-    orderData = {
-      ...orderData,
-      confirmedAt: existingOrder.confirmedAt || orderData.confirmedAt,
-      kitchenReceivedAt: existingOrder.kitchenReceivedAt || orderData.kitchenReceivedAt,
-      cookingStartedAt: existingOrder.cookingStartedAt || orderData.cookingStartedAt,
-      cookingFinishedAt: existingOrder.cookingFinishedAt || orderData.cookingFinishedAt,
-      readyAt: existingOrder.readyAt || orderData.readyAt,
-      servedAt: existingOrder.servedAt || orderData.servedAt,
-      completedAt: existingOrder.completedAt || orderData.completedAt,
-    };
-  }
-  if (orderData.status === "COOKING" && !orderData.cookingStartedAt) {
-    orderData = { ...orderData, cookingStartedAt: new Date().toISOString() };
-  }
-
-  const decision = decideOrderWrite(
-    auth.role,
-    auth.scopeLevel,
-    existingOrder,
-    orderData,
-    Boolean(supervisorPin)
-  );
-  if (!decision.allowed) {
-    return NextResponse.json({ error: decision.error }, { status: decision.status || 403 });
-  }
-
-  if (decision.requiresPinCheck) {
-    const pinCheck = authorizeSupervisorQrisOverride({
-      pin: supervisorPin,
-      referenceNumber: (orderData.orderNumber || orderData.id || "ORDER").padEnd(4, "0"),
-      actorKey: auth.userId || auth.role,
-    });
-    if (!pinCheck.allowed) {
-      const message =
-        pinCheck.statusCode === 403
-          ? "FORBIDDEN: PIN Supervisor tidak valid. Otorisasi pembatalan atau refund pesanan ditolak."
-          : pinCheck.error;
-      return NextResponse.json(
-        { error: message },
-        { status: pinCheck.statusCode || 403 }
-      );
+    if (existingOrder) {
+      orderData = {
+        ...orderData,
+        confirmedAt: existingOrder.confirmedAt || orderData.confirmedAt,
+        kitchenReceivedAt: existingOrder.kitchenReceivedAt || orderData.kitchenReceivedAt,
+        cookingStartedAt: existingOrder.cookingStartedAt || orderData.cookingStartedAt,
+        cookingFinishedAt: existingOrder.cookingFinishedAt || orderData.cookingFinishedAt,
+        readyAt: existingOrder.readyAt || orderData.readyAt,
+        servedAt: existingOrder.servedAt || orderData.servedAt,
+        completedAt: existingOrder.completedAt || orderData.completedAt,
+      };
     }
-    orderData = {
-      ...orderData,
-      supervisorPinVerified: true,
-    };
-  }
 
-  // A PAID QRIS order must consume exactly one verified QRIS session, identified by its gateway invoice number.
-  const alreadySettledByThisPayment =
-    existingOrder?.paymentStatus === "PAID" &&
-    existingOrder.paymentMethod === "QRIS" &&
-    existingOrder.total === orderData.total &&
-    existingOrder.qrisVerification?.invoiceNumber === orderData.qrisVerification?.invoiceNumber;
-  if (orderData.paymentMethod === "QRIS" && orderData.paymentStatus === "PAID" && !alreadySettledByThisPayment) {
-    const qrisInvoiceNumber = orderData.qrisVerification?.invoiceNumber?.trim();
-    const claim = qrisInvoiceNumber
-      ? await claimQrisSessionForOrder({
-          invoiceNumber: qrisInvoiceNumber,
-          orderId: orderData.id,
-          amount: validatedTotal,
-        })
-      : ({ ok: false, reason: "NOT_FOUND" } as const);
+    const hasCookingStage =
+      orderData.status === "COOKING" ||
+      Object.values(orderData.tenantStatuses ?? {}).some((stage) => stage === "COOKING");
+    if (hasCookingStage && !orderData.cookingStartedAt) {
+      orderData = { ...orderData, cookingStartedAt: new Date().toISOString() };
+    }
 
-    if (!claim.ok) {
-      return NextResponse.json(
-        {
-          error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
+    const decision = decideOrderWrite(
+      auth.role,
+      auth.scopeLevel,
+      existingOrder,
+      orderData,
+      Boolean(supervisorPin)
+    );
+    if (!decision.allowed) {
+      return {
+        nextOrders: existingOrders,
+        result: {
+          ok: false,
+          response: NextResponse.json(
+            { error: decision.error },
+            { status: decision.status || 403 }
+          ),
         },
-        { status: 409 }
-      );
+      };
     }
-  }
 
-  // Evaluate pre-cook eligibility against the PRIOR stored order before persisting CANCELLED status.
-  const isCancelOrRefund =
-    orderData.status === "CANCELLED" || orderData.paymentStatus === "REFUNDED";
-  let bomRestoration: { restored: boolean; reason: string; restoredItems: number } | null = null;
-  if (existingOrder && isCancelOrRefund) {
-    const reason =
+    if (decision.requiresPinCheck) {
+      const pinCheck = authorizeSupervisorQrisOverride({
+        pin: supervisorPin,
+        referenceNumber: (orderData.orderNumber || orderData.id || "ORDER").padEnd(4, "0"),
+        actorKey: auth.userId || auth.role,
+      });
+      if (!pinCheck.allowed) {
+        const message =
+          pinCheck.statusCode === 403
+            ? "FORBIDDEN: PIN Supervisor tidak valid. Otorisasi pembatalan atau refund pesanan ditolak."
+            : pinCheck.error;
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              { error: message },
+              { status: pinCheck.statusCode || 403 }
+            ),
+          },
+        };
+      }
+      orderData = {
+        ...orderData,
+        supervisorPinVerified: true,
+      };
+    }
+
+    // A PAID QRIS order must consume exactly one verified QRIS session, identified by its gateway invoice number.
+    const alreadySettledByThisPayment =
+      existingOrder?.paymentStatus === "PAID" &&
+      existingOrder.paymentMethod === "QRIS" &&
+      existingOrder.total === orderData.total &&
+      existingOrder.qrisVerification?.invoiceNumber === orderData.qrisVerification?.invoiceNumber;
+    if (
+      orderData.paymentMethod === "QRIS" &&
+      orderData.paymentStatus === "PAID" &&
+      !alreadySettledByThisPayment
+    ) {
+      const qrisInvoiceNumber = orderData.qrisVerification?.invoiceNumber?.trim();
+      const claim = qrisInvoiceNumber
+        ? await claimQrisSessionForOrder({
+            invoiceNumber: qrisInvoiceNumber,
+            orderId: orderData.id,
+            amount: validatedTotal,
+          })
+        : ({ ok: false, reason: "NOT_FOUND" } as const);
+
+      if (!claim.ok) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              {
+                error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
+              },
+              { status: 409 }
+            ),
+          },
+        };
+      }
+    }
+
+    const isCancelOrRefund =
+      orderData.status === "CANCELLED" || orderData.paymentStatus === "REFUNDED";
+    const shouldAttemptRestore = Boolean(
+      existingOrder && isCancelOrRefund && isOrderBeforeCooking(existingOrder)
+    );
+    const cancelReason =
       orderData.refundReason ||
       orderData.voidReason ||
       (orderData.paymentStatus === "REFUNDED"
         ? "Refund transaksi pelanggan"
         : "Pembatalan (void) pesanan");
-    if (isOrderBeforeCooking(existingOrder)) {
-      bomRestoration = await restorePersistentOrderBOMIfBeforeCooking(existingOrder, {
-        reason,
+
+    // Loyalty is earned once, when an order first becomes PAID, by the customer named on that order.
+    const becomesPaid =
+      orderData.paymentStatus === "PAID" &&
+      orderData.status !== "CANCELLED" &&
+      existingOrder?.paymentStatus !== "PAID" &&
+      !existingOrder?.loyaltyPointsCredited;
+    const customerKey = String(orderData.customerName || "").trim();
+    const serverEarnedPoints = becomesPaid ? Math.floor(validatedTotal / 10000) : 0;
+    const creditsLoyalty = Boolean(customerKey) && serverEarnedPoints > 0;
+
+    const orderToPersist = creditsLoyalty
+      ? { ...orderData, loyaltyPointsCredited: true }
+      : orderData;
+    const { nextOrders, savedOrder } = upsertOrderInList(existingOrders, orderToPersist);
+
+    return {
+      nextOrders,
+      result: {
+        ok: true,
+        savedOrder,
+        priorOrder: existingOrder,
+        auditPaidChange: decision.auditPaidChange,
+        validatedTotal,
+        isCancelOrRefund,
+        shouldAttemptRestore,
+        cancelReason,
+        creditsLoyalty,
+        customerKey,
+        serverEarnedPoints,
+      },
+    };
+  });
+
+  if (!outcome.ok) return outcome.response;
+
+  const {
+    savedOrder,
+    priorOrder,
+    auditPaidChange,
+    validatedTotal,
+    isCancelOrRefund,
+    shouldAttemptRestore,
+    cancelReason,
+    creditsLoyalty,
+    customerKey,
+    serverEarnedPoints,
+  } = outcome;
+
+  let bomRestoration: { restored: boolean; reason: string; restoredItems: number } | null = null;
+  if (priorOrder && isCancelOrRefund) {
+    if (shouldAttemptRestore) {
+      bomRestoration = await restorePersistentOrderBOMIfBeforeCooking(priorOrder, {
+        reason: cancelReason,
       });
     } else {
       bomRestoration = {
@@ -670,20 +913,6 @@ async function executeAuthorizedOrderWrite(params: {
       };
     }
   }
-
-  // Loyalty is earned once, when an order first becomes PAID, by the customer named on that order.
-  const becomesPaid =
-    orderData.paymentStatus === "PAID" &&
-    orderData.status !== "CANCELLED" &&
-    existingOrder?.paymentStatus !== "PAID" &&
-    !existingOrder?.loyaltyPointsCredited;
-  const customerKey = String(orderData.customerName || "").trim();
-  const serverEarnedPoints = becomesPaid ? Math.floor(validatedTotal / 10000) : 0;
-  const creditsLoyalty = Boolean(customerKey) && serverEarnedPoints > 0;
-
-  const savedOrder = await savePersistentOrder(
-    creditsLoyalty ? { ...orderData, loyaltyPointsCredited: true } : orderData
-  );
 
   let bomDeduction: { applied: boolean; deductedItems: number } | null = null;
   if (
@@ -697,10 +926,13 @@ async function executeAuthorizedOrderWrite(params: {
   }
 
   const finalOrder: OrderRecord =
-    (await getPersistentOrders()).find((o) => o.id === savedOrder.id) ??
-    (bomDeduction?.applied ? { ...savedOrder, bomDeducted: true } : savedOrder);
+    (await getPersistentOrders()).find((o) => o.id === savedOrder.id) ?? {
+      ...savedOrder,
+      ...(bomDeduction?.applied ? { bomDeducted: true } : {}),
+      ...(bomRestoration?.restored ? { bomRestored: true } : {}),
+    };
 
-  if (decision.auditPaidChange) {
+  if (auditPaidChange) {
     const isRefund = finalOrder.paymentStatus === "REFUNDED";
     const isVoid = !isRefund && (finalOrder.status === "CANCELLED" || Boolean(finalOrder.voidReason));
     const auditAction = isRefund
@@ -736,21 +968,21 @@ async function executeAuthorizedOrderWrite(params: {
       referenceId: finalOrder.id,
       outletId: finalOrder.outletId,
       outletName: finalOrder.outletName,
-      previousValue: `Status: ${existingOrder?.status || "-"}, Payment: ${existingOrder?.paymentStatus || "-"}, Total: Rp ${(existingOrder?.total ?? 0).toLocaleString("id-ID")}`,
+      previousValue: `Status: ${priorOrder?.status || "-"}, Payment: ${priorOrder?.paymentStatus || "-"}, Total: Rp ${(priorOrder?.total ?? 0).toLocaleString("id-ID")}`,
       newValue: `Status: ${finalOrder.status}, Payment: ${finalOrder.paymentStatus}, Total: Rp ${validatedTotal.toLocaleString("id-ID")}`,
       description: isRefund
         ? `Refund transaksi ${finalOrder.orderNumber || finalOrder.id} sebesar Rp ${validatedTotal.toLocaleString("id-ID")}. Disetujui: ${supervisorLabel}`
         : isVoid
         ? `Pembatalan (void) pesanan ${finalOrder.orderNumber || finalOrder.id}. Disetujui: ${supervisorLabel}`
-        : `Transaksi lunas ${finalOrder.orderNumber || finalOrder.id} diubah supervisor: status ${finalOrder.paymentStatus}/${finalOrder.status}, total ${existingOrder?.total} -> ${validatedTotal}.`,
+        : `Transaksi lunas ${finalOrder.orderNumber || finalOrder.id} diubah supervisor: status ${finalOrder.paymentStatus}/${finalOrder.status}, total ${priorOrder?.total} -> ${validatedTotal}.`,
       reason: auditReason,
       status: "SUCCESS",
       severity: "HIGH",
       category: "TRANSACTION",
       metadata: {
-        previousStatus: existingOrder?.status,
-        previousPaymentStatus: existingOrder?.paymentStatus,
-        previousTotal: existingOrder?.total,
+        previousStatus: priorOrder?.status,
+        previousPaymentStatus: priorOrder?.paymentStatus,
+        previousTotal: priorOrder?.total,
         total: validatedTotal,
         paymentStatus: finalOrder.paymentStatus,
         status: finalOrder.status,
@@ -789,11 +1021,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existingOrder = (await getPersistentOrders()).find((o) => o.id === orderData.id);
     return await executeAuthorizedOrderWrite({
       auth: authCheck.auth,
-      existingOrder,
-      initialOrderData: orderData,
+      action: { mode: "UPSERT", initialOrderData: orderData },
       supervisorPin,
     });
   } catch (err: unknown) {
@@ -819,54 +1049,9 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const existingOrder = (await getPersistentOrders()).find((o) => o.id === targetId);
-    if (!existingOrder) {
-      return NextResponse.json(
-        { error: `NOT_FOUND: Pesanan [${targetId}] tidak ditemukan.` },
-        { status: 404 }
-      );
-    }
-
-    const patchEntries = Object.entries(rawPatch as unknown as Record<string, unknown>).filter(
-      ([, value]) => value !== undefined
-    );
-    const mergedOrder: OrderRecord = {
-      ...existingOrder,
-      ...(Object.fromEntries(patchEntries) as Partial<OrderRecord>),
-      id: existingOrder.id,
-    };
-
-    const rawHasHistory =
-      Array.isArray((rawPatch as Partial<OrderRecord>).statusHistory) &&
-      (rawPatch as Partial<OrderRecord>).statusHistory!.length > 0;
-    if (
-      !rawHasHistory &&
-      mergedOrder.status &&
-      mergedOrder.status !== existingOrder.status
-    ) {
-      const nowIso = new Date().toISOString();
-      mergedOrder.statusHistory = [
-        ...(existingOrder.statusHistory ?? []),
-        {
-          id: `h-patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          orderId: existingOrder.id,
-          fromStatus: existingOrder.status,
-          toStatus: mergedOrder.status,
-          timestamp: nowIso,
-          actorId: authCheck.auth.userId ?? undefined,
-          actorName: authCheck.auth.name || authCheck.auth.role,
-          note:
-            mergedOrder.status === "CANCELLED"
-              ? mergedOrder.voidReason || mergedOrder.refundReason || "Pesanan dibatalkan"
-              : `Status diubah menjadi ${mergedOrder.status}`,
-        },
-      ];
-    }
-
     return await executeAuthorizedOrderWrite({
       auth: authCheck.auth,
-      existingOrder,
-      initialOrderData: mergedOrder,
+      action: { mode: "PATCH", targetId, rawPatch },
       supervisorPin,
     });
   } catch (err: unknown) {
@@ -902,49 +1087,15 @@ export async function DELETE(req: NextRequest) {
         );
       }
 
-      const existingOrder = (await getPersistentOrders()).find((o) => o.id === targetId.trim());
-      if (!existingOrder) {
-        return NextResponse.json(
-          { error: `NOT_FOUND: Pesanan [${targetId}] tidak ditemukan.` },
-          { status: 404 }
-        );
-      }
-
       const supervisorPin = typeof body?.supervisorPin === "string" ? body.supervisorPin.trim() : "";
       const voidReason =
         (typeof body?.voidReason === "string" && body.voidReason.trim()) ||
         searchParams.get("reason") ||
-        existingOrder.voidReason ||
         "Dibatalkan via DELETE /api/orders";
-      const nowIso = new Date().toISOString();
-
-      const cancelledOrder: OrderRecord = {
-        ...existingOrder,
-        status: "CANCELLED",
-        voidReason,
-        voidedAt: existingOrder.voidedAt || nowIso,
-        statusHistory:
-          existingOrder.status === "CANCELLED"
-            ? existingOrder.statusHistory
-            : [
-                ...(existingOrder.statusHistory ?? []),
-                {
-                  id: `h-del-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  orderId: existingOrder.id,
-                  fromStatus: existingOrder.status,
-                  toStatus: "CANCELLED",
-                  timestamp: nowIso,
-                  actorId: auth.userId ?? undefined,
-                  actorName: auth.name || auth.role,
-                  note: voidReason,
-                },
-              ],
-      };
 
       return await executeAuthorizedOrderWrite({
         auth: auth as ServerAuthResult & { role: RoleSlug },
-        existingOrder,
-        initialOrderData: cancelledOrder,
+        action: { mode: "CANCEL_DELETE", targetId: targetId.trim(), voidReason },
         supervisorPin,
       });
     }
