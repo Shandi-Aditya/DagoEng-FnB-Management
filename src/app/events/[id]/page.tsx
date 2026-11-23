@@ -42,7 +42,6 @@ import type { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 
 import { EventDetailSidebar } from "@/features/event-detail/EventDetailSidebar";
 import { EventBookingDialog, type BookingFormData } from "@/features/event-detail/EventBookingDialog";
-import { EventPaymentGuideDialog } from "@/features/event-detail/EventPaymentGuideDialog";
 import { EventTicketPassDialog } from "@/features/event-detail/EventTicketPassDialog";
 import { EventShareDialog } from "@/features/event-detail/EventShareDialog";
 import {
@@ -114,7 +113,6 @@ export default function EventDetailPage() {
   // Modals
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
 
   // Booking Form State
@@ -228,7 +226,11 @@ export default function EventDetailPage() {
       if (isEventPaidEffective(event) && orderData.totalPrice > 0) {
         setPendingTicket(orderData);
         const targetUrl = orderData.paymentUrl || `/events/tickets/${orderData.guestToken}`;
-        router.push(targetUrl);
+        if (/^https?:\/\//i.test(targetUrl)) {
+          window.location.assign(targetUrl);
+        } else {
+          router.push(targetUrl);
+        }
       } else {
         setIssuedTicket(orderData);
         setIsTicketModalOpen(true);
@@ -238,13 +240,6 @@ export default function EventDetailPage() {
     } finally {
       setIsSubmittingBooking(false);
     }
-  };
-
-  const handleProceedToTicketView = () => {
-    if (!pendingTicket) return;
-    setIsPaymentModalOpen(false);
-    setIssuedTicket(pendingTicket);
-    setIsTicketModalOpen(true);
   };
 
   if (isLoading) {
@@ -550,14 +545,6 @@ export default function EventDetailPage() {
         onSubmit={handleBookingSubmit}
         isSubmitting={isSubmittingBooking}
         error={bookingError}
-      />
-
-      <EventPaymentGuideDialog
-        open={isPaymentModalOpen}
-        onOpenChange={setIsPaymentModalOpen}
-        ticket={pendingTicket}
-        event={event}
-        onViewTicket={handleProceedToTicketView}
       />
 
       <EventTicketPassDialog

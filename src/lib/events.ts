@@ -4403,7 +4403,41 @@ export async function createEventBooking(
         (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
       );
 
-      // 1. Quota & Venue Capacity Check
+      // 1. Anti-duplicate Booking Protection & 15s Idempotency Guard (Rapid clicks)
+      // Must be evaluated BEFORE quota subtraction so rapid clicks on the last ticket converge gracefully
+      const normalizedEmail = payload.guestEmail.trim().toLowerCase();
+      const normalizedPhone = payload.guestPhone ? payload.guestPhone.trim() : "";
+      const recentRepeatWindow = Date.now() - 15 * 1000;
+
+      const recentIdenticalBooking = activeBookings.find((b) => {
+        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
+        const isSamePhone = !normalizedPhone || !b.guestPhone || b.guestPhone.trim() === normalizedPhone;
+        const isRecent = new Date(b.createdAt).getTime() > recentRepeatWindow;
+        const isSameTier = b.ticketTierId === (payload.ticketTierId || undefined);
+        const isSameCount = b.ticketCount === Math.floor(payload.ticketCount);
+        const isEligibleStatus = b.paymentStatus === "PENDING" || b.paymentStatus === "PAID";
+        return isSameEmail && isSamePhone && isRecent && isSameTier && isSameCount && isEligibleStatus;
+      });
+
+      if (recentIdenticalBooking) {
+        committedBooking = recentIdenticalBooking;
+        return recentIdenticalBooking;
+      }
+
+      const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
+      const isDuplicate = activeBookings.some((b) => {
+        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
+        const isRecent = new Date(b.createdAt).getTime() > threeMinutesAgo;
+        return isSameEmail && isRecent;
+      });
+
+      if (isDuplicate) {
+        throw new Error(
+          "Pemesanan tiket untuk event ini baru saja dilakukan dari email yang sama. Mohon tunggu 3 menit sebelum melakukan pemesanan tiket baru."
+        );
+      }
+
+      // 2. Quota & Venue Capacity Check
       let selectedTier: EventTicketTier | undefined;
       let unitPrice = 0;
 
@@ -4443,37 +4477,6 @@ export async function createEventBooking(
       if (payload.ticketCount > remainingQuota) {
         throw new Error(
           `Kapasitas venue atau kuota tiket telah penuh. Sisa tiket tersedia saat ini: ${Math.max(0, remainingQuota)} tiket.`
-        );
-      }
-
-      // 2. Anti-duplicate Booking Protection (same email + same event within 3 minutes)
-      const normalizedEmail = payload.guestEmail.trim().toLowerCase();
-      const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
-      const recentRepeatWindow = Date.now() - 15 * 1000;
-
-      // Idempotency guard for rapid button clicks: converge to existing pending booking
-      const recentIdenticalBooking = activeBookings.find((b) => {
-        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
-        const isRecent = new Date(b.createdAt).getTime() > recentRepeatWindow;
-        const isSameTier = b.ticketTierId === (selectedTier?.id || undefined);
-        const isSameCount = b.ticketCount === Math.floor(payload.ticketCount);
-        return isSameEmail && isRecent && isSameTier && isSameCount && b.paymentStatus === "PENDING";
-      });
-
-      if (recentIdenticalBooking) {
-        committedBooking = recentIdenticalBooking;
-        return recentIdenticalBooking;
-      }
-
-      const isDuplicate = activeBookings.some((b) => {
-        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
-        const isRecent = new Date(b.createdAt).getTime() > threeMinutesAgo;
-        return isSameEmail && isRecent;
-      });
-
-      if (isDuplicate) {
-        throw new Error(
-          "Pemesanan tiket untuk event ini baru saja dilakukan dari email yang sama. Mohon tunggu 3 menit sebelum melakukan pemesanan tiket baru."
         );
       }
 
@@ -4628,11 +4631,11 @@ export async function createEventBooking(
       markStorageSyncSynced("event_bookings.json");
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket gratis terbit (PAID)
-      if (committedBooking && (committedBooking as EventTicketOrder).paymentStatus === "PAID") {
+      if (result && result.paymentStatus === "PAID") {
         let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([
-            dispatchPaidTicketEmail(committedBooking as EventTicketOrder),
+            dispatchPaidTicketEmail(result),
             new Promise((_, reject) => {
               emailTimer = setTimeout(() => reject(new Error("Timeout sending free ticket email")), 10000);
             }),
