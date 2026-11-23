@@ -654,6 +654,7 @@ export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
     activeOrgModules: normalizeActiveOrgModules(
       DEFAULT_PLATFORM_SETTINGS.activeOrgModules
     ),
+    qrSelfOrderQrisOnly: DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
     appliedPromoOpIds: [],
   };
 }
@@ -737,6 +738,12 @@ export function mergePlatformSettingsState(
       patch.activeOrgModules !== undefined
         ? normalizeActiveOrgModules(patch.activeOrgModules)
         : normalizeActiveOrgModules(base.activeOrgModules),
+    qrSelfOrderQrisOnly:
+      typeof patch.qrSelfOrderQrisOnly === "boolean"
+        ? patch.qrSelfOrderQrisOnly
+        : typeof base.qrSelfOrderQrisOnly === "boolean"
+          ? base.qrSelfOrderQrisOnly
+          : DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
     appliedPromoOpIds: Array.isArray(patch.appliedPromoOpIds)
       ? patch.appliedPromoOpIds.slice(-MAX_APPLIED_OP_IDS)
       : base.appliedPromoOpIds ?? [],

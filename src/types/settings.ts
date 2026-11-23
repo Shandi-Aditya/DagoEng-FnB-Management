@@ -102,6 +102,7 @@ export interface PlatformSettings {
   eventRevenueSharing: EventMarketplaceRevenuePolicy;
   categoryTax?: CategoryTaxConfig;
   activeOrgModules?: BusinessModuleCode[];
+  qrSelfOrderQrisOnly?: boolean;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -119,6 +120,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   eventRevenueSharing: DEFAULT_EVENT_REVENUE_POLICY,
   categoryTax: DEFAULT_CATEGORY_TAX_CONFIG,
   activeOrgModules: ["CORE", "FNB", "CO_WORKING"],
+  qrSelfOrderQrisOnly: true,
   loyaltyTiers: {
     bronzeMin: 0,
     bronzeMax: 499,
