@@ -12,6 +12,7 @@ import {
 } from "@/lib/unified-account";
 import { RoleSlug } from "@/types/auth";
 import { EmployeeProfile } from "@/types/shift";
+import { maskCustomerPhone, maskCustomerEmail } from "@/lib/loyalty-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,7 @@ export async function GET(req: NextRequest) {
       "CASHIER",
       "WAITER",
       "KITCHEN_STAFF",
+      "INVENTORY_STAFF",
     ];
 
     if (!ALLOWED_EMPLOYEE_READ_ROLES.includes(auth.role)) {
@@ -141,21 +143,11 @@ export async function GET(req: NextRequest) {
 
     // Mask contacts for non-managerial staff to prevent internal data harvesting
     if (!isManagerial) {
-      employees = employees.map((e) => {
-        const contact = e.contact || "";
-        const email = e.email || "";
-        const maskedContact = contact.length >= 8 ? `${contact.slice(0, 4)}****${contact.slice(-4)}` : contact;
-        const emailParts = email.split("@");
-        const maskedEmail =
-          emailParts.length === 2 && emailParts[0].length > 2
-            ? `${emailParts[0].slice(0, 2)}***${emailParts[0].slice(-1)}@${emailParts[1]}`
-            : email;
-        return {
-          ...e,
-          contact: maskedContact,
-          email: maskedEmail,
-        };
-      });
+      employees = employees.map((e) => ({
+        ...e,
+        contact: e.contact ? maskCustomerPhone(e.contact) : e.contact,
+        email: e.email ? maskCustomerEmail(e.email) : e.email,
+      }));
     }
 
     return NextResponse.json({

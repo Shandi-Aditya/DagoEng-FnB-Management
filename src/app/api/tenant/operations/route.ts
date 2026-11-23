@@ -71,6 +71,28 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { tenantOperations, tenantId, updates } = body;
 
+    // Enforce Tenant Boundary: A tenant-scoped caller can only modify their own tenant operations
+    if (auth.scopeLevel === "TENANT" && auth.tenantId) {
+      if (tenantId && tenantId !== auth.tenantId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Akses ditolak: Mitra hanya diizinkan mengubah jam operasional tenant miliknya sendiri.",
+          },
+          { status: 403 }
+        );
+      }
+      if (tenantOperations && Object.keys(tenantOperations).some((tId) => tId !== auth.tenantId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Akses ditolak: Mitra tidak diizinkan mengubah jam operasional tenant lain.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const current = await readPersistentData<Record<string, TenantOperationConfig>>(
       STORAGE_FILE,
       DEFAULT_TENANT_OPERATIONS

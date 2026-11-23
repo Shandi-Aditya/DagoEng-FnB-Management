@@ -235,7 +235,7 @@ export async function GET(req: NextRequest) {
 
     if (phone) {
       // Query raw phone number is strictly restricted to managerial roles
-      if (!canUserViewFullCustomerContacts(auth.role)) {
+      if (!canUserViewFullCustomerContacts(auth.role, auth.scopeLevel)) {
         return NextResponse.json(
           {
             success: false,
@@ -270,17 +270,16 @@ export async function GET(req: NextRequest) {
         if (sessionEmail && m.email && m.email.toLowerCase().trim() === sessionEmail) {
           return true;
         }
-        if (sessionUserId && (m.id === sessionUserId || (m as any).metadata?.userId === sessionUserId)) {
+        if (sessionUserId && (m.id === sessionUserId || (m as { metadata?: { userId?: string } }).metadata?.userId === sessionUserId)) {
           return true;
         }
         return false;
       });
     }
 
-    const sanitizedMembers =
-      auth.role === "CUSTOMER"
-        ? members.map((m) => ({ ...m, identityNo: "" }))
-        : members.map((m) => sanitizeMemberForRole(m, auth.role));
+    const sanitizedMembers = members.map((m) =>
+      sanitizeMemberForRole(m, auth.role, auth.scopeLevel, { isSelf: auth.role === "CUSTOMER" })
+    );
 
     return NextResponse.json({
       success: true,
@@ -352,7 +351,7 @@ export async function POST(req: NextRequest) {
       (m) => normalizeLoyaltyPhone(m.phone) === normPhone
     );
 
-    const isManagerial = canUserViewFullCustomerContacts(auth.role);
+    const isManagerial = canUserViewFullCustomerContacts(auth.role, auth.scopeLevel);
 
     // If existing member found:
     // CASHIER is strictly forbidden from overwriting points, tier, or using allowUpdate
@@ -502,7 +501,7 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    const isManagerial = canUserViewFullCustomerContacts(auth.role);
+    const isManagerial = canUserViewFullCustomerContacts(auth.role, auth.scopeLevel);
     const nextPoints =
       updates.points !== undefined ? updates.points : target.points;
 
@@ -658,13 +657,13 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Batasi DELETE hanya untuk SUPER_ADMIN | OWNER | MANAGER
-    if (!canUserViewFullCustomerContacts(auth.role)) {
+    // Batasi DELETE hanya untuk SUPER_ADMIN | Hub OWNER | MANAGER
+    if (!canUserViewFullCustomerContacts(auth.role, auth.scopeLevel)) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Akses ditolak: Hanya Owner, Super Admin, dan Manager yang dapat menghapus member.",
+            "Akses ditolak: Hanya Owner, Super Admin, dan Manager Hub yang dapat menghapus member.",
         },
         { status: 403 }
       );

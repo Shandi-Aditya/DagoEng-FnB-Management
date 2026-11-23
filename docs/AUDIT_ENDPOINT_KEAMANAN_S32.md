@@ -38,16 +38,26 @@ Seluruh celah tersebut telah ditutup dan diverifikasi dengan tes otomatis `tests
   - Manajemen (`SUPER_ADMIN`, `OWNER`, `MANAGER`): Menerima data kontak lengkap untuk kebutuhan operasional outlet.
 
 ### 2.3 Endpoint `/api/reports/closing/pdf`
-- **Sebelum**: Terbuka tanpa autentikasi.
-- **Perbaikan**: Mewajibkan sesi login kasir atau manajer (`SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER`). Panggilan tanpa login ditolak dengan HTTP `401`.
+- **Sebelum**: Terbuka tanpa autentikasi, parameter URL diinterpolasi ke template HTML tanpa sanitasi.
+- **Perbaikan**:
+  - Mewajibkan sesi login kasir atau manajer (`SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER`). Panggilan tanpa login ditolak dengan HTTP `401`, role lain ditolak `403`.
+  - Seluruh parameter input URL query (`outlet`, `cashier`, `date`, `time`, `docNo`, `notes`) disanitasi menggunakan `escapeHtml` guna mencegah celah Reflected XSS.
 
 ### 2.4 Endpoint `/api/tenant/operations`
 - **Sebelum**: Metode `POST` dapat dipanggil tanpa login untuk mengubah jam operasional tenant.
-- **Perbaikan**: Metode `POST` dikunci hanya untuk role manajerial (`SUPER_ADMIN`, `OWNER`, `MANAGER`). Panggilan tanpa login ditolak dengan HTTP `401`.
+- **Perbaikan**:
+  - Metode `POST` dikunci hanya untuk role manajerial (`SUPER_ADMIN`, `OWNER`, `MANAGER`). Panggilan tanpa login ditolak dengan HTTP `401`.
+  - Penegakan Batas Tenant (*Tenant Boundary*): Akun pemilik tenant (`OWNER` dengan scope `TENANT`) dibatasi secara ketat hanya dapat memodifikasi tenant miliknya sendiri (`auth.tenantId`). Upaya mengubah tenant mitra lain ditolak dengan HTTP `403`.
 
 ### 2.5 Endpoint `/api/products`
 - **Sebelum**: Mengembalikan nilai HPP (`cogsEstimate`) dan persentase margin kotor (`grossMarginPercent`) ke semua pemanggil.
-- **Perbaikan**: Untuk pemanggil tanpa login atau role non-manajerial (`CUSTOMER`, tamu umum), nilai `cogsEstimate` dinetralkan ke `0` dan `grossMarginPercent` ke `"0%"`.
+- **Perbaikan**:
+  - Untuk pemanggil tanpa login atau role non-manajerial (`CUSTOMER`, tamu umum), nilai `cogsEstimate` dinetralkan ke `0` dan `grossMarginPercent` ke `"0%"`.
+  - Pemilik tenant (`OWNER` scope `TENANT`) tetap diizinkan melihat data HPP untuk produk milik tenant-nya sendiri.
+
+### 2.6 Endpoint `/api/settings/settlement-receipt`
+- **Sebelum**: Terbuka untuk semua sesi terautentikasi (termasuk Customer).
+- **Perbaikan**: Dikunci hanya untuk `SUPER_ADMIN`, `OWNER`, dan `MANAGER`. Role lain (seperti `CUSTOMER`) ditolak dengan HTTP `403`.
 
 ---
 
@@ -96,4 +106,4 @@ Seluruh celah tersebut telah ditutup dan diverifikasi dengan tes otomatis `tests
 1. Kriteria `Tanpa login -> 401`: Terpenuhi pada `/api/loyalty/members`, `/api/employees`, `/api/reports/closing/pdf`, dan seluruh endpoint transaksional.
 2. Kriteria `Customer hanya melihat data dirinya`: Terpenuhi pada `/api/loyalty/members` (disaring ketat berdasarkan email/userId sesi) dan `/api/coworking/bookings` (booking lain di-anonymize).
 3. Kriteria `Daftar endpoint yang dicek tercatat`: Seluruh 33 endpoint GET tercatat lengkap dalam laporan ini.
-4. Pengujian otomatis: `tests/s32-member-data-leak-and-endpoint-audit.test.ts` (13/13 skenario lulus) dan `tests/customer-role-access-and-tier.test.ts` (27/27 skenario lulus).
+4. Pengujian otomatis: `tests/s32-member-data-leak-and-endpoint-audit.test.ts` (19/19 skenario lulus) dan `tests/customer-role-access-and-tier.test.ts` (27/27 skenario lulus).

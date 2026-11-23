@@ -34,6 +34,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const ALLOWED_SETTLEMENT_READ_ROLES: string[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+    if (!ALLOWED_SETTLEMENT_READ_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki wewenang untuk membaca kebijakan bagi hasil.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const stored = await readPersistentData<Partial<SettlementReceiptPolicyConfig> | null>(
       SETTLEMENT_POLICY_STORAGE_FILE,
       null

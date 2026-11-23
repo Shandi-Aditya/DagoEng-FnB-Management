@@ -225,14 +225,27 @@ export async function GET(req: NextRequest) {
       products = products.filter((p) => p.status === status);
     }
 
-    // Mask financial cost calculations (COGS/HPP and gross margin %) for unauthenticated callers and customers
+    // Mask financial cost calculations (COGS/HPP and gross margin %) for unauthenticated callers and customers.
+    // Tenant Owners can view COGS for their own tenant products.
     const sanitizedProducts = isManagerial
       ? products
-      : products.map((p) => ({
-          ...p,
-          cogsEstimate: 0,
-          grossMarginPercent: "0%",
-        }));
+      : products.map((p) => {
+          const isOwnTenantProduct =
+            auth.isAuthenticated &&
+            auth.role === "OWNER" &&
+            auth.scopeLevel === "TENANT" &&
+            auth.tenantId &&
+            normalizeTenantId(p.tenantId || "tenant-ks") === normalizeTenantId(auth.tenantId);
+
+          if (isOwnTenantProduct) {
+            return p;
+          }
+          return {
+            ...p,
+            cogsEstimate: 0,
+            grossMarginPercent: "0%",
+          };
+        });
 
     return NextResponse.json({
       success: true,
