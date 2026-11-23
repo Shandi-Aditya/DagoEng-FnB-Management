@@ -11,6 +11,11 @@ import {
   getAllTenantRevenueSplits,
   getTenantRevenueSplit,
 } from "@/lib/settlement";
+import {
+  allocateCategoryTaxAndService,
+  allocateIntegerProRata,
+  isCoworkingOrderItem,
+} from "@/lib/tax-breakdown";
 import { getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 
@@ -217,8 +222,9 @@ export async function buildTransactionTemplateWorkbook(
     const isQris = o.paymentMethod === "QRIS";
     const subTotal = o.subtotal || 0;
     const taxTotal = o.tax || 0;
+    const serviceTotal = o.serviceCharge || 0;
     const discountTotal = o.discount || 0;
-    const total = o.total || subTotal - discountTotal + taxTotal;
+    const total = o.total || Math.max(0, subTotal - discountTotal) + taxTotal + serviceTotal;
 
     const taxPercent =
       o.taxRatePercent !== undefined
@@ -373,33 +379,41 @@ export async function buildTransactionTemplateWorkbook(
     const payment = (o.paymentMethod || o.paymentStatus || "cash").toLowerCase();
     const dt = formatWitaDateTime(o.createdAt, "dd/MM/yyyy HH:mm");
 
-    let orderValidGross = 0;
-    o.items.forEach((item) => {
+    const orderItems = o.items || [];
+    const itemGrosses = orderItems.map((item) => {
       const qty = Number(item.quantity) || 0;
       const price = Number(item.unitPrice) || 0;
-      orderValidGross += qty * price;
+      return Math.round(qty * price);
     });
+    const itemDiscounts = allocateIntegerProRata(o.discount || 0, itemGrosses);
+    const categoryTaxAllocs = allocateCategoryTaxAndService(
+      orderItems.map((item, idx) => ({
+        isCoworking: isCoworkingOrderItem(item),
+        subtotal: itemGrosses[idx] ?? 0,
+      })),
+      o.tax || 0,
+      o.serviceCharge || 0
+    );
 
-    const orderTax = o.tax || 0;
-    const orderDiscount = o.discount || 0;
-
-    o.items.forEach((item) => {
+    orderItems.forEach((item, idx) => {
       const qty = Number(item.quantity) || 0;
       const price = Number(item.unitPrice) || 0;
-      const itemGross = qty * price;
-      const ratio = orderValidGross > 0 ? itemGross / orderValidGross : 0;
-
-      const itemTax = Math.round(orderTax * ratio * 100) / 100;
-      const itemDiscount = Math.round(orderDiscount * ratio * 100) / 100;
-      const itemSubtotal = itemGross;
-      const itemTotal = itemSubtotal - itemDiscount + itemTax;
+      const itemSubtotal = itemGrosses[idx] ?? 0;
+      const itemDiscount = Math.min(itemSubtotal, itemDiscounts[idx] ?? 0);
+      const itemTax = categoryTaxAllocs[idx]?.tax ?? 0;
+      const itemServiceCharge = categoryTaxAllocs[idx]?.serviceCharge ?? 0;
+      const itemTotal =
+        Math.max(0, itemSubtotal - itemDiscount) + itemTax + itemServiceCharge;
 
       const qrisRate = isQris ? "0.7%" : "";
       const qrisTotal = isQris ? Math.round(itemTotal * 0.007 * 100) / 100 : 0;
       const itemGrandTotal = itemTotal - qrisTotal;
 
       const tenantId = resolveItemTenantId(item, (o as { tenantId?: string }).tenantId);
-      const tenantName = getTenantName(tenantId) || tenantId;
+      const tenantName =
+        tenantId === "DAGO_HUB"
+          ? "Dago Creative Hub"
+          : getTenantName(tenantId) || tenantId;
 
       const splitConfig = activeSplits[tenantId] || getTenantRevenueSplit(tenantId);
       const tenantSharePct =
@@ -408,10 +422,13 @@ export async function buildTransactionTemplateWorkbook(
           : splitConfig.tenantSharePercent ?? 85;
       const dagoSharePct = 100 - tenantSharePct;
 
-      const shareTenant = Math.round(itemGrandTotal * (tenantSharePct / 100) * 1000) / 1000;
-      const shareDago = Math.round(itemGrandTotal * (dagoSharePct / 100) * 1000) / 1000;
+      const shareBase = Math.max(0, itemSubtotal - itemDiscount - qrisTotal);
+      const shareTenant = Math.round(shareBase * (tenantSharePct / 100) * 1000) / 1000;
+      const shareDago = Math.round(shareBase * (dagoSharePct / 100) * 1000) / 1000;
 
-      const category = resolveProductCategory(item.productId, item.productName, products);
+      const category = isCoworkingOrderItem(item)
+        ? item.category || "Co-Working"
+        : resolveProductCategory(item.productId, item.productName, products);
       const itemNote = item.notes || o.notes || "";
 
       ws2.addRow([

@@ -8,6 +8,7 @@ import {
   KitchenTicketData,
   PrintPurpose,
   DEFAULT_PRINTER_DEVICES,
+  OutletReceiptCombineMode,
 } from "@/types/printer";
 import { POSReceiptData } from "@/features/pos/types";
 import type { RoleSlug } from "@/types/auth";
@@ -15,6 +16,7 @@ import { OrderRecord } from "@/types/order";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
+import { useSettings } from "./SettingsContext";
 import {
   canRoleReceiveCashierReceipt,
   canRoleReceiveKitchenReceipt,
@@ -35,7 +37,7 @@ import {
   recoverStalePrintingJobs,
   dispatchPrintJob,
   splitKitchenTicketByTenant,
-  splitCustomerReceiptByTenant,
+  splitCustomerReceiptByMode,
 } from "@/lib/printer";
 import { getTenantName } from "@/lib/tenant";
 import { useSyncedDomain } from "@/lib/use-synced-domain";
@@ -62,7 +64,7 @@ interface PrinterContextType {
   ) => Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }>;
   printCustomerReceipt: (
     receipt: POSReceiptData,
-    options?: { isManualReprint?: boolean }
+    options?: { isManualReprint?: boolean; receiptCombineMode?: OutletReceiptCombineMode }
   ) => Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }>;
   printFromOrderRecord: (
     order: OrderRecord,
@@ -94,6 +96,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { activeOutletId, activeOutlet } = useOutlet();
   const { logActivity } = useActivityLog();
+  const { settings: platformSettings } = useSettings();
 
   const [printerConfig, mutatePrinterConfig] = useSyncedDomain(printerConfigSyncClient, {
     rehydrateKey: user?.id ?? null,
@@ -559,11 +562,18 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const printCustomerReceipt = useCallback(
     async (
       receipt: POSReceiptData,
-      options?: { isManualReprint?: boolean }
+      options?: { isManualReprint?: boolean; receiptCombineMode?: OutletReceiptCombineMode }
     ): Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }> => {
       const targetPrinter = activeCustomerPrinter || DEFAULT_PRINTER_DEVICES[0];
-      const shouldSplit = Boolean(settings.splitCustomerReceiptPerTenant);
-      const receiptsToPrint = shouldSplit ? splitCustomerReceiptByTenant(receipt) : [receipt];
+      const effectiveCombineMode: OutletReceiptCombineMode =
+        options?.receiptCombineMode ??
+        platformSettings.receiptCombineMode ??
+        settings.receiptCombineMode ??
+        "COMBINED";
+      const receiptsToPrint = splitCustomerReceiptByMode(receipt, {
+        receiptCombineMode: effectiveCombineMode,
+        splitCustomerReceiptPerTenant: Boolean(settings.splitCustomerReceiptPerTenant),
+      });
 
       const createdJobs: PrintJob[] = [];
       let allSuccess = true;
@@ -649,7 +659,13 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           : lastErrorInfo || "Gagal mencetak struk kasir.",
       };
     },
-    [activeCustomerPrinter, activeOutletId, settings.splitCustomerReceiptPerTenant]
+    [
+      activeCustomerPrinter,
+      activeOutletId,
+      platformSettings.receiptCombineMode,
+      settings.receiptCombineMode,
+      settings.splitCustomerReceiptPerTenant,
+    ]
   );
 
   const printFromOrderRecord = useCallback(

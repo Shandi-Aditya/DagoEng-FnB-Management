@@ -38,12 +38,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import {
   CONFIGURABLE_RECEIPT_ROLES,
   DEFAULT_RECEIPT_ROLE_POLICY,
   canManageSettlementAndReceiptPolicy,
 } from "@/lib/settlement-receipt-policy";
 import type { RoleSlug } from "@/types/auth";
+import type { OutletReceiptCombineMode } from "@/types/settings";
 import type {
   POSPrintingSettings,
   PrinterConnectionType,
@@ -62,6 +64,7 @@ import {
 export function PrinterSettingsTab() {
   const { user } = useAuth();
   const { outlets } = useOutlet();
+  const { settings: platformSettings, updateSettings: updatePlatformSettings } = useSettings();
   const {
     devices,
     settings,
@@ -84,12 +87,23 @@ export function PrinterSettingsTab() {
   const canManageReceiptRoles = canManageSettlementAndReceiptPolicy(user);
 
   // Local Form state for operational settings
-  const [localSettings, setLocalSettings] = useState<POSPrintingSettings>(settings);
+  const [localSettings, setLocalSettings] = useState<POSPrintingSettings>(() => ({
+    ...settings,
+    receiptCombineMode:
+      settings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED",
+  }));
   const [savedSettingsSuccess, setSavedSettingsSuccess] = useState(false);
 
   useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
+    setLocalSettings({
+      ...settings,
+      receiptCombineMode:
+        settings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED",
+    });
+  }, [settings, platformSettings.receiptCombineMode]);
+
+  const effectiveCombineMode: OutletReceiptCombineMode =
+    localSettings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED";
 
   const cashierReceiptRoles =
     localSettings.cashierReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles;
@@ -206,15 +220,27 @@ export function PrinterSettingsTab() {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    const nextCombineMode: OutletReceiptCombineMode =
+      localSettings.receiptCombineMode ?? platformSettings.receiptCombineMode ?? "COMBINED";
+    const nextPrinterSettings: POSPrintingSettings = {
+      ...localSettings,
+      receiptCombineMode: nextCombineMode,
+    };
     updateSettings(
       canManageReceiptRoles
-        ? localSettings
+        ? nextPrinterSettings
         : {
-            ...localSettings,
+            ...nextPrinterSettings,
             cashierReceiptRoles: settings.cashierReceiptRoles,
             kitchenReceiptRoles: settings.kitchenReceiptRoles,
           }
     );
+    if (
+      canManageReceiptRoles &&
+      nextCombineMode !== (platformSettings.receiptCombineMode ?? "COMBINED")
+    ) {
+      updatePlatformSettings({ receiptCombineMode: nextCombineMode });
+    }
     setSavedSettingsSuccess(true);
     notify.success(
       "Aturan cetak disimpan",
@@ -569,6 +595,47 @@ export function PrinterSettingsTab() {
                   className="mt-1 rounded border"
                 />
               </label>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-lg border p-3.5">
+              <div className="flex flex-col gap-0.5">
+                <Label className="text-xs font-medium text-foreground">
+                  Mode struk co-working dan F&B (gabung / pisah)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Menentukan apakah pesanan campuran co-working dan F&B dicetak sebagai satu struk gabungan atau dua struk terpisah.
+                </p>
+              </div>
+              <div
+                role="group"
+                aria-label="Mode struk co-working dan F&B (gabung / pisah)"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                <Button
+                  type="button"
+                  size="lg"
+                  variant={effectiveCombineMode === "COMBINED" ? "default" : "outline"}
+                  aria-pressed={effectiveCombineMode === "COMBINED"}
+                  onClick={() =>
+                    setLocalSettings((prev) => ({ ...prev, receiptCombineMode: "COMBINED" }))
+                  }
+                  className="w-full justify-start"
+                >
+                  Gabung (1 struk: Dago & mitra)
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  variant={effectiveCombineMode === "SEPARATE" ? "default" : "outline"}
+                  aria-pressed={effectiveCombineMode === "SEPARATE"}
+                  onClick={() =>
+                    setLocalSettings((prev) => ({ ...prev, receiptCombineMode: "SEPARATE" }))
+                  }
+                  className="w-full justify-start"
+                >
+                  Pisah (struk co-working & F&B terpisah)
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

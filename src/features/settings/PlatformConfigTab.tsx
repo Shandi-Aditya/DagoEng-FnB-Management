@@ -11,7 +11,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { INDONESIAN_NATIONAL_HOLIDAYS_2026, type HolidayOverrideDate } from "@/lib/operating-hours";
-import type { CategoryTaxType } from "@/types/settings";
+import type { CategoryTaxType, OutletReceiptCombineMode } from "@/types/settings";
 
 export interface PlatformConfigTabProps {
   // Business Modules
@@ -64,6 +64,8 @@ export interface PlatformConfigTabProps {
   onFnbCloseTimeChange: (val: string) => void;
   qrSelfOrderQrisOnly: boolean;
   onQrSelfOrderQrisOnlyChange: (value: boolean) => void;
+  receiptCombineMode: OutletReceiptCombineMode;
+  onReceiptCombineModeChange: (value: OutletReceiptCombineMode) => void;
   // Holidays & Overrides
   cwWeekendClosed: boolean;
   onCwWeekendClosedChange: (val: boolean) => void;
@@ -122,6 +124,8 @@ export function PlatformConfigTab(props: PlatformConfigTabProps) {
     onFnbCloseTimeChange,
     qrSelfOrderQrisOnly,
     onQrSelfOrderQrisOnlyChange,
+    receiptCombineMode,
+    onReceiptCombineModeChange,
     cwWeekendClosed,
     onCwWeekendClosedChange,
     cwNationalHolidaysClosed,
@@ -426,6 +430,51 @@ export function PlatformConfigTab(props: PlatformConfigTabProps) {
               onCheckedChange={onQrSelfOrderQrisOnlyChange}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="size-4 text-muted-foreground" />
+            <span>Mode struk co-working dan F&B (gabung / pisah)</span>
+          </CardTitle>
+          <CardDescription>
+            Pilih apakah transaksi campuran ruang kerja dan F&B dicetak dalam satu struk atau dipisah.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div
+            role="group"
+            aria-label="Mode struk co-working dan F&B (gabung / pisah)"
+            className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+          >
+            <Button
+              type="button"
+              size="lg"
+              variant={receiptCombineMode === "COMBINED" ? "default" : "outline"}
+              aria-pressed={receiptCombineMode === "COMBINED"}
+              onClick={() => onReceiptCombineModeChange("COMBINED")}
+              className="w-full justify-start"
+            >
+              Gabung (1 struk: Dago & mitra)
+            </Button>
+            <Button
+              type="button"
+              size="lg"
+              variant={receiptCombineMode === "SEPARATE" ? "default" : "outline"}
+              aria-pressed={receiptCombineMode === "SEPARATE"}
+              onClick={() => onReceiptCombineModeChange("SEPARATE")}
+              className="w-full justify-start"
+            >
+              Pisah (struk co-working & F&B terpisah)
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {receiptCombineMode === "COMBINED"
+              ? "Kasir mencetak 1 struk berisi bagian Dago Creative Hub (Co-Working) dan mitra F&B."
+              : "Kasir mencetak struk co-working (0% PB1) terpisah dari struk pesanan F&B."}
+          </p>
         </CardContent>
       </Card>
 
