@@ -383,6 +383,75 @@ describe("V-32 Wave 2A: KDS Payment Gate, BOM Lifecycle & Canonical Order Unique
         initialCup - 3
       );
     });
+
+    it("promotes NEW/PENDING QRIS self-order to CONFIRMED/PAID and deducts BOM once via SUPERVISOR_OVERRIDE", async () => {
+      const initialMilk = INITIAL_INGREDIENTS.find((i) => i.id === "ing-1")!.stockNumber;
+
+      const soRes = await selfOrderPost(
+        makeReq("/api/orders/self-order", "POST", {
+          order: {
+            id: "ord-so-sup-bom-1",
+            tableNumber: "T-08",
+            customerName: "Tamu Override",
+            paymentMethod: "QRIS",
+            items: [
+              {
+                id: "it-so-sup-1",
+                productId: KS_PRODUCT.id,
+                productName: KS_PRODUCT.name,
+                quantity: 1,
+                unitPrice: KS_PRODUCT.basePrice,
+              },
+            ],
+          },
+        })
+      );
+      expect(soRes.status).toBe(200);
+      const created: OrderRecord = (await soRes.json()).order;
+
+      const supRes1 = await qrisVerifyPost(
+        makeReq(
+          "/api/pos/qris/verify",
+          "POST",
+          {
+            mode: "SUPERVISOR_OVERRIDE",
+            invoiceNumber: created.orderNumber,
+            pin: "9137",
+            referenceNumber: "RRN-V32-001",
+          },
+          MANAGER_COOKIE
+        )
+      );
+      expect(supRes1.status).toBe(200);
+
+      const settled = (await getPersistentOrders()).find((o) => o.id === "ord-so-sup-bom-1")!;
+      expect(settled.paymentStatus).toBe("PAID");
+      expect(settled.status).toBe("CONFIRMED");
+      expect(settled.bomDeducted).toBe(true);
+      expect(filterKitchenOrders([settled], ALL_KDS_FILTERS)).toHaveLength(1);
+
+      // Repeat override rejected with 409 and never double-deducts
+      const supRes2 = await qrisVerifyPost(
+        makeReq(
+          "/api/pos/qris/verify",
+          "POST",
+          {
+            mode: "SUPERVISOR_OVERRIDE",
+            invoiceNumber: created.orderNumber,
+            pin: "9137",
+            referenceNumber: "RRN-V32-002",
+          },
+          MANAGER_COOKIE
+        )
+      );
+      expect(supRes2.status).toBe(409);
+
+      const invState = await readPersistentDomainState(inventoryDomainSpec);
+      expect(invState.ingredients.find((i) => i.id === "ing-1")!.stockNumber).toBeCloseTo(
+        initialMilk - 0.12,
+        3
+      );
+    });
   });
 
   describe("3. Pre-Cook vs Post-Cook BOM Restoration on Cancel/Void/Refund", () => {

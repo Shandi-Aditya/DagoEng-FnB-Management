@@ -3,7 +3,6 @@ import {
   getPersistentOrders,
   getPersistentProductsData,
   getPersistentQrisSession,
-  getPersistentQrisSessions,
   isVerifiedQrisStatus,
   readSeededPersistentData,
   savePersistentOrder,
@@ -12,6 +11,7 @@ import {
 import { POS_PRODUCTS } from "@/features/pos/mock-data";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import { calculateOrderPricing } from "@/lib/promo";
+import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 import { resolveSelfOrderPaymentMethod } from "@/lib/self-order-policy";
 import { calculateCartTaxAndService } from "@/lib/tax-breakdown";
 import { OrderItemRecord, OrderRecord } from "@/types/order";
@@ -340,34 +340,28 @@ export async function POST(req: NextRequest) {
       },
     ];
 
-    const candidateOrderNumber =
-      typeof rawOrder.orderNumber === "string" ? rawOrder.orderNumber.trim() : "";
-    const existingQrisForCandidate = candidateOrderNumber
-      ? await getPersistentQrisSession(candidateOrderNumber)
-      : null;
-    const isCandidateTaken =
-      !candidateOrderNumber ||
-      existingOrders.some((o) => o.orderNumber === candidateOrderNumber) ||
-      Boolean(existingQrisForCandidate);
+    const outletName =
+      typeof rawOrder.outletName === "string" && rawOrder.outletName.trim()
+        ? rawOrder.outletName.trim()
+        : "Singaraja";
 
-    let resolvedOrderNumber = candidateOrderNumber;
-    if (isCandidateTaken) {
-      const qrisSessions = await getPersistentQrisSessions();
-      const takenOrderNumbers = new Set(existingOrders.map((o) => o.orderNumber));
-      const takenQrisKeys = new Set<string>();
-      for (const s of qrisSessions) {
-        if (s.invoiceNumber) takenQrisKeys.add(s.invoiceNumber);
-        if (s.orderId) takenQrisKeys.add(s.orderId);
-      }
-      do {
-        const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-        resolvedOrderNumber = `ORD-SELF-${Date.now().toString().slice(-6)}-${suffix}`;
-      } while (takenOrderNumbers.has(resolvedOrderNumber) || takenQrisKeys.has(resolvedOrderNumber));
-    }
+    const publisher = resolvePosReceiptPublisher(sanitizedItems, { name: outletName });
+
+    // Defer final sequential uniqueness to savePersistentOrder (locked under FILE_POS_ORDERS),
+    // clearing any candidate that collides with another order's QRIS session.
+    const rawCandidateOrderNumber =
+      typeof rawOrder.orderNumber === "string" ? rawOrder.orderNumber.trim() : "";
+    const existingQrisForCandidate = rawCandidateOrderNumber
+      ? await getPersistentQrisSession(rawCandidateOrderNumber)
+      : null;
+    const candidateOrderNumber =
+      existingQrisForCandidate && existingQrisForCandidate.orderId !== orderId
+        ? ""
+        : rawCandidateOrderNumber;
 
     const orderToSave: OrderRecord = {
       id: orderId,
-      orderNumber: resolvedOrderNumber,
+      orderNumber: candidateOrderNumber,
       organizationId:
         typeof rawOrder.organizationId === "string" && rawOrder.organizationId.trim()
           ? rawOrder.organizationId.trim()
@@ -376,10 +370,8 @@ export async function POST(req: NextRequest) {
         typeof rawOrder.outletId === "string" && rawOrder.outletId.trim()
           ? rawOrder.outletId.trim()
           : "outlet-sgr",
-      outletName:
-        typeof rawOrder.outletName === "string" && rawOrder.outletName.trim()
-          ? rawOrder.outletName.trim()
-          : "Singaraja",
+      outletName,
+      ...(publisher.tenantId ? { tenantId: publisher.tenantId } : {}),
       tableNumber:
         orderType === "TAKEAWAY"
           ? "TAKEAWAY"

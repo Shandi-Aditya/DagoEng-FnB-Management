@@ -10,8 +10,9 @@ import {
   getPersistentOrders,
   getPersistentQrisSession,
   saveCoworkingBooking,
-  savePersistentOrder,
   savePersistentQrisSession,
+  updatePersistentOrderIf,
+  deductPersistentOrderBOM,
   isVerifiedQrisStatus,
   appendAuditLog,
   updatePersistentLoyaltyPoints,
@@ -28,19 +29,33 @@ async function settleMatchingPendingTarget(params: {
   invoiceNumber: string;
   authoritativeExpectedAmount: number;
   nowIso: string;
+  verificationPayload?: {
+    type: "GATEWAY_WEBHOOK" | "SUPERVISOR_MANUAL";
+    referenceNumber: string;
+    invoiceNumber?: string;
+    verifiedAt: string;
+    note?: string;
+  };
+  actorName?: string;
+  historyNote?: string;
+  bomReason?: string;
 }): Promise<QrisVerificationSessionRecord> {
   const { session, invoiceNumber, authoritativeExpectedAmount, nowIso } = params;
   if (session.consumedByOrderId) {
     return session;
   }
 
-  const verificationPayload = {
+  const verificationPayload = params.verificationPayload ?? {
     type: "GATEWAY_WEBHOOK" as const,
     referenceNumber: session.transactionId || invoiceNumber,
     invoiceNumber,
     verifiedAt: session.verifiedAt || nowIso,
     note: "Auto-verified via DagoPay / DOKU QRIS Webhook",
   };
+  const actorName = params.actorName || "DagoPay / DOKU Webhook";
+  const historyNote =
+    params.historyNote || "Pembayaran QRIS terverifikasi otomatis via webhook gateway";
+  const bomReason = params.bomReason || "QRIS Settlement";
 
   const orders = await getPersistentOrders();
   const matchedOrder = orders.find(
@@ -52,50 +67,65 @@ async function settleMatchingPendingTarget(params: {
   );
 
   if (matchedOrder) {
-    const nextStatus = matchedOrder.status === "NEW" ? "CONFIRMED" : matchedOrder.status;
-    const loyaltyKey = (matchedOrder.customerPhone || matchedOrder.customerName || "").trim();
-    const earnedPoints = !matchedOrder.loyaltyPointsCredited
-      ? Math.floor(matchedOrder.total / 10000)
-      : 0;
-    const creditsLoyalty = Boolean(loyaltyKey) && earnedPoints > 0;
+    let creditedLoyaltyNow = false;
+    let loyaltyKey = "";
+    let earnedPoints = 0;
 
-    await savePersistentOrder({
-      ...matchedOrder,
-      paymentStatus: "PAID",
-      paymentMethod: "QRIS",
-      paymentReference: verificationPayload.referenceNumber,
-      status: nextStatus,
-      confirmedAt: matchedOrder.confirmedAt || nowIso,
-      qrisVerification: verificationPayload,
-      ...(creditsLoyalty ? { loyaltyPointsCredited: true } : {}),
-      statusHistory: [
-        ...(matchedOrder.statusHistory ?? []),
-        {
-          id: `h-qris-wh-${Date.now()}`,
-          orderId: matchedOrder.id,
-          fromStatus: matchedOrder.status,
-          toStatus: nextStatus,
-          timestamp: nowIso,
-          actorName: "DagoPay / DOKU Webhook",
-          note: "Pembayaran QRIS terverifikasi otomatis via webhook gateway",
-        },
-      ],
-    });
+    const updateResult = await updatePersistentOrderIf(
+      matchedOrder.id,
+      (current) => current.paymentStatus === "PENDING" && current.status !== "CANCELLED",
+      (current) => {
+        const nextStatus = current.status === "NEW" ? "CONFIRMED" : current.status;
+        loyaltyKey = (current.customerPhone || current.customerName || "").trim();
+        earnedPoints = !current.loyaltyPointsCredited
+          ? Math.floor(current.total / 10000)
+          : 0;
+        creditedLoyaltyNow = Boolean(loyaltyKey) && earnedPoints > 0;
 
-    if (creditsLoyalty) {
-      await updatePersistentLoyaltyPoints(
-        loyaltyKey,
-        earnedPoints,
-        matchedOrder.customerName,
-        matchedOrder.id
-      );
+        return {
+          ...current,
+          paymentStatus: "PAID",
+          paymentMethod: "QRIS",
+          paymentReference: verificationPayload.referenceNumber,
+          status: nextStatus,
+          confirmedAt: current.confirmedAt || nowIso,
+          qrisVerification: verificationPayload,
+          ...(creditedLoyaltyNow ? { loyaltyPointsCredited: true } : {}),
+          statusHistory: [
+            ...(current.statusHistory ?? []),
+            {
+              id: `h-qris-wh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              orderId: current.id,
+              fromStatus: current.status,
+              toStatus: nextStatus,
+              timestamp: nowIso,
+              actorName,
+              note: historyNote,
+            },
+          ],
+        };
+      }
+    );
+
+    const paidOrder = updateResult.order;
+    if (paidOrder && paidOrder.paymentStatus === "PAID" && paidOrder.status !== "CANCELLED") {
+      await deductPersistentOrderBOM(paidOrder, { reason: bomReason });
+
+      if (updateResult.updated && creditedLoyaltyNow) {
+        await updatePersistentLoyaltyPoints(
+          loyaltyKey,
+          earnedPoints,
+          paidOrder.customerName,
+          paidOrder.id
+        );
+      }
+
+      return savePersistentQrisSession({
+        ...session,
+        consumedByOrderId: paidOrder.id,
+        updatedAt: nowIso,
+      });
     }
-
-    return savePersistentQrisSession({
-      ...session,
-      consumedByOrderId: matchedOrder.id,
-      updatedAt: nowIso,
-    });
   }
 
   const bookings = await getCoworkingBookings();
@@ -481,7 +511,23 @@ export async function POST(req: NextRequest) {
         updatedAt: nowIso,
       };
 
-      await savePersistentQrisSession(sessionRecord);
+      const savedSession = await savePersistentQrisSession(sessionRecord);
+      const settledSession = await settleMatchingPendingTarget({
+        session: savedSession,
+        invoiceNumber: resolvedInvoice,
+        authoritativeExpectedAmount: existing.expectedAmount,
+        nowIso,
+        verificationPayload: {
+          type: "SUPERVISOR_MANUAL",
+          referenceNumber: overrideResult.verification.referenceNumber,
+          invoiceNumber: resolvedInvoice,
+          verifiedAt: overrideResult.verification.verifiedAt,
+          note: overrideResult.verification.note,
+        },
+        actorName: approver.name,
+        historyNote: `Pembayaran QRIS disetujui supervisor (${overrideResult.verification.referenceNumber})`,
+        bomReason: "QRIS Supervisor Settlement",
+      });
 
       await appendAuditLog({
         id: `audit-qris-sup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -498,10 +544,10 @@ export async function POST(req: NextRequest) {
         metadata: {
           invoiceNumber: resolvedInvoice,
           rrn: overrideResult.verification.referenceNumber,
-          expectedAmount: sessionRecord.expectedAmount,
-          authorizedBySupervisorId: sessionRecord.verifiedByUserId,
-          authorizedBySupervisorName: sessionRecord.verifiedByName,
-          authorizedBySupervisorRole: sessionRecord.verifiedByRole,
+          expectedAmount: settledSession.expectedAmount,
+          authorizedBySupervisorId: settledSession.verifiedByUserId,
+          authorizedBySupervisorName: settledSession.verifiedByName,
+          authorizedBySupervisorRole: settledSession.verifiedByRole,
           requestedByCashierId: auth.userId,
           requestedByRole: auth.role,
           note: overrideResult.verification.note,
@@ -511,7 +557,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         allowed: true,
-        session: sessionRecord,
+        session: settledSession,
         verification: { ...overrideResult.verification, invoiceNumber: resolvedInvoice },
       });
     }
