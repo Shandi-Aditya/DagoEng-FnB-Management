@@ -196,6 +196,14 @@ export async function GET(req: NextRequest) {
     const tenantId = searchParams.get("tenantId");
     const status = searchParams.get("status");
 
+    const auth = await getRequestAuthUser(req);
+    const isManagerial =
+      auth.isAuthenticated &&
+      (auth.role === "SUPER_ADMIN" ||
+        (auth.role === "OWNER" && auth.scopeLevel !== "TENANT") ||
+        auth.role === "MANAGER" ||
+        auth.role === "INVENTORY_STAFF");
+
     const data = await getPersistentProductsData();
     let products = data.products || [];
 
@@ -217,9 +225,18 @@ export async function GET(req: NextRequest) {
       products = products.filter((p) => p.status === status);
     }
 
+    // Mask financial cost calculations (COGS/HPP and gross margin %) for unauthenticated callers and customers
+    const sanitizedProducts = isManagerial
+      ? products
+      : products.map((p) => ({
+          ...p,
+          cogsEstimate: 0,
+          grossMarginPercent: "0%",
+        }));
+
     return NextResponse.json({
       success: true,
-      products,
+      products: sanitizedProducts,
       customCategories: data.customCategories || [],
     });
   } catch (error: unknown) {

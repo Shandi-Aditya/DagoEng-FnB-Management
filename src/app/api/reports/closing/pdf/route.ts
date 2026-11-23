@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthUser } from "@/lib/server-auth";
+import { RoleSlug } from "@/types/auth";
+
+export const dynamic = "force-dynamic";
+
+const ALLOWED_CLOSING_PDF_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
 
 export async function GET(req: NextRequest) {
+  const auth = await getRequestAuthUser(req);
+  if (!auth.isAuthenticated || !auth.role) {
+    return NextResponse.json(
+      { success: false, error: "Akses ditolak: Sesi login diperlukan." },
+      { status: 401 }
+    );
+  }
+
+  if (!ALLOWED_CLOSING_PDF_ROLES.includes(auth.role)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Akses ditolak: Role [${auth.role}] tidak memiliki wewenang untuk mencetak laporan closing shift.`,
+      },
+      { status: 403 }
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const outlet = searchParams.get("outlet") || "Dago Creative Hub (Singaraja)";
   const cashier = searchParams.get("cashier") || "Kasir Bertugas";

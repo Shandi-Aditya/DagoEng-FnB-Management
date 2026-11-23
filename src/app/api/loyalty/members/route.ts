@@ -11,6 +11,7 @@ import { normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 import { LoyaltyMember, LoyaltyPointTransaction } from "@/types/loyalty";
 import { DEFAULT_PLATFORM_SETTINGS, PlatformSettings } from "@/types/settings";
 import { getRequestAuthUser } from "@/lib/server-auth";
+import { RoleSlug } from "@/types/auth";
 import {
   canUserViewFullCustomerContacts,
   resolveAuthoritativeMemberTier,
@@ -201,6 +202,24 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const ALLOWED_LOYALTY_GET_ROLES: RoleSlug[] = [
+      "SUPER_ADMIN",
+      "OWNER",
+      "MANAGER",
+      "CASHIER",
+      "CUSTOMER",
+    ];
+
+    if (!ALLOWED_LOYALTY_GET_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki izin untuk mengakses data member loyalty.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const phone = searchParams.get("phone");
     const outletId = searchParams.get("outletId");
@@ -243,11 +262,15 @@ export async function GET(req: NextRequest) {
       members = members.filter((m) => (m.status || "").toUpperCase() === targetStatus);
     }
 
-    // Role-based visibility
+    // Role-based visibility: CUSTOMER only ever sees their own member profile
     if (auth.role === "CUSTOMER") {
       const sessionEmail = auth.email?.toLowerCase().trim();
+      const sessionUserId = auth.userId?.trim();
       members = members.filter((m) => {
         if (sessionEmail && m.email && m.email.toLowerCase().trim() === sessionEmail) {
+          return true;
+        }
+        if (sessionUserId && (m.id === sessionUserId || (m as any).metadata?.userId === sessionUserId)) {
           return true;
         }
         return false;

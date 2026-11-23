@@ -90,9 +90,42 @@ async function revokeEmployeeSessions(
 /**
  * GET /api/employees
  * Fetches all employee profiles from persistent server storage.
+ * Restricted to authenticated staff and managers. Non-managerial staff receive masked contacts.
  */
 export async function GET(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    const ALLOWED_EMPLOYEE_READ_ROLES: RoleSlug[] = [
+      "SUPER_ADMIN",
+      "OWNER",
+      "MANAGER",
+      "CASHIER",
+      "WAITER",
+      "KITCHEN_STAFF",
+    ];
+
+    if (!ALLOWED_EMPLOYEE_READ_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki izin mengakses data karyawan.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const isManagerial =
+      auth.role === "SUPER_ADMIN" ||
+      (auth.role === "OWNER" && auth.scopeLevel !== "TENANT") ||
+      auth.role === "MANAGER";
+
     const { searchParams } = new URL(req.url);
     const outletId = searchParams.get("outletId");
     const status = searchParams.get("status");
@@ -104,6 +137,25 @@ export async function GET(req: NextRequest) {
     }
     if (status) {
       employees = employees.filter((e) => e.status === status);
+    }
+
+    // Mask contacts for non-managerial staff to prevent internal data harvesting
+    if (!isManagerial) {
+      employees = employees.map((e) => {
+        const contact = e.contact || "";
+        const email = e.email || "";
+        const maskedContact = contact.length >= 8 ? `${contact.slice(0, 4)}****${contact.slice(-4)}` : contact;
+        const emailParts = email.split("@");
+        const maskedEmail =
+          emailParts.length === 2 && emailParts[0].length > 2
+            ? `${emailParts[0].slice(0, 2)}***${emailParts[0].slice(-1)}@${emailParts[1]}`
+            : email;
+        return {
+          ...e,
+          contact: maskedContact,
+          email: maskedEmail,
+        };
+      });
     }
 
     return NextResponse.json({
