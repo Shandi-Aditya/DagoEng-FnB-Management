@@ -23,10 +23,12 @@ import {
 import type { POSReceiptData } from "@/features/pos/types";
 import type { KitchenTicketData } from "@/types/printer";
 import { usePrinter } from "@/contexts/PrinterContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
-import { splitCustomerReceiptByTenant } from "@/lib/printer";
+import { splitCustomerReceiptByMode } from "@/lib/printer";
 import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { isAddonActive } from "@/lib/subscription";
+import { isCoworkingOrderItem } from "@/lib/tax-breakdown";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";
@@ -50,34 +52,50 @@ export function ReceiptModal({
 }: ReceiptModalProps) {
   const receiptData = rawReceiptData || order;
   const { printCustomerReceipt, printKitchenOrder, settings: printerSettings } = usePrinter();
+  const { settings: platformSettings } = useSettings();
   const [selectedSplitIdx, setSelectedSplitIdx] = React.useState(0);
+
+  const effectiveCombineMode =
+    platformSettings.receiptCombineMode ?? printerSettings.receiptCombineMode ?? "COMBINED";
 
   const splitReceipts = React.useMemo(() => {
     if (!receiptData) return [];
-    if (!printerSettings.splitCustomerReceiptPerTenant) return [receiptData];
-    return splitCustomerReceiptByTenant(receiptData);
-  }, [receiptData, printerSettings.splitCustomerReceiptPerTenant]);
+    return splitCustomerReceiptByMode(receiptData, {
+      receiptCombineMode: effectiveCombineMode,
+      splitCustomerReceiptPerTenant: Boolean(printerSettings.splitCustomerReceiptPerTenant),
+    });
+  }, [receiptData, effectiveCombineMode, printerSettings.splitCustomerReceiptPerTenant]);
 
   React.useEffect(() => {
     setSelectedSplitIdx(0);
-  }, [receiptData?.orderNumber, isOpen, printerSettings.splitCustomerReceiptPerTenant]);
+  }, [
+    receiptData?.orderNumber,
+    isOpen,
+    effectiveCombineMode,
+    printerSettings.splitCustomerReceiptPerTenant,
+  ]);
 
   if (!isOpen || !receiptData) return null;
 
-  const hasSplitReceipts =
-    Boolean(printerSettings.splitCustomerReceiptPerTenant) && splitReceipts.length > 1;
+  const hasSplitReceipts = splitReceipts.length > 1;
   const activeReceipt = hasSplitReceipts
     ? splitReceipts[Math.min(selectedSplitIdx, splitReceipts.length - 1)] || receiptData
     : receiptData;
 
   const handlePrint = async () => {
     try {
-      await printCustomerReceipt(receiptData, { isManualReprint: true });
+      await printCustomerReceipt(receiptData, {
+        isManualReprint: true,
+        receiptCombineMode: effectiveCombineMode,
+      });
     } catch {
       window.print();
     }
 
-    if (printerSettings.autoPrintKitchenOrder) {
+    const fnbItemsForKitchen = (receiptData.items || []).filter(
+      (item) => !isCoworkingOrderItem(item)
+    );
+    if (printerSettings.autoPrintKitchenOrder && fnbItemsForKitchen.length > 0) {
       try {
         const kitchenTicket: KitchenTicketData = {
           orderId: receiptData.orderNumber,
@@ -88,7 +106,7 @@ export function ReceiptModal({
           customerName: receiptData.customerName || "Tamu",
           orderType: (receiptData.orderType?.toUpperCase() === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN") as "DINE_IN" | "TAKEAWAY",
           purpose: "NEW_ORDER",
-          items: (receiptData.items || []).map((item, idx) => ({
+          items: fnbItemsForKitchen.map((item, idx) => ({
             id: `item-${idx}-${Date.now()}`,
             productName: item.name,
             quantity: item.quantity,
@@ -109,52 +127,88 @@ export function ReceiptModal({
     }
   };
 
+  const normalizedActiveItems = (activeReceipt.items || []).map((item) =>
+    isCoworkingOrderItem(item)
+      ? {
+          ...item,
+          tenantId: "DAGO_HUB",
+          tenantName: item.tenantName || "Dago Creative Hub (Co-Working)",
+        }
+      : item
+  );
+
+  const hasCoworkingItems = normalizedActiveItems.some((i) => isCoworkingOrderItem(i));
+  const allCoworkingItems =
+    normalizedActiveItems.length > 0 && normalizedActiveItems.every((i) => isCoworkingOrderItem(i));
+  const isCoworkingOnlyReceipt = activeReceipt.tenantId === "DAGO_HUB" || allCoworkingItems;
+
   const tenantIdsInItems = Array.from(
     new Set(
-      (activeReceipt.items || [])
-        .map((i) => i.tenantId || (i.tenantName ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === i.tenantName?.toLowerCase())?.id : undefined))
+      normalizedActiveItems
+        .map((i) =>
+          isCoworkingOrderItem(i)
+            ? "DAGO_HUB"
+            : i.tenantId ||
+              (i.tenantName
+                ? DEFAULT_FNB_TENANTS.find(
+                    (t) => t.name.toLowerCase() === i.tenantName?.toLowerCase()
+                  )?.id
+                : undefined)
+        )
         .filter(Boolean)
     )
   );
 
   const isMultiTenant = tenantIdsInItems.length > 1;
 
-  const primaryTenantId =
-    activeReceipt.tenantId ||
-    activeReceipt.items?.find((i) => i.tenantId)?.tenantId ||
-    (activeReceipt.items?.find((i) => i.tenantName)
-      ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === activeReceipt.items[0]?.tenantName?.toLowerCase())?.id
-      : undefined) ||
-    "tenant-ks";
+  const primaryTenantId = isCoworkingOnlyReceipt
+    ? "DAGO_HUB"
+    : activeReceipt.tenantId ||
+      normalizedActiveItems.find((i) => i.tenantId)?.tenantId ||
+      (normalizedActiveItems.find((i) => i.tenantName)
+        ? DEFAULT_FNB_TENANTS.find(
+            (t) => t.name.toLowerCase() === normalizedActiveItems[0]?.tenantName?.toLowerCase()
+          )?.id
+        : undefined) ||
+      "tenant-ks";
 
   const allStoredSettings = typeof window !== "undefined" ? getAllStoredTenantSettings() : {};
-  const storedTenantSettings = allStoredSettings[primaryTenantId];
-  const defaultTenantInfo = DEFAULT_FNB_TENANTS.find((t) => t.id === primaryTenantId) || DEFAULT_FNB_TENANTS[0];
+  const storedTenantSettings = !isCoworkingOnlyReceipt ? allStoredSettings[primaryTenantId] : undefined;
+  const defaultTenantInfo =
+    DEFAULT_FNB_TENANTS.find((t) => t.id === primaryTenantId) || DEFAULT_FNB_TENANTS[0];
 
-  const brandName = isMultiTenant
+  const brandName = isCoworkingOnlyReceipt
+    ? activeReceipt.brandName || activeReceipt.tenantName || "Dago Creative Hub"
+    : isMultiTenant
     ? "Dago Creative Hub"
-    : (
-        activeReceipt.receiptHeader ||
-        storedTenantSettings?.receiptHeader ||
-        storedTenantSettings?.brandName ||
-        activeReceipt.tenantName ||
-        defaultTenantInfo.name
-      );
+    : activeReceipt.receiptHeader ||
+      storedTenantSettings?.receiptHeader ||
+      storedTenantSettings?.brandName ||
+      activeReceipt.tenantName ||
+      defaultTenantInfo.name;
 
-  const tagline = isMultiTenant
-    ? "Ringkasan pesanan multi-mitra"
-    : (storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge);
+  const tagline = isCoworkingOnlyReceipt
+    ? activeReceipt.tagline || "Co-Working & Meeting Spaces"
+    : isMultiTenant
+    ? hasCoworkingItems
+      ? "Ringkasan pesanan co-working & mitra"
+      : "Ringkasan pesanan multi-mitra"
+    : activeReceipt.tagline ||
+      storedTenantSettings?.tagline ||
+      defaultTenantInfo.tagline ||
+      defaultTenantInfo.badge;
 
-  const contactPhone = isMultiTenant
-    ? activeReceipt.outletPhone || MASTER_HQ_OUTLET.phone || OFFICIAL_CS_DISPLAY_PHONE
-    : (storedTenantSettings?.contactPhone || activeReceipt.outletPhone);
+  const contactPhone =
+    isCoworkingOnlyReceipt || isMultiTenant
+      ? activeReceipt.outletPhone || MASTER_HQ_OUTLET.phone || OFFICIAL_CS_DISPLAY_PHONE
+      : storedTenantSettings?.contactPhone || activeReceipt.outletPhone;
 
   const footerMessage =
     activeReceipt.receiptFooter ||
-    (!isMultiTenant ? storedTenantSettings?.receiptFooter : undefined) ||
+    (!isMultiTenant && !isCoworkingOnlyReceipt ? storedTenantSettings?.receiptFooter : undefined) ||
     "Terima kasih atas kunjungan Anda";
 
-  const groupedItems = calculateTenantReceiptGroups(activeReceipt.items);
+  const groupedItems = calculateTenantReceiptGroups(normalizedActiveItems);
 
   const simulatedWifiVoucher = (() => {
     if (!activeReceipt.orderNumber) return null;
@@ -234,7 +288,9 @@ export function ReceiptModal({
                 <TabsList aria-label="Pilih struk mitra" className="w-full overflow-x-auto">
                   {splitReceipts.map((sub, idx) => (
                     <TabsTrigger key={sub.orderNumber} value={String(idx)} className="text-xs">
-                      {sub.tenantName || `Mitra ${idx + 1}`}
+                      {sub.tenantId === "DAGO_HUB"
+                        ? "Co-working"
+                        : sub.tenantName || `Mitra ${idx + 1}`}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -294,7 +350,7 @@ export function ReceiptModal({
                 )}
               </div>
 
-              {/* Items List - Grouped by Mitra if Multi-Tenant */}
+              {/* Items List - Grouped by Mitra / Co-working if Multi-Tenant */}
               <div className="space-y-2 border-b border-dashed border-border pb-3">
                 {isMultiTenant ? (
                   groupedItems.map((group) => (
@@ -303,8 +359,16 @@ export function ReceiptModal({
                       className="space-y-1.5 pt-2 first:pt-0 border-t first:border-t-0 border-dashed border-border"
                     >
                       <div className="flex items-center justify-between bg-muted/50 px-2 py-1 rounded text-xs font-medium text-foreground border border-border">
-                        <span>Mitra: {group.tenantName}</span>
-                        <span className="font-mono text-muted-foreground tabular-nums">{group.items.length} item</span>
+                        <span>
+                          {group.tenantId === "DAGO_HUB"
+                            ? group.tenantName
+                            : `Mitra: ${group.tenantName}`}
+                        </span>
+                        <span className="font-mono text-muted-foreground tabular-nums">
+                          {group.tenantId === "DAGO_HUB"
+                            ? `${group.items.length} item · 0% PB1`
+                            : `${group.items.length} item`}
+                        </span>
                       </div>
                       {group.items.map((item, idx) => (
                         <div key={idx} className="space-y-0.5 text-xs pl-1">
@@ -314,6 +378,15 @@ export function ReceiptModal({
                             </span>
                             <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(item.subtotal)}</span>
                           </div>
+                          {item.coworkingMeta && (
+                            <p className="text-xs text-muted-foreground pl-2">
+                              • {item.coworkingMeta.spaceName} ({item.coworkingMeta.durationHours} jam
+                              {item.coworkingMeta.startTime && item.coworkingMeta.endTime
+                                ? `, ${item.coworkingMeta.startTime}–${item.coworkingMeta.endTime}`
+                                : ""}
+                              )
+                            </p>
+                          )}
                           {item.variantName && (
                             <p className="text-xs text-muted-foreground pl-2">• {item.variantName}</p>
                           )}
@@ -323,7 +396,7 @@ export function ReceiptModal({
                             </p>
                           )}
                           {item.notes && (
-                            <p className="text-xs italic text-muted-foreground pl-2">
+                            <p className="text-xs text-muted-foreground pl-2">
                               *Catatan: {item.notes}
                             </p>
                           )}
@@ -336,7 +409,7 @@ export function ReceiptModal({
                     </div>
                   ))
                 ) : (
-                  activeReceipt.items.map((item, idx) => (
+                  normalizedActiveItems.map((item, idx) => (
                     <div key={idx} className="space-y-0.5 text-xs">
                       <div className="flex justify-between font-medium">
                         <span className="text-foreground">
@@ -344,6 +417,15 @@ export function ReceiptModal({
                         </span>
                         <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(item.subtotal)}</span>
                       </div>
+                      {item.coworkingMeta && (
+                        <p className="text-xs text-muted-foreground pl-2">
+                          • {item.coworkingMeta.spaceName} ({item.coworkingMeta.durationHours} jam
+                          {item.coworkingMeta.startTime && item.coworkingMeta.endTime
+                            ? `, ${item.coworkingMeta.startTime}–${item.coworkingMeta.endTime}`
+                            : ""}
+                          )
+                        </p>
+                      )}
                       {item.variantName && (
                         <p className="text-xs text-muted-foreground pl-2">• {item.variantName}</p>
                       )}
@@ -353,7 +435,7 @@ export function ReceiptModal({
                         </p>
                       )}
                       {item.notes && (
-                        <p className="text-xs italic text-muted-foreground pl-2">
+                        <p className="text-xs text-muted-foreground pl-2">
                           *Catatan: {item.notes}
                         </p>
                       )}
@@ -391,7 +473,11 @@ export function ReceiptModal({
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Pajak restoran (PB1):</span>
+                  <span className="text-muted-foreground">
+                    {isCoworkingOnlyReceipt && activeReceipt.tax === 0
+                      ? "Pajak PB1 (co-working 0%):"
+                      : "Pajak restoran (PB1):"}
+                  </span>
                   <span className="font-mono tabular-nums text-foreground">{activeReceipt.tax > 0 ? formatCurrencyIDR(activeReceipt.tax) : "Rp 0"}</span>
                 </div>
                 {activeReceipt.serviceCharge > 0 && (
