@@ -184,7 +184,6 @@ function CustomerApp() {
     setIsCheckoutOpen(true);
   };
 
-  // Payment state shared by orders and bookings — resolved from live polled lists so server settlement updates the modal.
   const [waitingOrderId, setWaitingOrderId] = useState<string | null>(null);
   const [waitingOrderSnapshot, setWaitingOrderSnapshot] = useState<OrderRecord | null>(null);
   const [waitingBookingId, setWaitingBookingId] = useState<string | null>(null);

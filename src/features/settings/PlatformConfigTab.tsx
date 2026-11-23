@@ -62,7 +62,6 @@ export interface PlatformConfigTabProps {
   onFnbOpenTimeChange: (val: string) => void;
   fnbCloseTime: string;
   onFnbCloseTimeChange: (val: string) => void;
-  // Self-Order QR Policy
   qrSelfOrderQrisOnly: boolean;
   onQrSelfOrderQrisOnlyChange: (value: boolean) => void;
   // Holidays & Overrides
@@ -401,7 +400,6 @@ export function PlatformConfigTab(props: PlatformConfigTabProps) {
         </CardContent>
       </Card>
 
-      {/* Metode Bayar Self-Order QR */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

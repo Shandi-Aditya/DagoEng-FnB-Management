@@ -154,7 +154,7 @@ export default function SettingsPage() {
   const [cwTaxRate, setCwTaxRate] = useState(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
   const [cwTaxEnabled, setCwTaxEnabled] = useState(settings.categoryTax?.coworking?.isEnabled ?? false);
   const [serviceCharge, setServiceCharge] = useState(settings.serviceChargePercent);
-  const [qrSelfOrderQrisOnly, setQrSelfOrderQrisOnly] = useState<boolean>(settings?.qrSelfOrderQrisOnly !== false);
+  const [qrSelfOrderQrisOnly, setQrSelfOrderQrisOnly] = useState<boolean>(settings.qrSelfOrderQrisOnly !== false);
 
   // Loyalty thresholds
   const [silverPts, setSilverPts] = useState(settings.loyaltyTiers.silverMin);

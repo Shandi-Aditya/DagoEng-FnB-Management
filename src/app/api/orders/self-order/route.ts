@@ -3,6 +3,7 @@ import {
   getPersistentOrders,
   getPersistentProductsData,
   getPersistentQrisSession,
+  getPersistentQrisSessions,
   isVerifiedQrisStatus,
   readSeededPersistentData,
   savePersistentOrder,
@@ -23,13 +24,8 @@ const MAX_SELF_ORDER_POLL_IDS = 20;
 
 function resolveAuthoritativeItemPrice(
   rawItem: Record<string, unknown>,
-  catalogProduct: MasterProduct | undefined
+  catalogProduct: MasterProduct
 ): number {
-  if (!catalogProduct) {
-    const fallback = Number(rawItem.unitPrice);
-    return Number.isFinite(fallback) ? Math.max(0, Math.round(fallback)) : 0;
-  }
-
   const basePrice = Math.max(0, Math.round(Number(catalogProduct.basePrice) || 0));
   const variants =
     catalogProduct.variants && catalogProduct.variants.length > 0
@@ -147,7 +143,8 @@ export async function POST(req: NextRequest) {
     }
 
     const nowIso = new Date().toISOString();
-    const existingOrder = (await getPersistentOrders()).find((o) => o.id === orderId);
+    const existingOrders = await getPersistentOrders();
+    const existingOrder = existingOrders.find((o) => o.id === orderId);
     if (existingOrder) {
       if (
         existingOrder.status === "CANCELLED" ||
@@ -239,11 +236,8 @@ export async function POST(req: NextRequest) {
     const sanitizedItems: OrderItemRecord[] = rawOrder.items.map((entry: unknown, index: number) => {
       const itemObj =
         entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
-      const productId =
-        typeof itemObj.productId === "string" && itemObj.productId.trim()
-          ? itemObj.productId.trim()
-          : undefined;
-      const catalogProduct = productId ? productById.get(productId) : undefined;
+      const productId = (itemObj.productId as string).trim();
+      const catalogProduct = productById.get(productId)!;
       const rawQty = Number(itemObj.quantity);
       const quantity = Number.isFinite(rawQty) ? Math.max(1, Math.floor(rawQty)) : 1;
       const unitPrice = resolveAuthoritativeItemPrice(itemObj, catalogProduct);
@@ -256,17 +250,13 @@ export async function POST(req: NextRequest) {
           typeof itemObj.id === "string" && itemObj.id.trim()
             ? itemObj.id.trim()
             : `it-${Date.now()}-${index}`,
-        productId: catalogProduct?.id ?? productId,
+        productId: catalogProduct.id,
         tenantId:
-          catalogProduct?.tenantId ||
+          catalogProduct.tenantId ||
           (typeof itemObj.tenantId === "string" && itemObj.tenantId.trim()
             ? itemObj.tenantId.trim()
             : undefined),
-        productName:
-          catalogProduct?.name ||
-          (typeof itemObj.productName === "string" && itemObj.productName.trim()
-            ? itemObj.productName.trim()
-            : "Menu"),
+        productName: catalogProduct.name,
         quantity,
         unitPrice,
         notes: typeof itemObj.notes === "string" ? itemObj.notes : undefined,
@@ -350,12 +340,34 @@ export async function POST(req: NextRequest) {
       },
     ];
 
+    const candidateOrderNumber =
+      typeof rawOrder.orderNumber === "string" ? rawOrder.orderNumber.trim() : "";
+    const existingQrisForCandidate = candidateOrderNumber
+      ? await getPersistentQrisSession(candidateOrderNumber)
+      : null;
+    const isCandidateTaken =
+      !candidateOrderNumber ||
+      existingOrders.some((o) => o.orderNumber === candidateOrderNumber) ||
+      Boolean(existingQrisForCandidate);
+
+    let resolvedOrderNumber = candidateOrderNumber;
+    if (isCandidateTaken) {
+      const qrisSessions = await getPersistentQrisSessions();
+      const takenOrderNumbers = new Set(existingOrders.map((o) => o.orderNumber));
+      const takenQrisKeys = new Set<string>();
+      for (const s of qrisSessions) {
+        if (s.invoiceNumber) takenQrisKeys.add(s.invoiceNumber);
+        if (s.orderId) takenQrisKeys.add(s.orderId);
+      }
+      do {
+        const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+        resolvedOrderNumber = `ORD-SELF-${Date.now().toString().slice(-6)}-${suffix}`;
+      } while (takenOrderNumbers.has(resolvedOrderNumber) || takenQrisKeys.has(resolvedOrderNumber));
+    }
+
     const orderToSave: OrderRecord = {
       id: orderId,
-      orderNumber:
-        typeof rawOrder.orderNumber === "string" && rawOrder.orderNumber.trim()
-          ? rawOrder.orderNumber.trim()
-          : `ORD-SELF-${Date.now().toString().slice(-6)}`,
+      orderNumber: resolvedOrderNumber,
       organizationId:
         typeof rawOrder.organizationId === "string" && rawOrder.organizationId.trim()
           ? rawOrder.organizationId.trim()

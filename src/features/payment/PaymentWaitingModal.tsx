@@ -65,18 +65,18 @@ export function PaymentWaitingModal({
     return normalizePaymentItem({ order, booking, paymentItem });
   }, [order, booking, paymentItem]);
 
-  // Payment status must come strictly from live server-backed data, never from a client click.
+  const activeItemId = activeItem?.id ?? null;
+  const activeItemCreatedAt = activeItem?.createdAt;
   const isPaidSuccess = activeItem?.paymentStatus === "PAID";
 
-  // Sync initial state when modal opens
   useEffect(() => {
-    if (isOpen && activeItem) {
+    if (isOpen && activeItemId) {
       setShowCancelConfirm(false);
 
-      const remain = calculateSecondsRemaining(activeItem.createdAt, Date.now(), DEFAULT_PAYMENT_EXPIRY_SECONDS);
+      const remain = calculateSecondsRemaining(activeItemCreatedAt, Date.now(), DEFAULT_PAYMENT_EXPIRY_SECONDS);
       setSecondsRemaining(remain);
     }
-  }, [isOpen, activeItem]);
+  }, [isOpen, activeItemId]);
 
   // Countdown timer loop
   useEffect(() => {
@@ -382,7 +382,6 @@ export function PaymentWaitingModal({
                 </div>
               )}
 
-              {/* Read-only Status Banner & Action Buttons */}
               <div className="space-y-2 pt-1">
                 <div className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
                   <Clock className="size-4 shrink-0 text-primary mt-0.5" />

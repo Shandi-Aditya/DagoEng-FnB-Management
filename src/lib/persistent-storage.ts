@@ -430,6 +430,10 @@ export async function savePersistentQrisSession(
       return [session, ...existing];
     }
     const previous = existing[index];
+    if (previous.orderId && previous.orderId !== session.orderId) {
+      saved = previous;
+      return existing;
+    }
     // Proof of payment is never downgraded, and the order a payment settled stays bound to it.
     saved =
       isVerifiedQrisStatus(previous.status) && !isVerifiedQrisStatus(session.status)

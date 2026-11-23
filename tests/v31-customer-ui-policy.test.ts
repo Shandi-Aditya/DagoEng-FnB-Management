@@ -59,43 +59,55 @@ describe("V-31: Customer UI hardening & settings toggle policy", () => {
     });
   });
 
-  describe("3. Checkout & booking components gate cashier option behind qrisOnly", () => {
-    it("CheckoutSheet accepts qrisOnly (default true), hides Di kasir when enabled, and keeps QRIS submit copy", () => {
+  describe("3. Checkout & booking components gate cashier option behind qrisOnly via shared SelfOrderPaymentField", () => {
+    it("SelfOrderPaymentField consumes policy helpers and renders QRIS-only card or option group", () => {
+      const src = readWorkspaceFile("src/features/customer/SelfOrderPaymentField.tsx");
+      expect(src).toContain("getAllowedSelfOrderPayments");
+      expect(src).toContain("isQrSelfOrderQrisOnly");
+      expect(src).toContain("Pembayaran diproses lewat QRIS. Status lunas diperbarui otomatis setelah verifikasi.");
+      expect(src).toContain('cashierLabel = "Di kasir"');
+      expect(src).toContain("allowedPayments.map(");
+    });
+
+    it("CheckoutSheet accepts qrisOnly (default true), renders SelfOrderPaymentField, and keeps QRIS submit copy", () => {
       const src = readWorkspaceFile("src/features/customer/app/CheckoutSheet.tsx");
+      expect(src).toContain('import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField";');
       expect(src).toContain("qrisOnly?: boolean;");
       expect(src).toContain("const isQrisOnly = props.qrisOnly ?? true;");
-      expect(src).toContain("isQrisOnly ?");
-      expect(src).toContain("Pembayaran diproses lewat QRIS. Status lunas diperbarui otomatis setelah verifikasi.");
-      expect(src).toContain('{ id: "CASHIER", label: "Di kasir" }');
+      expect(src).toContain("<SelfOrderPaymentField");
+      expect(src).toContain("qrisOnly={isQrisOnly}");
       expect(src).toContain('isQrisOnly || form.payment === "QRIS" ? "Bayar dengan QRIS" : "Pesan, bayar di kasir"');
     });
 
-    it("SpaceView gates Di kasir on isQrSelfOrderQrisOnly and forces QRIS in onBook when enabled", () => {
+    it("SpaceView gates payment via SelfOrderPaymentField and forces QRIS in onBook when enabled", () => {
       const src = readWorkspaceFile("src/features/customer/app/SpaceView.tsx");
+      expect(src).toContain('import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField";');
       expect(src).toContain('import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";');
       expect(src).toContain("const qrisOnly = isQrSelfOrderQrisOnly(settings);");
-      expect(src).toContain("qrisOnly ?");
+      expect(src).toContain("<SelfOrderPaymentField");
+      expect(src).toContain("qrisOnly={qrisOnly}");
       expect(src).toContain('payment: qrisOnly ? "QRIS" : payment');
-      expect(src).toContain('{method === "QRIS" ? "QRIS" : "Di kasir"}');
     });
 
-    it("CustomerCheckoutSheet reads settings policy and gates Bayar di kasir on qrisOnly", () => {
+    it("CustomerCheckoutSheet reads settings policy and wires SelfOrderPaymentField with Bayar di kasir", () => {
       const src = readWorkspaceFile("src/features/customer/CustomerCheckoutSheet.tsx");
       expect(src).toContain('import { useSettings } from "@/contexts/SettingsContext";');
       expect(src).toContain('import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";');
+      expect(src).toContain('import { SelfOrderPaymentField } from "./SelfOrderPaymentField";');
       expect(src).toContain("const qrisOnly = isQrSelfOrderQrisOnly(settings);");
       expect(src).toContain('if (qrisOnly && paymentMethod !== "QRIS")');
-      expect(src).toContain("qrisOnly ?");
-      expect(src).toContain("Bayar di kasir");
+      expect(src).toContain("<SelfOrderPaymentField");
+      expect(src).toContain('cashierLabel="Bayar di kasir"');
     });
 
-    it("CustomerBookingModal reads settings policy before early return and gates Bayar di resepsionis on qrisOnly", () => {
+    it("CustomerBookingModal reads settings policy before early return and wires SelfOrderPaymentField with Bayar di resepsionis", () => {
       const src = readWorkspaceFile("src/features/customer/CustomerBookingModal.tsx");
       expect(src).toContain('import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";');
+      expect(src).toContain('import { SelfOrderPaymentField } from "./SelfOrderPaymentField";');
       expect(src).toContain("const qrisOnly = isQrSelfOrderQrisOnly(settings);");
       expect(src).toContain('if (qrisOnly && paymentMethod !== "QRIS")');
-      expect(src).toContain("qrisOnly ?");
-      expect(src).toContain("Bayar di resepsionis");
+      expect(src).toContain("<SelfOrderPaymentField");
+      expect(src).toContain('cashierLabel="Bayar di resepsionis"');
 
       const earlyReturnIdx = src.indexOf("if (!space) return null;");
       const useEffectIdx = src.indexOf("useEffect(");
@@ -127,7 +139,7 @@ describe("V-31: Customer UI hardening & settings toggle policy", () => {
 
     it("settings/page.tsx wires qrSelfOrderQrisOnly state, syncs on settings change, passes to PlatformConfigTab, and persists via updateSettings", () => {
       const src = readWorkspaceFile("src/app/(dashboard)/settings/page.tsx");
-      expect(src).toContain("useState<boolean>(settings?.qrSelfOrderQrisOnly !== false)");
+      expect(src).toContain("useState<boolean>(settings.qrSelfOrderQrisOnly !== false)");
       expect(src).toContain("setQrSelfOrderQrisOnly(settings.qrSelfOrderQrisOnly !== false);");
       expect(src).toContain("qrSelfOrderQrisOnly,");
       expect(src).toContain("qrSelfOrderQrisOnly={qrSelfOrderQrisOnly}");

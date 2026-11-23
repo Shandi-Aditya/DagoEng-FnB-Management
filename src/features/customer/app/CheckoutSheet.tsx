@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { CustomerCartItem, CustomerCartTotals } from "@/features/customer/customer-domain";
+import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
 export type CheckoutOrderType = "DINE_IN" | "TAKEAWAY";
@@ -157,24 +158,11 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             </Field>
             <Field>
               <FieldLabel>Bayar</FieldLabel>
-              {isQrisOnly ? (
-                <div className="flex flex-col gap-1 rounded-xl border bg-muted/40 p-3 text-sm">
-                  <span className="font-medium text-foreground">QRIS</span>
-                  <span className="text-xs text-muted-foreground">
-                    Pembayaran diproses lewat QRIS. Status lunas diperbarui otomatis setelah verifikasi.
-                  </span>
-                </div>
-              ) : (
-                <Segmented
-                  label="Metode bayar"
-                  value={form.payment}
-                  onChange={(payment) => props.onFormChange({ payment })}
-                  options={[
-                    { id: "QRIS", label: "QRIS" },
-                    { id: "CASHIER", label: "Di kasir" },
-                  ]}
-                />
-              )}
+              <SelfOrderPaymentField
+                value={form.payment}
+                onChange={(payment) => props.onFormChange({ payment })}
+                qrisOnly={isQrisOnly}
+              />
             </Field>
           </FieldGroup>
 

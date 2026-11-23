@@ -27,6 +27,7 @@ import {
   calculateCartTotals,
   type CustomerCartItem,
 } from "./customer-domain";
+import { SelfOrderPaymentField } from "./SelfOrderPaymentField";
 
 export interface CustomerCheckoutSheetProps {
   open: boolean;
@@ -252,33 +253,14 @@ export function CustomerCheckoutSheet({
             {/* 4. Pilihan Metode Bayar */}
             <div className="flex flex-col gap-2 rounded-lg border p-3">
               <Label className="text-xs">Metode pembayaran</Label>
-              {qrisOnly ? (
-                <div className="flex flex-col gap-1 rounded-md border bg-muted/40 p-2.5 text-xs">
-                  <span className="font-medium text-foreground">QRIS otomatis</span>
-                  <span className="text-muted-foreground">
-                    Pembayaran diproses lewat QRIS. Status lunas diperbarui otomatis setelah verifikasi.
-                  </span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={paymentMethod === "QRIS" ? "default" : "outline"}
-                    onClick={() => onPaymentMethodChange("QRIS")}
-                  >
-                    QRIS otomatis
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={paymentMethod === "CASHIER" ? "default" : "outline"}
-                    onClick={() => onPaymentMethodChange("CASHIER")}
-                  >
-                    Bayar di kasir
-                  </Button>
-                </div>
-              )}
+              <SelfOrderPaymentField
+                compact
+                value={paymentMethod}
+                onChange={onPaymentMethodChange}
+                qrisOnly={qrisOnly}
+                qrisLabel="QRIS otomatis"
+                cashierLabel="Bayar di kasir"
+              />
             </div>
 
             {/* 5. Rincian Biaya */}

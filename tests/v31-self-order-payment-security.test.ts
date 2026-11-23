@@ -19,6 +19,7 @@ import {
   getPersistentQrisSession,
   saveCoworkingBooking,
   savePersistentOrder,
+  savePersistentQrisSession,
   writePersistentData,
 } from "@/lib/persistent-storage";
 import {
@@ -390,6 +391,96 @@ describe("Task V-31: Self-Order & Coworking Payment Security Boundaries", () => 
       );
       expect(replayPaidRes.status).toBe(403);
     });
+
+    it("prevents colliding orderNumber from hijacking Guest A's PENDING QRIS session and blocks cross-order QRIS overwrite", async () => {
+      const expensiveProd = INITIAL_PRODUCTS[1] ?? prod;
+      const guestARes = await selfOrderPost(
+        new NextRequest("http://localhost:3000/api/orders/self-order", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            order: {
+              id: "ord-guest-a-1",
+              orderNumber: "SO-SHARED-99",
+              tableNumber: "T-01",
+              customerName: "Guest A",
+              paymentMethod: "QRIS",
+              items: [
+                {
+                  id: "it-a",
+                  productId: expensiveProd.id,
+                  productName: expensiveProd.name,
+                  quantity: 3,
+                  unitPrice: expensiveProd.basePrice,
+                },
+              ],
+            },
+          }),
+        })
+      );
+      expect(guestARes.status).toBe(200);
+      const guestAOrder = (await guestARes.json()).order;
+
+      const attackerRes = await selfOrderPost(
+        new NextRequest("http://localhost:3000/api/orders/self-order", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            order: {
+              id: "ord-attacker-1",
+              orderNumber: "SO-SHARED-99",
+              tableNumber: "T-02",
+              customerName: "Attacker",
+              paymentMethod: "QRIS",
+              items: [
+                {
+                  id: "it-b",
+                  productId: prod.id,
+                  productName: prod.name,
+                  quantity: 1,
+                  unitPrice: prod.basePrice,
+                },
+              ],
+            },
+          }),
+        })
+      );
+      expect(attackerRes.status).toBe(200);
+      const attackerOrder = (await attackerRes.json()).order;
+
+      expect(attackerOrder.orderNumber).not.toBe("SO-SHARED-99");
+      expect(attackerOrder.orderNumber).not.toBe(guestAOrder.orderNumber);
+
+      const guestAQris = await getPersistentQrisSession("SO-SHARED-99");
+      expect(guestAQris?.orderId).toBe("ord-guest-a-1");
+      expect(guestAQris?.expectedAmount).toBe(guestAOrder.total);
+
+      const attackerQris = await getPersistentQrisSession(attackerOrder.orderNumber);
+      expect(attackerQris?.orderId).toBe("ord-attacker-1");
+      expect(attackerQris?.expectedAmount).toBe(attackerOrder.total);
+
+      // Direct storage guard: savePersistentQrisSession refuses cross-order overwrite on same invoiceNumber
+      const attemptOverwrite = await savePersistentQrisSession({
+        orderId: "ord-hijack-direct",
+        invoiceNumber: "SO-SHARED-99",
+        expectedAmount: 100,
+        status: "PENDING",
+        updatedAt: new Date().toISOString(),
+      });
+      expect(attemptOverwrite.orderId).toBe("ord-guest-a-1");
+      expect(attemptOverwrite.expectedAmount).toBe(guestAOrder.total);
+
+      // Same-orderId update (e.g. POS re-init) remains allowed while PENDING
+      const sameOrderReinit = await savePersistentQrisSession({
+        orderId: "ord-guest-a-1",
+        invoiceNumber: "SO-SHARED-99",
+        expectedAmount: guestAOrder.total + 1000,
+        status: "PENDING",
+        updatedAt: new Date().toISOString(),
+      });
+      expect(sameOrderReinit.orderId).toBe("ord-guest-a-1");
+      expect(sameOrderReinit.expectedAmount).toBe(guestAOrder.total + 1000);
+    });
   });
 
   describe("3. /api/coworking/bookings customer vs staff QRIS boundaries", () => {
@@ -576,6 +667,101 @@ describe("Task V-31: Self-Order & Coworking Payment Security Boundaries", () => 
         })
       );
       expect(verifiedRes.status).toBe(200);
+    });
+
+    it("rejects CUSTOMER unknown spaceId, missing date, or CANCELLED status on holiday date with 400, and avoids QRIS bookingCode collisions", async () => {
+      const missingDateRes = await coworkingBookingsPost(
+        new NextRequest("http://localhost:3000/api/coworking/bookings", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: CUSTOMER_COOKIE },
+          body: JSON.stringify({
+            booking: {
+              guestName: "Customer No Date",
+              spaceId: "sp-hot-1",
+              paymentMethod: "QRIS",
+            },
+          }),
+        })
+      );
+      expect(missingDateRes.status).toBe(400);
+
+      const badSpaceRes = await coworkingBookingsPost(
+        new NextRequest("http://localhost:3000/api/coworking/bookings", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: CUSTOMER_COOKIE },
+          body: JSON.stringify({
+            booking: {
+              guestName: "Customer Bad Space",
+              spaceId: "sp-does-not-exist",
+              date: "2026-11-20",
+              duration: 2,
+              price: 100,
+              totalAmount: 100,
+              paymentMethod: "QRIS",
+            },
+          }),
+        })
+      );
+      expect(badSpaceRes.status).toBe(400);
+
+      // 2026-11-21 is Saturday (coworking weekend closed by default) — checkInStatus: "CANCELLED" cannot bypass schedule validation
+      const holidayCancelBypassRes = await coworkingBookingsPost(
+        new NextRequest("http://localhost:3000/api/coworking/bookings", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: CUSTOMER_COOKIE },
+          body: JSON.stringify({
+            booking: {
+              guestName: "Customer Holiday Bypass",
+              spaceId: "sp-hot-1",
+              date: "2026-11-21",
+              startTime: "10:00",
+              duration: 2,
+              checkInStatus: "CANCELLED",
+              paymentMethod: "QRIS",
+            },
+          }),
+        })
+      );
+      expect(holidayCancelBypassRes.status).toBe(400);
+
+      // Pre-existing QRIS session with invoiceNumber "CW-COLLIDE-1" cannot be hijacked by CUSTOMER bookingCode
+      await savePersistentQrisSession({
+        orderId: "ord-existing-victim",
+        invoiceNumber: "CW-COLLIDE-1",
+        expectedAmount: 99000,
+        status: "PENDING",
+        updatedAt: new Date().toISOString(),
+      });
+
+      const collideRes = await coworkingBookingsPost(
+        new NextRequest("http://localhost:3000/api/coworking/bookings", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: CUSTOMER_COOKIE },
+          body: JSON.stringify({
+            booking: {
+              id: "cwb-collide-new",
+              bookingCode: "CW-COLLIDE-1",
+              guestName: "Customer Collide",
+              spaceId: "sp-hot-1",
+              date: "2026-11-20",
+              startTime: "10:00",
+              duration: 2,
+              paymentMethod: "QRIS",
+            },
+          }),
+        })
+      );
+      expect(collideRes.status).toBe(200);
+      const collideBooking = (await collideRes.json()).booking;
+      expect(collideBooking.bookingCode).not.toBe("CW-COLLIDE-1");
+
+      const victimSession = await getPersistentQrisSession("CW-COLLIDE-1");
+      expect(victimSession?.orderId).toBe("ord-existing-victim");
+      expect(victimSession?.expectedAmount).toBe(99000);
+
+      const newBookingSession = await getPersistentQrisSession(collideBooking.bookingCode);
+      expect(newBookingSession?.orderId).toBe("cwb-collide-new");
+      expect(newBookingSession?.expectedAmount).toBe(30000);
     });
   });
 
