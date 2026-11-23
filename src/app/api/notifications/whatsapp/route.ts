@@ -27,16 +27,23 @@ export async function POST(req: NextRequest) {
       resolvedTarget = "62" + resolvedTarget.slice(1);
     }
 
-    // Check if token is configured
-    if (!fonnteToken || fonnteToken.trim() === "") {
+    const isExplicitlyDisabled =
+      process.env.ENABLE_WHATSAPP_CHATBOT === "false" ||
+      process.env.DISABLE_WHATSAPP_CHATBOT === "true";
+
+    // Check if disabled or token is not configured
+    if (isExplicitlyDisabled || !fonnteToken || fonnteToken.trim() === "") {
       console.warn(
-        "[WhatsApp Gateway - Fonnte] FONNTE_API_TOKEN belum dikonfigurasi di environment variable (.env)."
+        isExplicitlyDisabled
+          ? "[WhatsApp Gateway] Pengiriman WhatsApp dinonaktifkan sementara (ENABLE_WHATSAPP_CHATBOT=false)."
+          : "[WhatsApp Gateway - Fonnte] FONNTE_API_TOKEN belum dikonfigurasi di environment variable (.env)."
       );
       return NextResponse.json({
         success: false,
         configured: false,
-        message:
-          "FONNTE_API_TOKEN belum diset di server environment. Laporan closing tetap diproses di sistem.",
+        message: isExplicitlyDisabled
+          ? "Layanan pengiriman WhatsApp otomatis dinonaktifkan sementara hingga sistem siap rilis produksi."
+          : "FONNTE_API_TOKEN belum diset di server environment. Laporan closing tetap diproses di sistem.",
       });
     }
 

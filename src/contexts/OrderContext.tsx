@@ -564,7 +564,11 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     if (nextStatus === "COMPLETED") {
       if (!target.completedAt) updated.completedAt = nowIso;
       if (target.paymentStatus !== "PAID") {
-        updated.paymentStatus = paymentUpdate?.paymentStatus || "PAID";
+        if (target.paymentMethod === "INVOICE" && !paymentUpdate?.paymentStatus) {
+          updated.paymentStatus = target.paymentStatus;
+        } else {
+          updated.paymentStatus = paymentUpdate?.paymentStatus || "PAID";
+        }
         if (paymentUpdate?.paymentMethod) {
           updated.paymentMethod = paymentUpdate.paymentMethod;
         }

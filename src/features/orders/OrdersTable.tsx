@@ -46,7 +46,10 @@ function isClosed(order: OrderRecord): boolean {
 }
 
 function isPayable(order: OrderRecord, canProcessPayment: boolean): boolean {
-  return canProcessPayment && order.paymentStatus !== "PAID" && order.status !== "CANCELLED" && order.status !== "COMPLETED";
+  if (!canProcessPayment || order.paymentStatus === "PAID" || order.status === "CANCELLED") {
+    return false;
+  }
+  return order.status !== "COMPLETED" || order.paymentMethod === "INVOICE";
 }
 
 export function OrdersTable({

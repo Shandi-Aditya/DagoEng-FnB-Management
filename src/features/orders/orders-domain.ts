@@ -293,6 +293,7 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
     amountPaid: order.total,
     changeDue: 0,
     splitDetails,
+    corporateInfo: order.corporateInfo,
     qrisVerification: order.qrisVerification
       ? {
           type: order.qrisVerification.type,
@@ -357,3 +358,16 @@ export function buildOrderExportData(
 
   return { headers, rows };
 }
+
+export function formatOrderCustomerName(order: {
+  customerName?: string;
+  corporateInfo?: import("@/types/order").CorporateOrderInfo;
+}): string {
+  if (order.corporateInfo?.companyName?.trim()) {
+    const comp = order.corporateInfo.companyName.trim();
+    const pic = order.corporateInfo.picName?.trim();
+    return pic ? `${comp} (PIC: ${pic})` : comp;
+  }
+  return order.customerName || "-";
+}
+

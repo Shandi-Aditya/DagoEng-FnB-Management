@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildReportData } from "@/features/reports/reports-domain";
-import type { OrderRecord, CorporateOrderInfo } from "@/types/order";
+import { buildReportData, extractAvailableReportCompanies } from "@/features/reports/reports-domain";
+import { formatOrderCustomerName } from "@/features/orders/orders-domain";
+import { DEFAULT_CORPORATE_DRAFT, type OrderRecord, type CorporateOrderInfo } from "@/types/order";
 import type { CoworkingBooking } from "@/types/coworking";
 
 describe("S-36 Corporate Order, Bundling, Invoicing & Report Filtering", () => {
@@ -265,5 +266,25 @@ describe("S-36 Corporate Order, Bundling, Invoicing & Report Filtering", () => {
     expect(reportDataAll.tableRows.some((r) => r[0] === sampleCorporatePrepaidOrder.orderNumber)).toBe(true);
     expect(reportDataAll.tableRows.some((r) => r[0] === sampleRegularOrder.orderNumber)).toBe(true);
     expect(reportDataAll.tableRows.some((r) => r[0] === sampleCorporateCoworkingBooking.bookingCode)).toBe(true);
+  });
+
+  it("should extract available report companies uniquely and cleanly", () => {
+    const companies = extractAvailableReportCompanies(
+      [sampleCorporatePrepaidOrder, sampleCorporateInvoiceOrder, sampleRegularOrder],
+      [sampleCorporateCoworkingBooking]
+    );
+    expect(companies).toEqual(["PT Dago Ekosistem Digital", "Singaraja Tech Ventures"]);
+  });
+
+  it("should format corporate customer name cleanly via formatOrderCustomerName", () => {
+    expect(formatOrderCustomerName(sampleCorporatePrepaidOrder)).toBe("PT Dago Ekosistem Digital (PIC: Budi Santoso)");
+    expect(formatOrderCustomerName(sampleRegularOrder)).toBe("Pelanggan Biasa");
+  });
+
+  it("should provide a safe default corporate draft object", () => {
+    expect(DEFAULT_CORPORATE_DRAFT.enabled).toBe(false);
+    expect(DEFAULT_CORPORATE_DRAFT.companyName).toBe("");
+    expect(DEFAULT_CORPORATE_DRAFT.billingType).toBe("PREPAID");
+    expect(DEFAULT_CORPORATE_DRAFT.headcount).toBe(1);
   });
 });

@@ -16,6 +16,21 @@ export const OFFICIAL_CS_WHATSAPP_NUMBER = normalizeWhatsAppDigits(
 	process.env.NEXT_PUBLIC_CS_WHATSAPP || OFFICIAL_CS_DISPLAY_PHONE
 );
 
+export const OFFICIAL_FINANCE_EMAIL = "finance@dagoeng.com";
+
+export const OFFICIAL_BANK_ACCOUNTS = [
+	{
+		bankName: "Bank Central Asia (BCA)",
+		accountNumber: "040-288-1995",
+		accountHolder: "PT Dago Creative Hub Singaraja",
+	},
+	{
+		bankName: "Bank Mandiri",
+		accountNumber: "145-00-1995-2026",
+		accountHolder: "PT Dago Creative Hub Singaraja",
+	},
+];
+
 export function buildOfficialCsWhatsAppUrl(message?: string): string {
 	const base = `https://wa.me/${OFFICIAL_CS_WHATSAPP_NUMBER}`;
 	return message ? `${base}?text=${encodeURIComponent(message)}` : base;

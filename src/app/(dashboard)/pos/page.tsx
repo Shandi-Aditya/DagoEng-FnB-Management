@@ -18,7 +18,11 @@ import { useCoworking } from "@/contexts/CoworkingContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
 import { CoworkingSpaceItem, SpaceType } from "@/types/coworking";
-import type { CorporateBillingType } from "@/types/order";
+import {
+  DEFAULT_CORPORATE_DRAFT,
+  type CorporateBillingType,
+  type CorporateOrderDraft,
+} from "@/types/order";
 import {
   POSProductItem,
   POSCartItem,
@@ -244,14 +248,8 @@ export default function POSPage() {
   const [appliedVoucher, setAppliedVoucher] = useState<LoyaltyVoucher | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState<boolean>(false);
 
-  // Corporate Order States (Task S-36)
-  const [isCorporateOrder, setIsCorporateOrder] = useState<boolean>(false);
-  const [corporateCompany, setCorporateCompany] = useState<string>("");
-  const [corporatePicName, setCorporatePicName] = useState<string>("");
-  const [corporatePicPhone, setCorporatePicPhone] = useState<string>("");
-  const [corporateHeadcount, setCorporateHeadcount] = useState<number>(1);
-  const [corporateBillingType, setCorporateBillingType] = useState<CorporateBillingType>("PREPAID");
-  const [corporateMeetingRoomId, setCorporateMeetingRoomId] = useState<string>("");
+  // Corporate Order States (Task S-36 - Unified Draft)
+  const [corporateDraft, setCorporateDraft] = useState<CorporateOrderDraft>(DEFAULT_CORPORATE_DRAFT);
 
   const meetingRoomsList = useMemo(() => {
     return (cwSpaces || [])
@@ -264,13 +262,21 @@ export default function POSPage() {
   }, [cwSpaces]);
 
   const handleCorporateMeetingRoomChange = (roomId: string) => {
-    setCorporateMeetingRoomId(roomId);
+    setCorporateDraft((prev) => ({ ...prev, meetingRoomId: roomId }));
     if (!roomId) {
       setCartItems((prev) => prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-")));
       return;
     }
     const room = cwSpaces.find((s) => s.id === roomId);
     if (room) {
+      if (room.status === "MAINTENANCE") {
+        notify.error(
+          "Ruangan Dalam Perbaikan",
+          `Ruang pertemuan ${room.name} sedang dalam perbaikan dan tidak dapat dibundel.`
+        );
+        setCorporateDraft((prev) => ({ ...prev, meetingRoomId: undefined }));
+        return;
+      }
       const roomCartItem: POSCartItem = {
         cartItemId: `bundle-meeting-${room.id}`,
         productId: `space-${room.id}`,
@@ -280,7 +286,7 @@ export default function POSPage() {
         selectedModifiers: [],
         unitFinalPrice: room.hourlyRate,
         itemTotal: room.hourlyRate,
-        tenantId: "tenant-dago-hub",
+        tenantId: "DAGO_HUB",
         notes: `Paket Ruang Meeting Perusahaan (${room.capacity} Pax)`,
       };
       setCartItems((prev) => {
@@ -767,25 +773,62 @@ export default function POSPage() {
         existingNumbers: orders.map((o) => o.orderNumber),
       });
 
-      const corporateInfo =
-        isCorporateOrder && corporateCompany.trim()
-          ? {
-              companyName: corporateCompany.trim(),
-              picName: corporatePicName.trim() || "PIC Tim",
-              picPhone: corporatePicPhone.trim() || "-",
-              headcount: corporateHeadcount || 1,
-              billingType: paymentData.method === "INVOICE" ? "INVOICE" as const : corporateBillingType,
-              invoiceNumber: `INV-${receiptNo}`,
-              invoiceDueDate:
-                paymentData.method === "INVOICE" || corporateBillingType === "INVOICE"
-                  ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-                  : undefined,
-              notes: orderNotes.trim() || undefined,
-              linkedSpaceName: corporateMeetingRoomId
-                ? cwSpaces.find((s) => s.id === corporateMeetingRoomId)?.name
-                : undefined,
-            }
-          : undefined;
+      const isCorporate = corporateDraft.enabled && corporateDraft.companyName.trim().length > 0;
+      const isInvoicePayment = paymentData.method === "INVOICE";
+      const resolvedBillingType: CorporateBillingType = isInvoicePayment ? "INVOICE" : "PREPAID";
+
+      let linkedBookingCode: string | undefined = undefined;
+      const linkedRoom = corporateDraft.meetingRoomId
+        ? cwSpaces.find((s) => s.id === corporateDraft.meetingRoomId)
+        : undefined;
+
+      if (isCorporate && linkedRoom) {
+        try {
+          const booked = cwBookSpace({
+            guestName: corporateDraft.picName.trim() || "PIC Corporate",
+            guestPhone: corporateDraft.picPhone.trim() || "-",
+            guestEmail: "",
+            company: corporateDraft.companyName.trim(),
+            spaceId: linkedRoom.id,
+            spaceName: linkedRoom.name,
+            spaceType: linkedRoom.type,
+            bookingType: "HOURLY",
+            date: new Date().toISOString().split("T")[0],
+            startTime: "09:00",
+            duration: 1,
+            price: linkedRoom.hourlyRate,
+            discount: 0,
+            totalAmount: linkedRoom.hourlyRate,
+            paidAmount: isInvoicePayment ? 0 : linkedRoom.hourlyRate,
+            remainingAmount: isInvoicePayment ? linkedRoom.hourlyRate : 0,
+            outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+            paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
+            paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
+          });
+          linkedBookingCode = booked?.bookingCode;
+        } catch (e) {
+          console.warn("[POS Corporate] Gagal memesan ruang coworking:", e);
+        }
+      }
+
+      const invoiceNumber = receiptNo.startsWith("INV-") ? receiptNo : `INV-${receiptNo}`;
+
+      const corporateInfo = isCorporate
+        ? {
+            companyName: corporateDraft.companyName.trim(),
+            picName: corporateDraft.picName.trim() || "PIC Tim",
+            picPhone: corporateDraft.picPhone.trim() || "-",
+            headcount: corporateDraft.headcount || 1,
+            billingType: resolvedBillingType,
+            invoiceNumber,
+            invoiceDueDate: isInvoicePayment
+              ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+              : undefined,
+            notes: orderNotes.trim() || undefined,
+            linkedBookingCode,
+            linkedSpaceName: linkedRoom?.name,
+          }
+        : undefined;
 
       const effectiveCustomerName = corporateInfo
         ? `${corporateInfo.companyName} (PIC: ${corporateInfo.picName})`
@@ -932,15 +975,17 @@ export default function POSPage() {
         redeemPromo(selectedPromoId, selectedMember?.id || selectedMember?.phone || user?.id || "walk-in-customer");
       }
 
-      const cashPortion =
-        paymentData.method === "SPLIT"
-          ? (paymentData.splitDetails || [])
-              .filter((guest) => guest.paymentMethod === "CASH")
-              .reduce((sum, guest) => sum + guest.assignedAmount, 0)
-          : paymentData.method === "CASH"
-            ? grandTotal
-            : 0;
-      recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
+      if (paymentData.method !== "INVOICE") {
+        const cashPortion =
+          paymentData.method === "SPLIT"
+            ? (paymentData.splitDetails || [])
+                .filter((guest) => guest.paymentMethod === "CASH")
+                .reduce((sum, guest) => sum + guest.assignedAmount, 0)
+            : paymentData.method === "CASH"
+              ? grandTotal
+              : 0;
+        recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
+      }
 
       logActivity({
         module: "POS",
@@ -1031,13 +1076,7 @@ export default function POSPage() {
     setSelectedCategory("Semua Kategori");
     setSelectedTable("");
     setOrderType("DINE_IN");
-    setIsCorporateOrder(false);
-    setCorporateCompany("");
-    setCorporatePicName("");
-    setCorporatePicPhone("");
-    setCorporateHeadcount(1);
-    setCorporateBillingType("PREPAID");
-    setCorporateMeetingRoomId("");
+    setCorporateDraft(DEFAULT_CORPORATE_DRAFT);
     notify.success("Transaksi baru siap", "Keranjang dan formulir kasir sudah dikosongkan.");
   };
 
@@ -1579,20 +1618,9 @@ export default function POSPage() {
                 onRemoveVoucher={() => setAppliedVoucher(null)}
                 orderNotes={orderNotes}
                 onOrderNotesChange={setOrderNotes}
-                isCorporateOrder={isCorporateOrder}
-                onIsCorporateOrderChange={setIsCorporateOrder}
-                companyName={corporateCompany}
-                onCompanyNameChange={setCorporateCompany}
-                picName={corporatePicName}
-                onPicNameChange={setCorporatePicName}
-                picPhone={corporatePicPhone}
-                onPicPhoneChange={setCorporatePicPhone}
-                headcount={corporateHeadcount}
-                onHeadcountChange={setCorporateHeadcount}
-                billingType={corporateBillingType}
-                onBillingTypeChange={setCorporateBillingType}
+                corporateDraft={corporateDraft}
+                onCorporateDraftChange={setCorporateDraft}
                 meetingRooms={meetingRoomsList}
-                selectedMeetingRoomId={corporateMeetingRoomId}
                 onSelectedMeetingRoomChange={handleCorporateMeetingRoomChange}
               />
               <Separator />
@@ -1846,14 +1874,14 @@ export default function POSPage() {
         grandTotal={grandTotal}
         tableNumber={selectedTable}
         customerName={
-          isCorporateOrder && corporateCompany
-            ? `${corporateCompany} (PIC: ${corporatePicName || "Tim"})`
+          corporateDraft.enabled && corporateDraft.companyName
+            ? `${corporateDraft.companyName} (PIC: ${corporateDraft.picName || "Tim"})`
             : selectedMember?.name || customerName.trim() || "Walk-in Guest"
         }
         orderType={orderType}
-        isCorporateOrder={isCorporateOrder}
-        corporateBillingType={corporateBillingType}
-        corporateCompany={corporateCompany}
+        isCorporateOrder={corporateDraft.enabled}
+        corporateBillingType={corporateDraft.billingType}
+        corporateCompany={corporateDraft.companyName}
         onPaymentSuccess={handlePaymentSuccess}
       />
 

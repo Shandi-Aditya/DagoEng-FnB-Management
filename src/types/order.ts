@@ -12,6 +12,28 @@ export type SLAStatus = "ON_TIME" | "AT_RISK" | "DELAYED";
 
 export type CorporateBillingType = "PREPAID" | "INVOICE";
 
+export interface CorporateOrderDraft {
+  enabled: boolean;
+  companyName: string;
+  picName: string;
+  picPhone: string;
+  headcount: number;
+  billingType: CorporateBillingType;
+  meetingRoomId?: string;
+  notes?: string;
+}
+
+export const DEFAULT_CORPORATE_DRAFT: CorporateOrderDraft = {
+  enabled: false,
+  companyName: "",
+  picName: "",
+  picPhone: "",
+  headcount: 1,
+  billingType: "PREPAID",
+  meetingRoomId: undefined,
+  notes: "",
+};
+
 export interface CorporateOrderInfo {
   companyName: string;
   picName: string;

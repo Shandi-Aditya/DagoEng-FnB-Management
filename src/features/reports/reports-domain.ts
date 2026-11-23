@@ -535,7 +535,9 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         const pb1 = breakdown.pb1;
         const service = breakdown.serviceCharge;
         const customerDisplayName = o.corporateInfo?.companyName
-          ? `${o.customerName} [${o.corporateInfo.companyName}]`
+          ? o.customerName && o.customerName.includes(`[${o.corporateInfo.companyName}]`)
+            ? o.customerName
+            : `${o.customerName || "Tamu"} [${o.corporateInfo.companyName}]`
           : o.customerName || "Tamu";
         return [
           o.orderNumber || o.id,
@@ -1182,3 +1184,22 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     }
   }
 }
+
+export function extractAvailableReportCompanies(
+  orders: OrderRecord[],
+  coworkingBookings: Array<{ company?: string }>
+): string[] {
+  const set = new Set<string>();
+  orders.forEach((o) => {
+    if (o.corporateInfo?.companyName?.trim()) {
+      set.add(o.corporateInfo.companyName.trim());
+    }
+  });
+  coworkingBookings.forEach((b) => {
+    if (b.company?.trim()) {
+      set.add(b.company.trim());
+    }
+  });
+  return Array.from(set).sort();
+}
+

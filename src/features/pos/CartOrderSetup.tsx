@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTableSelectableForPos } from "@/contexts/TableContext";
-import type { CorporateBillingType } from "@/types/order";
+import type { CorporateBillingType, CorporateOrderDraft } from "@/types/order";
+import { DEFAULT_CORPORATE_DRAFT } from "@/types/order";
 
 export type PosOrderType = "DINE_IN" | "TAKEAWAY";
 
@@ -53,21 +54,10 @@ interface CartOrderSetupProps {
   onRemoveVoucher: () => void;
   orderNotes?: string;
   onOrderNotesChange?: (notes: string) => void;
-  // Corporate Order Props
-  isCorporateOrder?: boolean;
-  onIsCorporateOrderChange?: (val: boolean) => void;
-  companyName?: string;
-  onCompanyNameChange?: (val: string) => void;
-  picName?: string;
-  onPicNameChange?: (val: string) => void;
-  picPhone?: string;
-  onPicPhoneChange?: (val: string) => void;
-  headcount?: number;
-  onHeadcountChange?: (val: number) => void;
-  billingType?: CorporateBillingType;
-  onBillingTypeChange?: (val: CorporateBillingType) => void;
+  // Unified Corporate Order Props
+  corporateDraft?: CorporateOrderDraft;
+  onCorporateDraftChange?: (draft: CorporateOrderDraft) => void;
   meetingRooms?: { id: string; name: string; hourlyRate: number }[];
-  selectedMeetingRoomId?: string;
   onSelectedMeetingRoomChange?: (roomId: string) => void;
 }
 
@@ -87,22 +77,22 @@ export function CartOrderSetup({
   onRemoveVoucher,
   orderNotes,
   onOrderNotesChange,
-  isCorporateOrder = false,
-  onIsCorporateOrderChange,
-  companyName = "",
-  onCompanyNameChange,
-  picName = "",
-  onPicNameChange,
-  picPhone = "",
-  onPicPhoneChange,
-  headcount = 1,
-  onHeadcountChange,
-  billingType = "PREPAID",
-  onBillingTypeChange,
+  corporateDraft = DEFAULT_CORPORATE_DRAFT,
+  onCorporateDraftChange,
   meetingRooms = [],
-  selectedMeetingRoomId = "",
   onSelectedMeetingRoomChange,
 }: CartOrderSetupProps) {
+  const isCorporateOrder = corporateDraft.enabled;
+  const companyName = corporateDraft.companyName;
+  const picName = corporateDraft.picName;
+  const picPhone = corporateDraft.picPhone;
+  const headcount = corporateDraft.headcount;
+  const billingType = corporateDraft.billingType;
+  const selectedMeetingRoomId = corporateDraft.meetingRoomId || "";
+
+  const updateDraft = (patch: Partial<CorporateOrderDraft>) => {
+    onCorporateDraftChange?.({ ...corporateDraft, ...patch });
+  };
   return (
     <div className="flex flex-col gap-3">
       <Tabs value={orderType} onValueChange={(value) => onOrderTypeChange(value as PosOrderType)}>
@@ -172,7 +162,7 @@ export function CartOrderSetup({
             variant={isCorporateOrder ? "default" : "outline"}
             size="sm"
             className="shrink-0"
-            onClick={() => onIsCorporateOrderChange?.(!isCorporateOrder)}
+            onClick={() => updateDraft({ enabled: !isCorporateOrder })}
             aria-pressed={isCorporateOrder}
           >
             {isCorporateOrder ? "Aktif" : "Aktifkan"}
@@ -189,7 +179,7 @@ export function CartOrderSetup({
                 id="pos-corporate-company"
                 className="h-8 text-xs"
                 value={companyName}
-                onChange={(e) => onCompanyNameChange?.(e.target.value)}
+                onChange={(e) => updateDraft({ companyName: e.target.value })}
                 placeholder="Contoh: PT Dago Eng Kreatif"
                 required
               />
@@ -204,7 +194,7 @@ export function CartOrderSetup({
                   id="pos-corporate-pic"
                   className="h-8 text-xs"
                   value={picName}
-                  onChange={(e) => onPicNameChange?.(e.target.value)}
+                  onChange={(e) => updateDraft({ picName: e.target.value })}
                   placeholder="Nama PIC tim"
                   required
                 />
@@ -218,7 +208,7 @@ export function CartOrderSetup({
                   id="pos-corporate-phone"
                   className="h-8 text-xs"
                   value={picPhone}
-                  onChange={(e) => onPicPhoneChange?.(e.target.value)}
+                  onChange={(e) => updateDraft({ picPhone: e.target.value })}
                   placeholder="0812xxxx"
                   required
                 />
@@ -238,7 +228,7 @@ export function CartOrderSetup({
                     max={200}
                     className="h-8 text-xs pl-7"
                     value={headcount || 1}
-                    onChange={(e) => onHeadcountChange?.(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => updateDraft({ headcount: Math.max(1, parseInt(e.target.value) || 1) })}
                   />
                   <Users className="size-3.5 absolute left-2 top-2.5 text-muted-foreground" aria-hidden="true" />
                 </div>
@@ -252,7 +242,7 @@ export function CartOrderSetup({
                   id="pos-corporate-billing"
                   className="h-8 text-xs w-full"
                   value={billingType}
-                  onChange={(e) => onBillingTypeChange?.(e.target.value as CorporateBillingType)}
+                  onChange={(e) => updateDraft({ billingType: e.target.value as CorporateBillingType })}
                 >
                   <NativeSelectOption value="PREPAID">Bayar di Muka (Prepaid)</NativeSelectOption>
                   <NativeSelectOption value="INVOICE">Tagihan Bertempo (Invoice)</NativeSelectOption>
@@ -269,7 +259,10 @@ export function CartOrderSetup({
                   id="pos-corporate-room"
                   className="h-8 text-xs w-full"
                   value={selectedMeetingRoomId}
-                  onChange={(e) => onSelectedMeetingRoomChange?.(e.target.value)}
+                  onChange={(e) => {
+                    updateDraft({ meetingRoomId: e.target.value });
+                    onSelectedMeetingRoomChange?.(e.target.value);
+                  }}
                 >
                   <NativeSelectOption value="">Tanpa ruang meeting (hanya F&B)</NativeSelectOption>
                   {meetingRooms.map((room) => (

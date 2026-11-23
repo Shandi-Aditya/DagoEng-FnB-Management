@@ -96,7 +96,11 @@ function OrderDetailBody({
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
   const isPaid = selectedOrder.paymentStatus === "PAID";
-  const canPayThis = selectedOrder.status !== "COMPLETED" && !isCancelled && !isPaid && canProcessPayment;
+  const canPayThis =
+    !isCancelled &&
+    !isPaid &&
+    canProcessPayment &&
+    (selectedOrder.status !== "COMPLETED" || selectedOrder.paymentMethod === "INVOICE");
   const timing = [
     { label: "Antre di dapur", minutes: metrics.kitchenQueueMinutes },
     { label: "Dimasak", minutes: metrics.cookingMinutes },

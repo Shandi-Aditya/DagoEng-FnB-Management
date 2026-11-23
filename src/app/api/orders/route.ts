@@ -295,7 +295,7 @@ const OrderPayloadSchema = z.object({
   total: z.number().finite().nonnegative(),
   items: z.array(OrderItemSchema).optional(),
   paymentStatus: z.enum(["PENDING", "PAID", "REFUNDED"]).optional(),
-  paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT"]).optional(),
+  paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT", "INVOICE"]).optional(),
   notes: z.string().optional(),
   status: z
     .enum(["NEW", "CONFIRMED", "KITCHEN_RECEIVED", "COOKING", "READY", "SERVED", "COMPLETED", "CANCELLED"])

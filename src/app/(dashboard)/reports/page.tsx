@@ -21,6 +21,7 @@ import { ReportsPreviewTable } from "@/features/reports/ReportsPreviewTable";
 import { ReportsToolbar } from "@/features/reports/ReportsToolbar";
 import {
   buildReportData,
+  extractAvailableReportCompanies,
   filterReportRows,
   getReportCategories,
   isSettledPaidOrder,
@@ -220,20 +221,10 @@ export default function ReportsPage() {
     ? selectedReportType
     : "SALES";
 
-  const availableCompanies = useMemo(() => {
-    const set = new Set<string>();
-    orders.forEach((o) => {
-      if (o.corporateInfo?.companyName?.trim()) {
-        set.add(o.corporateInfo.companyName.trim());
-      }
-    });
-    coworkingBookings.forEach((b) => {
-      if (b.company?.trim()) {
-        set.add(b.company.trim());
-      }
-    });
-    return Array.from(set).sort();
-  }, [orders, coworkingBookings]);
+  const availableCompanies = useMemo(
+    () => extractAvailableReportCompanies(orders, coworkingBookings),
+    [orders, coworkingBookings]
+  );
 
   const currentReport = buildReportData({
     type: effectiveReportType,
@@ -368,14 +359,19 @@ export default function ReportsPage() {
           setPageSize(newSize);
           setCurrentPage(1);
         }}
-        companyFilter={{
-          selectedCompany,
-          availableCompanies,
-          onCompanyChange: (company) => {
-            setSelectedCompany(company);
-            setCurrentPage(1);
-          },
-        }}
+        companyFilter={
+          effectiveReportType === "SALES" ||
+          effectiveReportType === "PRODUCTS"
+            ? {
+                selectedCompany,
+                availableCompanies,
+                onCompanyChange: (company) => {
+                  setSelectedCompany(company);
+                  setCurrentPage(1);
+                },
+              }
+            : undefined
+        }
       />
 
       {isPDFModalOpen && (
