@@ -578,8 +578,15 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       throw new Error(`COWORKING_SCHEDULE_CLOSED: ${scheduleCheck.reason}`);
     }
 
+    const targetSpace = spaces.find((s) => s.id === bookingData.spaceId);
+    const maxCapacity =
+      targetSpace?.type === "HOT_DESK" ? targetSpace.capacity || 8 : 1;
+
     const latestBookings = bookingsRef.current;
-    const conflict = checkCoworkingBookingConflict(latestBookings, bookingData);
+    const conflict = checkCoworkingBookingConflict(latestBookings, {
+      ...bookingData,
+      maxCapacity,
+    });
     if (conflict.hasConflict) {
       throw new Error(`DOUBLE_BOOKING_CONFLICT: ${conflict.message}`);
     }

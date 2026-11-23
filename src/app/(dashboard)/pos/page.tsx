@@ -1025,6 +1025,7 @@ export default function POSPage() {
       targetDate,
       startHour,
       durationHours,
+      checkPast: true,
     });
   };
 
@@ -1670,6 +1671,10 @@ export default function POSPage() {
                   checkSlotAvailable={(slot) => {
                     const startH = parseHour(slot);
                     return checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration).isAvailable;
+                  }}
+                  getSlotInfo={(slot) => {
+                    const startH = parseHour(slot);
+                    return checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
                   }}
                   cwUsageType={cwUsageType}
                   onUsageTypeChange={setCwUsageType}

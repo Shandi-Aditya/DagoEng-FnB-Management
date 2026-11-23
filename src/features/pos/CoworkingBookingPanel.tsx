@@ -13,6 +13,7 @@ import {
   calculateEndTime,
   formatCoworkingDuration,
   spaceTypeLabel,
+  type SlotAvailabilityResult,
 } from "@/features/pos/pos-coworking";
 import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,6 +34,7 @@ interface CoworkingBookingPanelProps {
   onStartTimeChange: (time: string) => void;
   onResetStartTime: () => void;
   checkSlotAvailable: (slot: string) => boolean;
+  getSlotInfo?: (slot: string) => SlotAvailabilityResult;
   cwUsageType: "PERSONAL" | "GROUP";
   onUsageTypeChange: (type: "PERSONAL" | "GROUP") => void;
   cwCompanyName: string;
@@ -94,6 +96,7 @@ export function CoworkingBookingPanel({
   onStartTimeChange,
   onResetStartTime,
   checkSlotAvailable,
+  getSlotInfo,
   cwUsageType,
   onUsageTypeChange,
   cwCompanyName,
@@ -277,7 +280,17 @@ export function CoworkingBookingPanel({
 
         <div className="grid grid-cols-3 gap-1.5 pt-1 sm:grid-cols-5">
           {startSlots.map((slot) => {
-            const isAvail = checkSlotAvailable(slot);
+            const slotInfo = getSlotInfo
+              ? getSlotInfo(slot)
+              : {
+                  isAvailable: checkSlotAvailable(slot),
+                  remainingSeats: checkSlotAvailable(slot) ? 1 : 0,
+                  maxCapacity: 1,
+                  isPast: false,
+                  label: checkSlotAvailable(slot) ? "Tersedia" : "Terisi",
+                };
+            const isAvail = slotInfo.isAvailable;
+            const isPast = slotInfo.isPast;
             const isSelected = cwStartTime === slot;
 
             return (
@@ -286,16 +299,26 @@ export function CoworkingBookingPanel({
                 type="button"
                 disabled={!isAvail}
                 onClick={() => onStartTimeChange(slot)}
+                aria-label={`${selectedSpace.name} jam ${slot}, ${slotInfo.label}`}
                 className={cn(
-                  "flex flex-col items-center justify-center rounded-md border p-1 text-center transition-colors touch-manipulation",
-                  !isAvail && "cursor-not-allowed border-border bg-muted/30 opacity-50",
+                  "flex flex-col items-center justify-center rounded-md border p-1 text-center transition-colors touch-manipulation min-h-[46px]",
+                  isPast && "cursor-not-allowed border-border/40 bg-muted/30 text-muted-foreground opacity-60",
+                  !isPast && !isAvail && "cursor-not-allowed border-destructive/20 bg-destructive/10 text-destructive/80 opacity-75",
                   isAvail && isSelected && "border-primary bg-primary text-primary-foreground font-medium",
                   isAvail && !isSelected && "border-border bg-card hover:bg-muted/40 text-foreground"
                 )}
               >
-                <span className="font-mono text-xs leading-tight">{slot}</span>
-                <span className="text-xs">
-                  {isAvail ? "Tersedia" : "Terisi"}
+                <span className="font-mono text-xs font-semibold leading-tight">{slot}</span>
+                <span
+                  className={cn(
+                    "text-xs leading-tight font-medium mt-0.5",
+                    isPast && "text-muted-foreground",
+                    !isPast && !isAvail && "text-destructive",
+                    isAvail && !isSelected && "text-success",
+                    isAvail && isSelected && "text-primary-foreground"
+                  )}
+                >
+                  {slotInfo.label}
                 </span>
               </button>
             );

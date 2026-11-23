@@ -13,6 +13,9 @@ import {
 } from "@/lib/persistent-storage";
 import { getRequestAuthUser, type ServerAuthResult } from "@/lib/server-auth";
 import type { RoleSlug } from "@/types/auth";
+import { INITIAL_SPACES } from "@/lib/sync-domains/spaces-spec";
+import type { CoworkingSpaceItem } from "@/types/coworking";
+import { calculateEndTime } from "@/features/pos/pos-coworking";
 
 const FILE_COWORKING_BOOKINGS = "coworking_bookings.json";
 
@@ -173,6 +176,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const masterData = await readPersistentData<{ spaces?: CoworkingSpaceItem[] }>(
+      "coworking_master.json",
+      { spaces: INITIAL_SPACES }
+    );
+    const spaces = masterData?.spaces || INITIAL_SPACES;
+    const space = spaces.find((s) => s.id === booking.spaceId);
+
+    if (!space) {
+      return NextResponse.json(
+        { error: "Ruang kerja tidak ditemukan." },
+        { status: 400 }
+      );
+    }
+
+    if (space.status === "MAINTENANCE") {
+      return NextResponse.json(
+        { error: "Ruang kerja sedang dalam pemeliharaan." },
+        { status: 400 }
+      );
+    }
+
+    const maxCapacity =
+      booking.maxCapacity ??
+      (space.type === "HOT_DESK" ? space.capacity || 8 : 1);
+
+    if (!booking.endTime && booking.startTime) {
+      booking.endTime = calculateEndTime(
+        booking.startTime,
+        typeof booking.duration === "number" ? booking.duration : 1
+      );
+    }
+
     const existingBookings = await getCoworkingBookings();
     const matchedExisting = existingBookings.find(
       (b: Record<string, unknown>) =>
@@ -250,7 +285,28 @@ export async function POST(req: NextRequest) {
       booking.createdAt = new Date().toISOString();
     }
 
-    await saveCoworkingBooking(booking);
+    try {
+      await saveCoworkingBooking(booking, {
+        maxCapacity,
+        spaceName: space.name,
+      });
+    } catch (saveErr: unknown) {
+      const isConflict =
+        (saveErr as { code?: string })?.code === "OVERBOOKING_CONFLICT" ||
+        (saveErr as { status?: number })?.status === 409;
+      if (isConflict) {
+        const message =
+          saveErr instanceof Error
+            ? saveErr.message
+            : "Kapasitas slot tidak mencukupi atau sudah penuh. Pemesanan ditolak untuk mencegah overbooking.";
+        return NextResponse.json(
+          { error: message, code: "OVERBOOKING_CONFLICT" },
+          { status: 409 }
+        );
+      }
+      throw saveErr;
+    }
+
     return NextResponse.json({ success: true, booking });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal server error";

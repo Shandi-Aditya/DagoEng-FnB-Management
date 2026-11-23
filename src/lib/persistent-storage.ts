@@ -26,6 +26,8 @@ import type {
   SyncDomainName,
 } from "@/lib/domain-sync-types";
 import type { ServerAuthResult } from "@/lib/server-auth";
+import { checkCoworkingBookingConflict } from "@/lib/operating-hours";
+import type { CoworkingBooking } from "@/types/coworking";
 
 const FILE_AUDIT_LOGS = "audit_logs.json";
 const FILE_SHIFTS = "shifts.json";
@@ -304,10 +306,55 @@ export async function getCoworkingBookings(): Promise<any[]> {
   return readPersistentData<any[]>(FILE_COWORKING_BOOKINGS, []);
 }
 
-export async function saveCoworkingBooking(booking: any): Promise<boolean> {
+export async function saveCoworkingBooking(
+  booking: any,
+  options?: {
+    maxCapacity?: number;
+    spaceName?: string;
+    checkConflict?: boolean;
+  }
+): Promise<boolean> {
   await mutatePersistentData<any[]>(FILE_COWORKING_BOOKINGS, [], (existing) => {
+    const isNonActiveStatus =
+      booking.checkInStatus === "CANCELLED" ||
+      booking.checkInStatus === "COMPLETED" ||
+      booking.paymentStatus === "CANCELLED";
+
+    if (
+      options?.checkConflict !== false &&
+      !isNonActiveStatus &&
+      booking.date &&
+      booking.spaceId
+    ) {
+      const conflict = checkCoworkingBookingConflict(
+        existing as CoworkingBooking[],
+        {
+          id: booking.id,
+          spaceId: booking.spaceId,
+          spaceName: options?.spaceName || booking.spaceName,
+          bookingType: booking.bookingType || "HOURLY",
+          date: booking.date,
+          endDate: booking.endDate,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          maxCapacity: options?.maxCapacity,
+        }
+      );
+
+      if (conflict.hasConflict) {
+        const err = new Error(
+          conflict.message || "Kapasitas slot tidak mencukupi atau sudah penuh."
+        );
+        (err as any).code = "OVERBOOKING_CONFLICT";
+        (err as any).status = 409;
+        throw err;
+      }
+    }
+
     const index = existing.findIndex(
-      (b) => b.id === booking.id || (booking.bookingCode && b.bookingCode === booking.bookingCode)
+      (b) =>
+        b.id === booking.id ||
+        (booking.bookingCode && b.bookingCode === booking.bookingCode)
     );
     if (index >= 0) {
       const updated = [...existing];

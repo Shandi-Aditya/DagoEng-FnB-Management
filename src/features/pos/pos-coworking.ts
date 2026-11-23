@@ -73,10 +73,38 @@ export function calculateEndTime(startTime: string, durationHours: number): stri
   return `${endHour.toString().padStart(2, "0")}:00`;
 }
 
+export function isSlotPast(
+  targetDate: string,
+  slotTime: string,
+  now = new Date()
+): boolean {
+  const todayWita = getTodayWitaDateString(now);
+  const targetYmd = normalizeDateToYMD(targetDate);
+  if (!targetYmd) return false;
+  if (targetYmd < todayWita) {
+    return true;
+  }
+  if (targetYmd > todayWita) {
+    return false;
+  }
+  const witaHourStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Makassar",
+    hour: "numeric",
+    hour12: false,
+  }).format(now);
+  const curH = parseInt(witaHourStr, 10);
+  const slotH = parseHour(slotTime);
+  return slotH < curH;
+}
+
 export interface SlotAvailabilityResult {
   isAvailable: boolean;
   reason?: string;
   conflictingBooking?: CoworkingBooking;
+  remainingSeats: number;
+  maxCapacity: number;
+  isPast: boolean;
+  label: string;
 }
 
 export interface CheckSlotParams {
@@ -86,6 +114,8 @@ export interface CheckSlotParams {
   targetDate: string;
   startHour: number;
   durationHours: number;
+  checkPast?: boolean;
+  now?: Date;
 }
 
 export function checkSlotAvailability({
@@ -95,27 +125,46 @@ export function checkSlotAvailability({
   targetDate,
   startHour,
   durationHours,
+  checkPast = false,
+  now = new Date(),
 }: CheckSlotParams): SlotAvailabilityResult {
   const space = spaces.find((s) => s.id === spaceId);
+  const maxCapacity = space?.type === "HOT_DESK" ? space.capacity || 8 : 1;
+  const isPast = checkPast
+    ? isSlotPast(targetDate, `${startHour.toString().padStart(2, "0")}:00`, now)
+    : false;
+
   if (space?.status === "MAINTENANCE") {
     return {
       isAvailable: false,
       reason: "Sedang pemeliharaan",
+      remainingSeats: 0,
+      maxCapacity,
+      isPast: false,
+      label: "Pemeliharaan",
     };
   }
 
-  const maxCapacity = space?.type === "HOT_DESK" ? space.capacity || 8 : 1;
   const targetYmd = normalizeDateToYMD(targetDate);
   const reqStartMin = startHour * 60;
   const reqEndMin = (startHour + durationHours) * 60;
 
   const activeBookings = bookings.filter((b) => {
     if (b.spaceId !== spaceId) return false;
-    if (b.checkInStatus === "CANCELLED" || b.checkInStatus === "COMPLETED") return false;
+    if (
+      b.checkInStatus === "CANCELLED" ||
+      b.checkInStatus === "COMPLETED" ||
+      (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
+    ) {
+      return false;
+    }
     const bStartYmd = normalizeDateToYMD(b.date);
     const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
     return Boolean(bStartYmd) && targetYmd >= bStartYmd && targetYmd <= bEndYmd;
   });
+
+  let peakOverlapping = 0;
+  let firstConflicting: CoworkingBooking | undefined;
 
   for (let min = reqStartMin; min < reqEndMin; min += 30) {
     const windowEnd = min + 30;
@@ -127,16 +176,46 @@ export function checkSlotAvailability({
       return min < bEndMin && windowEnd > bStartMin;
     });
 
-    if (overlapping.length >= maxCapacity) {
-      return {
-        isAvailable: false,
-        reason: "Sudah dibooking",
-        conflictingBooking: overlapping[0],
-      };
+    if (overlapping.length > peakOverlapping) {
+      peakOverlapping = overlapping.length;
+      if (!firstConflicting && overlapping.length >= maxCapacity) {
+        firstConflicting = overlapping[0];
+      }
     }
   }
 
-  return { isAvailable: true };
+  const remainingSeats = Math.max(0, maxCapacity - peakOverlapping);
+
+  if (isPast) {
+    return {
+      isAvailable: false,
+      reason: "Slot sudah lewat",
+      remainingSeats,
+      maxCapacity,
+      isPast: true,
+      label: "Lewat",
+    };
+  }
+
+  if (remainingSeats <= 0) {
+    return {
+      isAvailable: false,
+      reason: "Sudah dibooking",
+      conflictingBooking: firstConflicting,
+      remainingSeats: 0,
+      maxCapacity,
+      isPast: false,
+      label: "Penuh",
+    };
+  }
+
+  return {
+    isAvailable: true,
+    remainingSeats,
+    maxCapacity,
+    isPast: false,
+    label: `${remainingSeats}/${maxCapacity} tersisa`,
+  };
 }
 
 const SPACE_TYPE_LABELS: Record<string, string> = {
