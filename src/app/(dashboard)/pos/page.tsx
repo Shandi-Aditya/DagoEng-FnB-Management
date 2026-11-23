@@ -12,7 +12,11 @@ import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { calculateOrderPricing, calculateCoworkingPricing, validateVoucherCode, PromoConfig } from "@/lib/promo";
-import { calculateCartTaxAndService } from "@/lib/tax-breakdown";
+import {
+  allocateIntegerProRata,
+  calculateMixedCartTaxAndService,
+  isCoworkingOrderItem,
+} from "@/lib/tax-breakdown";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
@@ -89,12 +93,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
 import { EmptyState } from "@/components/app/empty-state";
+import { StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CartItemList } from "@/features/pos/CartItemList";
 import { CartOrderSetup } from "@/features/pos/CartOrderSetup";
 import { CartPromoField } from "@/features/pos/CartPromoField";
-import { CartSummary } from "@/features/pos/CartSummary";
 import { ProductCatalog } from "@/features/pos/ProductCatalog";
 import { UnitScope } from "@/components/app/unit-scope";
 import { PosToolbar } from "@/features/pos/PosToolbar";
@@ -379,23 +382,68 @@ export default function POSPage() {
     return settings.promos.find((p: PromoConfig) => p.id === selectedPromoId);
   }, [settings.promos, selectedPromoId]);
 
-  const cartPricing = useMemo(() => {
+  const { fnbCartItems, coworkingCartItems, fnbSubtotalRaw, coworkingSubtotalRaw, subtotal } = useMemo(() => {
+    const fnb: POSCartItem[] = [];
+    const cw: POSCartItem[] = [];
+    let fnbSum = 0;
+    let cwSum = 0;
+    for (const c of cartItems) {
+      const lineTotal = Math.round((c.unitFinalPrice || 0) * (c.quantity || 0));
+      if (isCoworkingOrderItem(c)) {
+        cw.push(c);
+        cwSum += lineTotal;
+      } else {
+        fnb.push(c);
+        fnbSum += lineTotal;
+      }
+    }
+    return {
+      fnbCartItems: fnb,
+      coworkingCartItems: cw,
+      fnbSubtotalRaw: fnbSum,
+      coworkingSubtotalRaw: cwSum,
+      subtotal: fnbSum + cwSum,
+    };
+  }, [cartItems]);
+
+  const hasCoworkingInCart = coworkingCartItems.length > 0;
+  const hasFnbInCart = fnbCartItems.length > 0;
+  const allCoworkingInCart = hasCoworkingInCart && !hasFnbInCart;
+
+  const promoDiscountAmount = useMemo(() => {
+    if (!activePromo || subtotal <= 0) return 0;
+    if (activePromo.scope === "FNB") {
+      if (fnbCartItems.length === 0) return 0;
+      const items = fnbCartItems.map((c) => {
+        const prod = posProducts.find((p) => p.id === c.productId);
+        return {
+          productId: c.productId,
+          category: c.category || prod?.category,
+          tenantId: c.tenantId,
+          quantity: c.quantity,
+          unitPrice: c.unitFinalPrice,
+        };
+      });
+      return Math.round(calculateOrderPricing(items, activePromo, 0).discountAmount);
+    }
+    if (activePromo.scope === "COWORKING") {
+      if (coworkingSubtotalRaw <= 0) return 0;
+      return Math.round(
+        calculateCoworkingPricing(coworkingSubtotalRaw, activePromo, 0, "NON_TAX").discountAmount
+      );
+    }
     const items = cartItems.map((c) => {
-      const prod = posProducts.find(p => p.id === c.productId);
+      const prod = posProducts.find((p) => p.id === c.productId);
       return {
         productId: c.productId,
-        category: prod?.category,
+        category: c.category || prod?.category,
         tenantId: c.tenantId,
         quantity: c.quantity,
-        unitPrice: c.unitFinalPrice
+        unitPrice: c.unitFinalPrice,
       };
     });
-    // We pass taxRate=0 because we calculate tax locally in POS
-    return calculateOrderPricing(items, activePromo, 0);
-  }, [cartItems, activePromo, posProducts]);
-
-  const subtotal = cartPricing.originalSubtotal;
-  const promoDiscountAmount = Math.round(cartPricing.discountAmount);
+    return Math.round(calculateOrderPricing(items, activePromo, 0).discountAmount);
+  }, [activePromo, subtotal, fnbCartItems, coworkingSubtotalRaw, cartItems, posProducts]);
 
   const voucherDiscountAmount = useMemo(() => {
     if (!appliedVoucher) return 0;
@@ -525,17 +573,81 @@ export default function POSPage() {
     return { ok: true };
   };
 
-  // Single centralized tax & service charge calculation (POS-11, POS-27 / B2)
+  const fnbTaxCfg = settings?.categoryTax?.fnb;
+  const cwTaxCfg = settings?.categoryTax?.coworking;
+  const effectiveFnbTaxEnabled = fnbTaxCfg !== undefined ? fnbTaxCfg.isEnabled : isTaxEnabled;
+  const effectiveFnbTaxRatePercent =
+    fnbTaxCfg !== undefined ? fnbTaxCfg.taxRatePercent : Number(taxRatePercent) || 10;
+  const effectiveServiceChargePercent = settings?.serviceChargePercent ?? 5;
+  const effectiveCwTaxEnabled = cwTaxCfg !== undefined ? cwTaxCfg.isEnabled : false;
+  const effectiveCwTaxRatePercent = cwTaxCfg !== undefined ? cwTaxCfg.taxRatePercent : 0;
+
+  // Mixed-category tax & service charge calculation (V-33: F&B PB1+Service, Co-working category tax, 0 service)
   const cartTaxBreakdown = useMemo(() => {
-    return calculateCartTaxAndService({
-      subtotal,
+    const taxItems = cartItems.map((c) => ({
+      id: c.cartItemId,
+      productId: c.productId,
+      productName: c.productName,
+      itemType: c.itemType,
+      category: c.category,
+      tenantId: c.tenantId,
+      coworkingMeta: c.coworkingMeta,
+      price: c.unitFinalPrice,
+      quantity: c.quantity,
+    }));
+
+    const otherDiscount = Math.max(0, totalDiscount - promoDiscountAmount);
+    let scopedDiscountOptions: { discount?: number; fnbDiscount?: number; coworkingDiscount?: number } = {
       discount: totalDiscount,
-      taxRatePercent: Number(taxRatePercent) || 10,
-      serviceChargePercent: Number(settings.serviceChargePercent) || 0,
-      isTaxEnabled,
+    };
+
+    if (activePromo?.scope === "FNB" && promoDiscountAmount > 0) {
+      const [otherFnb, otherCw] =
+        otherDiscount > 0 && subtotal > 0
+          ? allocateIntegerProRata(otherDiscount, [fnbSubtotalRaw, coworkingSubtotalRaw])
+          : [0, 0];
+      scopedDiscountOptions = {
+        discount: totalDiscount,
+        fnbDiscount: Math.min(fnbSubtotalRaw, promoDiscountAmount + otherFnb),
+        coworkingDiscount: Math.min(coworkingSubtotalRaw, otherCw),
+      };
+    } else if (activePromo?.scope === "COWORKING" && promoDiscountAmount > 0) {
+      const [otherFnb, otherCw] =
+        otherDiscount > 0 && subtotal > 0
+          ? allocateIntegerProRata(otherDiscount, [fnbSubtotalRaw, coworkingSubtotalRaw])
+          : [0, 0];
+      scopedDiscountOptions = {
+        discount: totalDiscount,
+        fnbDiscount: Math.min(fnbSubtotalRaw, otherFnb),
+        coworkingDiscount: Math.min(coworkingSubtotalRaw, promoDiscountAmount + otherCw),
+      };
+    }
+
+    return calculateMixedCartTaxAndService(taxItems, {
+      ...scopedDiscountOptions,
+      fnbTaxRatePercent: effectiveFnbTaxRatePercent,
+      isFnbTaxEnabled: effectiveFnbTaxEnabled,
+      fnbServiceChargePercent: effectiveServiceChargePercent,
+      coworkingTaxRatePercent: effectiveCwTaxRatePercent,
+      isCoworkingTaxEnabled: effectiveCwTaxEnabled,
+      coworkingServiceChargePercent: 0,
       orderType,
     });
-  }, [subtotal, totalDiscount, taxRatePercent, settings.serviceChargePercent, isTaxEnabled, orderType]);
+  }, [
+    cartItems,
+    totalDiscount,
+    promoDiscountAmount,
+    activePromo?.scope,
+    subtotal,
+    fnbSubtotalRaw,
+    coworkingSubtotalRaw,
+    effectiveFnbTaxRatePercent,
+    effectiveFnbTaxEnabled,
+    effectiveServiceChargePercent,
+    effectiveCwTaxRatePercent,
+    effectiveCwTaxEnabled,
+    orderType,
+  ]);
 
   const taxableAmount = cartTaxBreakdown.dpp;
   const taxPB1 = cartTaxBreakdown.pb1;
@@ -560,18 +672,27 @@ export default function POSPage() {
 
   // Add Item to Cart
   const handleAddToCart = (item: POSCartItem) => {
-    const tId =
-      item.tenantId ||
-      posProducts.find((p) => p.id === item.productId)?.tenantId ||
-      "tenant-ks";
-    const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
-    if (!tenantOp.isOpen) {
-      notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
-      return;
+    const isCw = isCoworkingOrderItem(item);
+    const tId = isCw
+      ? "DAGO_HUB"
+      : item.tenantId ||
+        posProducts.find((p) => p.id === item.productId)?.tenantId ||
+        "tenant-ks";
+    if (!isCw) {
+      const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
+      if (!tenantOp.isOpen) {
+        notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
+        return;
+      }
     }
     const resolvedItem: POSCartItem = {
       ...item,
       tenantId: tId,
+      tenantName: isCw
+        ? item.tenantName || "Dago Creative Hub (Co-Working)"
+        : item.tenantName || getTenantName(tId),
+      itemType: isCw ? "COWORKING" : item.itemType ?? "FNB",
+      category: isCw ? item.category || "Co-Working" : item.category,
     };
     setCartItems((prev) => {
       const existingIdx = prev.findIndex(
@@ -579,6 +700,7 @@ export default function POSPage() {
           i.productId === resolvedItem.productId &&
           i.selectedVariant?.name === resolvedItem.selectedVariant?.name &&
           i.notes === resolvedItem.notes &&
+          JSON.stringify(i.coworkingMeta ?? null) === JSON.stringify(resolvedItem.coworkingMeta ?? null) &&
           JSON.stringify(i.selectedModifiers.map((m) => m.name).sort()) ===
           JSON.stringify(resolvedItem.selectedModifiers.map((m) => m.name).sort())
       );
@@ -664,8 +786,25 @@ export default function POSPage() {
       setFnbVoucherValidationMsg(null);
       return;
     }
-    const res = validateVoucherCode(code, settings.promos || [], subtotal, {
-      scope: "FNB",
+    const matchingPromo = (settings.promos || []).find(
+      (p) =>
+        (p.code && p.code.trim().toUpperCase() === code.toUpperCase()) ||
+        p.name.trim().toUpperCase() === code.toUpperCase()
+    );
+    const validationSubtotal =
+      matchingPromo?.scope === "FNB"
+        ? fnbSubtotalRaw
+        : matchingPromo?.scope === "COWORKING"
+        ? coworkingSubtotalRaw
+        : subtotal;
+    const validationScope =
+      hasCoworkingInCart && !hasFnbInCart
+        ? "COWORKING"
+        : !hasCoworkingInCart
+        ? "FNB"
+        : undefined;
+    const res = validateVoucherCode(code, settings.promos || [], validationSubtotal, {
+      scope: validationScope,
       tenantId: selectedTenantId !== "ALL" ? selectedTenantId : undefined,
       customerId: selectedMember?.id,
     });
@@ -703,18 +842,44 @@ export default function POSPage() {
         timeStyle: "short",
       });
 
+      const resolvedCartMeta = cartItems.map((c) => {
+        const isCw = isCoworkingOrderItem(c);
+        const resolvedTenantId = isCw
+          ? "DAGO_HUB"
+          : c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks";
+        const resolvedTenantName = isCw
+          ? c.tenantName || "Dago Creative Hub (Co-Working)"
+          : c.tenantName || getTenantName(resolvedTenantId);
+        const resolvedCategory = isCw
+          ? c.category || "Co-Working"
+          : c.category || posProducts.find((p) => p.id === c.productId)?.category;
+        return {
+          item: c,
+          isCw,
+          resolvedTenantId,
+          resolvedTenantName,
+          resolvedCategory,
+        };
+      });
+
       const primaryTenantId =
-        cartItems[0]?.tenantId ||
+        resolvedCartMeta[0]?.resolvedTenantId ||
         lockedTenantId ||
         (selectedTenantId !== "ALL" ? selectedTenantId : "tenant-ks");
-      const posPublisher = resolvePosReceiptPublisher(
-        cartItems.map((item) => ({ tenantId: item.tenantId })),
-        activeOutlet,
-        primaryTenantId
-      );
-      const publisherCode = posPublisher.isMultiTenant
-        ? "DAGO"
-        : resolvePublisherCode(posPublisher.tenantId);
+      const posPublisher = allCoworkingInCart
+        ? resolveCoworkingReceiptPublisher(activeOutlet)
+        : resolvePosReceiptPublisher(
+            resolvedCartMeta.map((entry) => ({
+              tenantId: entry.resolvedTenantId,
+              tenantName: entry.resolvedTenantName,
+            })),
+            activeOutlet,
+            primaryTenantId
+          );
+      const publisherCode =
+        allCoworkingInCart || posPublisher.isMultiTenant
+          ? "DAGO"
+          : resolvePublisherCode(posPublisher.tenantId);
       const receiptNo = generateSequentialReceiptNumber({
         publisherCode,
         existingNumbers: orders.map((o) => o.orderNumber),
@@ -736,8 +901,8 @@ export default function POSPage() {
         promoId: selectedPromoId || undefined,
         tax: taxPB1,
         serviceCharge: serviceCharge,
-        taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
-        serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
+        taxRatePercent: cartTaxBreakdown.taxRatePercent,
+        serviceChargePercent: cartTaxBreakdown.serviceChargePercent,
         total: grandTotal,
         notes: orderNotes.trim() || undefined,
         paymentMethod: paymentData.method,
@@ -749,19 +914,26 @@ export default function POSPage() {
           amount: g.assignedAmount,
           method: g.paymentMethod,
         })),
-        items: cartItems.map((c, i) => ({
-          id: `pos-it-${i}-${Date.now()}`,
-          productId: c.productId,
-          tenantId: c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks",
-          productName: c.productName,
-          quantity: c.quantity,
-          unitPrice: c.unitFinalPrice,
-          modifiers: [
-            ...(c.selectedVariant ? [c.selectedVariant.name] : []),
-            ...c.selectedModifiers.map((m) => m.name),
-          ],
-          notes: c.notes,
-        })),
+        items: resolvedCartMeta.map((entry, i) => {
+          const { item: c, isCw, resolvedTenantId, resolvedTenantName, resolvedCategory } = entry;
+          return {
+            id: isCw ? `cw-pos-it-${i}-${Date.now()}` : `pos-it-${i}-${Date.now()}`,
+            productId: c.productId,
+            tenantId: resolvedTenantId,
+            tenantName: resolvedTenantName,
+            itemType: isCw ? ("COWORKING" as const) : c.itemType ?? ("FNB" as const),
+            category: resolvedCategory,
+            ...(c.coworkingMeta ? { coworkingMeta: c.coworkingMeta } : {}),
+            productName: c.productName,
+            quantity: c.quantity,
+            unitPrice: c.unitFinalPrice,
+            modifiers: [
+              ...(c.selectedVariant ? [c.selectedVariant.name] : []),
+              ...c.selectedModifiers.map((m) => m.name),
+            ],
+            notes: c.notes,
+          };
+        }),
       });
 
       const syncResult = await serverSync;
@@ -775,49 +947,55 @@ export default function POSPage() {
 
       const createdOrder = syncResult.order ?? optimisticOrder;
 
-      const kitchenTicket: KitchenTicketData = {
-        orderId: createdOrder.id,
-        orderNumber: createdOrder.orderNumber,
-        outletId: createdOrder.outletId,
-        outletName: activeOutlet?.name || "Singaraja",
-        tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
-        customerName: effectiveCustomerName,
-        orderType,
-        purpose: "NEW_ORDER",
-        items: cartItems.map((c, i) => ({
-          id: `kit-${i}-${Date.now()}`,
-          productName: c.productName,
-          quantity: c.quantity,
-          variantName: c.selectedVariant?.name,
-          modifiers: c.selectedModifiers.map((m) => m.name),
-          notes: c.notes,
-          tenantId: c.tenantId,
-          tenantName: getTenantName(c.tenantId),
-        })),
-        cashierName: user?.name || "Kasir Bertugas",
-        timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" }) + " WITA",
-        kitchenNotes: orderNotes.trim() || undefined,
-        isSilent: true,
-      };
-      setKitchenModalTicket(kitchenTicket);
+      const fnbKitchenEntries = resolvedCartMeta.filter((entry) => !entry.isCw);
+      if (fnbKitchenEntries.length > 0) {
+        const kitchenTicket: KitchenTicketData = {
+          orderId: createdOrder.id,
+          orderNumber: createdOrder.orderNumber,
+          outletId: createdOrder.outletId,
+          outletName: activeOutlet?.name || "Singaraja",
+          tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
+          customerName: effectiveCustomerName,
+          orderType,
+          purpose: "NEW_ORDER",
+          items: fnbKitchenEntries.map((entry, i) => ({
+            id: `kit-${i}-${Date.now()}`,
+            productName: entry.item.productName,
+            quantity: entry.item.quantity,
+            variantName: entry.item.selectedVariant?.name,
+            modifiers: entry.item.selectedModifiers.map((m) => m.name),
+            notes: entry.item.notes,
+            tenantId: entry.resolvedTenantId,
+            tenantName: entry.resolvedTenantName,
+            itemType: "FNB",
+          })),
+          cashierName: user?.name || "Kasir Bertugas",
+          timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" }) + " WITA",
+          kitchenNotes: orderNotes.trim() || undefined,
+          isSilent: true,
+        };
+        setKitchenModalTicket(kitchenTicket);
 
-      if (printerSettings.autoPrintKitchenOrder) {
-        printKitchenOrder(kitchenTicket, "NEW_ORDER", { isSilent: true }).then((res) => {
-          if (res.success) {
-            setKitchenPrintNotification({
-              type: "success",
-              text: res.message,
-              jobId: res.job.id,
-            });
-            setTimeout(() => setKitchenPrintNotification(null), 5000);
-          } else {
-            setKitchenPrintNotification({
-              type: "error",
-              text: `Nota Dapur: ${res.message}`,
-              jobId: res.job.id,
-            });
-          }
-        });
+        if (printerSettings.autoPrintKitchenOrder) {
+          printKitchenOrder(kitchenTicket, "NEW_ORDER", { isSilent: true }).then((res) => {
+            if (res.success) {
+              setKitchenPrintNotification({
+                type: "success",
+                text: res.message,
+                jobId: res.job.id,
+              });
+              setTimeout(() => setKitchenPrintNotification(null), 5000);
+            } else {
+              setKitchenPrintNotification({
+                type: "error",
+                text: `Nota Dapur: ${res.message}`,
+                jobId: res.job.id,
+              });
+            }
+          });
+        }
+      } else {
+        setKitchenModalTicket(null);
       }
 
       if (orderType === "DINE_IN" && selectedTable) {
@@ -886,25 +1064,30 @@ export default function POSPage() {
         orderNumber: createdOrder.orderNumber,
         date: nowFormatted,
         cashierName: user?.name || "Kasir Bertugas",
-        tenantId: posPublisher.tenantId || primaryTenantId,
+        tenantId: allCoworkingInCart ? "DAGO_HUB" : posPublisher.tenantId || primaryTenantId,
         tenantName: posPublisher.brandName,
+        brandName: posPublisher.brandName,
+        tagline: posPublisher.tagline,
         outletName: posPublisher.outletName,
         outletAddress: posPublisher.outletAddress,
         outletPhone: posPublisher.outletPhone,
-        tableNumber: selectedTable,
+        tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
         customerName: effectiveCustomerName,
         customerPhone: selectedMember?.phone,
         orderType,
-        items: cartItems.map((item) => ({
-          name: item.productName,
-          quantity: item.quantity,
-          unitPrice: item.unitFinalPrice,
-          subtotal: item.itemTotal,
-          variantName: item.selectedVariant?.name,
-          modifiers: item.selectedModifiers.map((m) => m.name),
-          notes: item.notes,
-          tenantId: item.tenantId,
-          tenantName: getTenantName(item.tenantId),
+        items: resolvedCartMeta.map((entry) => ({
+          name: entry.item.productName,
+          quantity: entry.item.quantity,
+          unitPrice: entry.item.unitFinalPrice,
+          subtotal: entry.item.itemTotal,
+          variantName: entry.item.selectedVariant?.name,
+          modifiers: entry.item.selectedModifiers.map((m) => m.name),
+          notes: entry.item.notes,
+          tenantId: entry.resolvedTenantId,
+          tenantName: entry.resolvedTenantName,
+          itemType: entry.isCw ? ("COWORKING" as const) : entry.item.itemType ?? ("FNB" as const),
+          category: entry.resolvedCategory,
+          ...(entry.item.coworkingMeta ? { coworkingMeta: entry.item.coworkingMeta } : {}),
         })),
         subtotal,
         tax: taxPB1,
@@ -1359,11 +1542,21 @@ export default function POSPage() {
     notify.success("Pembayaran QRIS lunas", `Booking #${verifiedBooking.bookingCode} berhasil disetujui supervisor.`);
   };
 
-  const fnbPromos = (settings.promos ?? []).filter(
-    (promo: PromoConfig) => promo.isActive && (!promo.scope || promo.scope === "ALL" || promo.scope === "FNB"),
-  );
+  const availableCartPromos = (settings.promos ?? []).filter((promo: PromoConfig) => {
+    if (!promo.isActive) return false;
+    if (!promo.scope || promo.scope === "ALL") return true;
+    if (promo.scope === "COWORKING") return hasCoworkingInCart;
+    if (promo.scope === "FNB") return hasFnbInCart || !hasCoworkingInCart;
+    return true;
+  });
+  const promoRelevantSubtotal =
+    activePromo?.scope === "FNB"
+      ? fnbSubtotalRaw
+      : activePromo?.scope === "COWORKING"
+      ? coworkingSubtotalRaw
+      : subtotal;
   const promoMinimumNotice =
-    activePromo?.minimumAmount && subtotal < activePromo.minimumAmount
+    activePromo?.minimumAmount && promoRelevantSubtotal < activePromo.minimumAmount
       ? `Belum mencapai minimum belanja Rp ${activePromo.minimumAmount.toLocaleString("id-ID")}.`
       : null;
   const cartCount = cartItemCount(cartItems);
@@ -1480,9 +1673,24 @@ export default function POSPage() {
           </div>
 
           <Card className="self-start lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:col-span-5 xl:col-span-4">
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Pesanan</CardTitle>
-              <CardDescription className="tabular-nums">{cartCount} item</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle className="text-sm font-medium">Pesanan</CardTitle>
+                <CardDescription className="tabular-nums">
+                  {cartCount} item{hasCoworkingInCart && hasFnbInCart ? " · Gabungan F&B & co-working" : ""}
+                </CardDescription>
+              </div>
+              {!isTenantScoped && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPosMode("COWORKING")}
+                >
+                  <Laptop className="size-3.5" />
+                  <span>Tambah ruang</span>
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <CartOrderSetup
@@ -1503,7 +1711,88 @@ export default function POSPage() {
               />
               <Separator />
               <div className="max-h-80 overflow-y-auto">
-                <CartItemList items={cartItems} onUpdateQuantity={handleUpdateQuantity} onRemove={handleRemoveItem} />
+                {cartItems.length === 0 ? (
+                  <EmptyState
+                    icon={<ShoppingCart />}
+                    title="Keranjang kosong"
+                    description="Pilih menu di katalog atau tambah paket co-working."
+                  />
+                ) : (
+                  <ul className="flex flex-col divide-y">
+                    {cartItems.map((item) => {
+                      const isCwItem = isCoworkingOrderItem(item);
+                      const details = [
+                        item.selectedVariant?.name,
+                        ...item.selectedModifiers.map((modifier) => modifier.name),
+                      ].filter(Boolean);
+                      const cwBadgeLabel =
+                        effectiveCwTaxEnabled && effectiveCwTaxRatePercent > 0
+                          ? `${item.coworkingMeta ? `${item.coworkingMeta.durationHours} jam · ` : ""}${cwTaxCfg?.taxType || "Pajak"} ${effectiveCwTaxRatePercent}%`
+                          : item.coworkingMeta
+                          ? `${item.coworkingMeta.durationHours} jam · Bebas PB1`
+                          : "Co-working · Bebas PB1";
+                      return (
+                        <li key={item.cartItemId} className="flex flex-col gap-1.5 py-2.5 first:pt-0 last:pb-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <span className="text-sm font-medium">{item.productName}</span>
+                              {isCwItem ? (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                  <StatusBadge status="neutral">{cwBadgeLabel}</StatusBadge>
+                                  {item.coworkingMeta?.bookingDate ? (
+                                    <span className="text-xs text-muted-foreground font-mono tabular-nums">
+                                      {item.coworkingMeta.bookingDate}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                              {details.length > 0 ? (
+                                <span className="text-xs text-muted-foreground">{details.join(", ")}</span>
+                              ) : null}
+                              {item.notes ? (
+                                <span className="text-xs text-muted-foreground">Catatan: {item.notes}</span>
+                              ) : null}
+                            </div>
+                            <span className="shrink-0 font-mono text-sm tabular-nums">
+                              {formatCurrencyIDR(item.itemTotal)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleRemoveItem(item.cartItemId)}
+                              aria-label={`Hapus ${item.productName}`}
+                            >
+                              <Trash2 />
+                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                onClick={() => handleUpdateQuantity(item.cartItemId, -1)}
+                                aria-label="Kurangi jumlah"
+                              >
+                                <Minus />
+                              </Button>
+                              <span className="w-7 text-center font-mono text-sm tabular-nums" aria-live="polite">
+                                {item.quantity}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="icon-sm"
+                                onClick={() => handleUpdateQuantity(item.cartItemId, 1)}
+                                aria-label="Tambah jumlah"
+                              >
+                                <Plus />
+                              </Button>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
               <Separator />
               <CartPromoField
@@ -1511,7 +1800,7 @@ export default function POSPage() {
                 onCodeChange={setFnbVoucherCode}
                 onApplyCode={() => handleApplyFnbVoucher()}
                 message={fnbVoucherValidationMsg}
-                promos={fnbPromos}
+                promos={availableCartPromos}
                 selectedPromoId={selectedPromoId}
                 onPromoChange={handlePromoChange}
                 onClear={handleClearPromo}
@@ -1530,22 +1819,95 @@ export default function POSPage() {
                 onApplyManualDiscount={handleApplyManualDiscount}
                 onClearManualDiscount={() => setManualDiscount(null)}
               />
-              <CartSummary
-                subtotal={subtotal}
-                voucherDiscount={voucherDiscountAmount}
-                promoDiscount={promoDiscountAmount + manualDiscountAmount}
-                promoName={
-                  activePromo?.name || (manualDiscount ? `manual (${manualDiscount.reason})` : undefined)
-                }
-                isTaxEnabled={isTaxEnabled}
-                taxRatePercent={taxRatePercent}
-                tax={taxPB1}
-                serviceCharge={serviceCharge}
-                serviceChargePercent={Number(settings.serviceChargePercent) || 0}
-                grandTotal={grandTotal}
-                canPay={canPay}
-                onPay={handleRequestPayment}
-              />
+              <div className="flex flex-col gap-3">
+                <dl className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  <div className="flex justify-between">
+                    <dt>Subtotal</dt>
+                    <dd className="font-mono tabular-nums">{formatCurrencyIDR(subtotal)}</dd>
+                  </div>
+                  {voucherDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-success">
+                      <dt>Voucher poin</dt>
+                      <dd className="font-mono tabular-nums">−{formatCurrencyIDR(voucherDiscountAmount)}</dd>
+                    </div>
+                  ) : null}
+                  {promoDiscountAmount + manualDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-success">
+                      <dt>
+                        {activePromo?.name
+                          ? `Promo ${activePromo.name}`
+                          : manualDiscount
+                          ? `Promo manual (${manualDiscount.reason})`
+                          : "Promo"}
+                      </dt>
+                      <dd className="font-mono tabular-nums">
+                        −{formatCurrencyIDR(promoDiscountAmount + manualDiscountAmount)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {hasCoworkingInCart ? (
+                    <>
+                      {cartTaxBreakdown.fnbSubtotal > 0 ? (
+                        <div className="flex justify-between">
+                          <dt>
+                            {effectiveFnbTaxEnabled
+                              ? `Pajak PB1 (F&B ${effectiveFnbTaxRatePercent}%)`
+                              : "Pajak PB1 (nonaktif)"}
+                          </dt>
+                          <dd className="font-mono tabular-nums">
+                            {formatCurrencyIDR(cartTaxBreakdown.fnbPb1)}
+                          </dd>
+                        </div>
+                      ) : null}
+                      <div className="flex justify-between">
+                        <dt>
+                          {effectiveCwTaxEnabled && effectiveCwTaxRatePercent > 0
+                            ? `Pajak co-working (${cwTaxCfg?.taxType || "PPN"} ${effectiveCwTaxRatePercent}%)`
+                            : "Co-working bebas PB1"}
+                        </dt>
+                        <dd className="font-mono tabular-nums">
+                          {formatCurrencyIDR(cartTaxBreakdown.coworkingTax)}
+                        </dd>
+                      </div>
+                      {cartTaxBreakdown.serviceCharge > 0 ? (
+                        <div className="flex justify-between">
+                          <dt>Service charge (F&B {effectiveServiceChargePercent}%)</dt>
+                          <dd className="font-mono tabular-nums">
+                            {formatCurrencyIDR(cartTaxBreakdown.serviceCharge)}
+                          </dd>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <dt>
+                          {effectiveFnbTaxEnabled
+                            ? `PB1 ${effectiveFnbTaxRatePercent}%`
+                            : "PB1 (nonaktif)"}
+                        </dt>
+                        <dd className="font-mono tabular-nums">{formatCurrencyIDR(taxPB1)}</dd>
+                      </div>
+                      {serviceCharge > 0 ? (
+                        <div className="flex justify-between">
+                          <dt>Service charge {effectiveServiceChargePercent}%</dt>
+                          <dd className="font-mono tabular-nums">{formatCurrencyIDR(serviceCharge)}</dd>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                  <div className="mt-1 flex items-baseline justify-between border-t pt-2 text-foreground">
+                    <dt className="font-medium">Total</dt>
+                    <dd className="font-mono text-xl font-semibold tabular-nums">
+                      {formatCurrencyIDR(grandTotal)}
+                    </dd>
+                  </div>
+                </dl>
+                <Button size="lg" className="w-full" disabled={!canPay} onClick={handleRequestPayment}>
+                  <CreditCard />
+                  Bayar {formatCurrencyIDR(grandTotal)}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -1702,6 +2064,34 @@ export default function POSPage() {
                   cwPaymentMethod={cwPaymentMethod}
                   onPaymentMethodChange={setCwPaymentMethod}
                   onCompletePayment={handleCompleteCoworkingPayment}
+                  cwDate={cwDate}
+                  onAddToUnifiedCart={(cwItem) => {
+                    if (!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen) {
+                      notify.warning("Co-working tutup", "Tanggal yang dipilih bukan hari operasional co-working.");
+                      return;
+                    }
+                    if (!isWithinCoworkingHours(cwStartTime, cwDuration)) {
+                      notify.warning(
+                        "Di luar jam operasional",
+                        "Jam operasional Dago Creative Hub dan co-working adalah 09.00 sampai 18.00 WITA."
+                      );
+                      return;
+                    }
+                    handleAddToCart(cwItem);
+                    if (!customerName.trim()) {
+                      if (cwCustomerType === "MEMBER" && cwSelectedMember) {
+                        setSelectedMemberId(cwSelectedMember.id);
+                        setCustomerName(cwSelectedMember.name);
+                      } else if (cwCustomerType === "WALK_IN" && cwGuestName.trim()) {
+                        setCustomerName(cwGuestName.trim());
+                      }
+                    }
+                    notify.success(
+                      "Item co-working ditambahkan ke keranjang",
+                      `${cwItem.productName} siap digabung dengan pesanan F&B.`
+                    );
+                    setPosMode("FNB");
+                  }}
                   isDateClosed={!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen}
                   closedDateReason={isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).reason}
                 />
@@ -1758,7 +2148,7 @@ export default function POSPage() {
           isOpen={isReceiptModalOpen}
           onClose={handleStartNewTransaction}
           onNewTransaction={handleStartNewTransaction}
-          onViewKitchenTicket={() => setIsKitchenReceiptModalOpen(true)}
+          onViewKitchenTicket={kitchenModalTicket ? () => setIsKitchenReceiptModalOpen(true) : undefined}
           receiptData={lastReceiptData}
         />
       )}

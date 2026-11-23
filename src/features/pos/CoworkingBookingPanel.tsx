@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, ShieldCheck, Tag, User, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, ShieldCheck, ShoppingCart, Tag, User, X } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
 import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
 import { useAuth } from "@/contexts/AuthContext";
 import { canUserViewFullCustomerContacts, maskCustomerPhone } from "@/features/customers/customers-domain";
-import type { POSPaymentMethod } from "@/features/pos/types";
+import type { CoworkingOrderItemMeta, POSCartItem, POSPaymentMethod } from "@/features/pos/types";
 import { getCoworkingStartSlots, isWithinCoworkingHours } from "@/lib/operating-hours";
 import type { PromoConfig } from "@/lib/promo";
 import type { CoworkingSpaceItem } from "@/types/coworking";
@@ -67,6 +67,8 @@ interface CoworkingBookingPanelProps {
   cwPaymentMethod: POSPaymentMethod;
   onPaymentMethodChange: (method: POSPaymentMethod) => void;
   onCompletePayment: () => void;
+  onAddToUnifiedCart?: (item: POSCartItem) => void;
+  cwDate?: string;
   isDateClosed?: boolean;
   closedDateReason?: string;
 }
@@ -121,6 +123,8 @@ export function CoworkingBookingPanel({
   cwPaymentMethod,
   onPaymentMethodChange,
   onCompletePayment,
+  onAddToUnifiedCart,
+  cwDate,
   isDateClosed = false,
   closedDateReason,
 }: CoworkingBookingPanelProps) {
@@ -129,6 +133,46 @@ export function CoworkingBookingPanel({
   const endTime = calculateEndTime(cwStartTime, cwDuration);
   const isPastOperatingHours = !isWithinCoworkingHours(cwStartTime, cwDuration);
   const startSlots = getCoworkingStartSlots(1);
+
+  const handleAddToUnifiedCart = () => {
+    if (!onAddToUnifiedCart) return;
+    const baseUnitPrice =
+      cwDuration >= 8 && selectedSpace.dailyRate
+        ? selectedSpace.dailyRate
+        : (selectedSpace.hourlyRate || 15000) * cwDuration;
+    const durationLabel = formatCoworkingDuration(cwDuration);
+    const timeRangeLabel = `${cwStartTime}–${endTime} WITA`;
+    const coworkingMeta: CoworkingOrderItemMeta = {
+      spaceId: selectedSpace.id,
+      spaceName: selectedSpace.name,
+      spaceType: selectedSpace.type,
+      durationHours: cwDuration,
+      startTime: cwStartTime,
+      endTime,
+      bookingDate: cwDate,
+      rateLabel: `${durationLabel} (${timeRangeLabel})`,
+    };
+    onAddToUnifiedCart({
+      cartItemId: `cw-${selectedSpace.id}-${cwDate || "today"}-${cwStartTime}-${cwDuration}h-${Date.now()}`,
+      productId: selectedSpace.id,
+      productName: `${selectedSpace.name} (${durationLabel})`,
+      quantity: 1,
+      basePrice: baseUnitPrice,
+      selectedVariant: {
+        name: timeRangeLabel,
+        priceAdjustment: 0,
+      },
+      selectedModifiers: [],
+      notes: cwUsageType === "GROUP" && cwCompanyName.trim() ? cwCompanyName.trim() : undefined,
+      unitFinalPrice: baseUnitPrice,
+      itemTotal: baseUnitPrice,
+      tenantId: "DAGO_HUB",
+      tenantName: "Dago Creative Hub (Co-Working)",
+      itemType: "COWORKING",
+      category: "Co-Working",
+      coworkingMeta,
+    });
+  };
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 text-xs text-card-foreground shadow-xs">
@@ -503,17 +547,32 @@ export function CoworkingBookingPanel({
       </div>
 
       {/* Checkout action */}
-      <Button
-        type="button"
-        size="lg"
-        disabled={isPastOperatingHours || isDateClosed}
-        onClick={onCompletePayment}
-        className="w-full font-medium"
-      >
-        <ShieldCheck className="size-4" />
-        <span>Bayar dan cetak nota ({formatCurrencyIDR(cwPricing.total)})</span>
-        <ArrowRight className="size-4" />
-      </Button>
+      <div className="flex flex-col gap-2">
+        {onAddToUnifiedCart && (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            disabled={isPastOperatingHours || isDateClosed}
+            onClick={handleAddToUnifiedCart}
+            className="w-full"
+          >
+            <ShoppingCart className="size-4" />
+            <span>Tambah ke keranjang POS</span>
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="lg"
+          disabled={isPastOperatingHours || isDateClosed}
+          onClick={onCompletePayment}
+          className="w-full font-medium"
+        >
+          <ShieldCheck className="size-4" />
+          <span>Bayar dan cetak nota ({formatCurrencyIDR(cwPricing.total)})</span>
+          <ArrowRight className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }

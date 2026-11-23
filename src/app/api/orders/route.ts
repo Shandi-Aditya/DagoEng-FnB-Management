@@ -20,6 +20,7 @@ import {
 } from "@/lib/qris-verification";
 import {
   filterOrdersByTenant,
+  isCoworkingOrderItem,
   isKdsGatedStatus,
   normalizeTenantId,
   resolveNormalizedItemTenantId,
@@ -89,8 +90,10 @@ function computeAggregateOrderStatus(
   tenantStatuses: Record<string, OrderStatus>,
   fallbackStatus: OrderStatus
 ): OrderStatus {
+  const fnbItems = items.filter((it) => !isCoworkingOrderItem(it));
+  const statusItems = fnbItems.length > 0 ? fnbItems : items;
   const tenants = Array.from(
-    new Set(items.map((it) => resolveNormalizedItemTenantId(it)))
+    new Set(statusItems.map((it) => resolveNormalizedItemTenantId(it)))
   );
   if (tenants.length <= 1) {
     return (tenants[0] && tenantStatuses[tenants[0]]) || fallbackStatus;
@@ -327,10 +330,25 @@ function decideOrderWrite(
       };
 }
 
+const CoworkingMetaSchema = z.object({
+  spaceId: z.string(),
+  spaceName: z.string(),
+  spaceType: z.string().optional(),
+  durationHours: z.number(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  bookingDate: z.string().optional(),
+  rateLabel: z.string().optional(),
+});
+
 const OrderItemSchema = z.object({
   id: z.string().optional(),
   productId: z.string().optional(),
   tenantId: z.string().optional(),
+  tenantName: z.string().optional(),
+  itemType: z.enum(["FNB", "COWORKING"]).optional(),
+  category: z.string().optional(),
+  coworkingMeta: CoworkingMetaSchema.optional(),
   productName: z.string().min(1),
   quantity: z.number().finite().positive(),
   unitPrice: z.number().finite().nonnegative(),
@@ -667,12 +685,12 @@ async function executeAuthorizedOrderWrite(params: {
 
     if (existingOrder && scopedTenantId) {
       const orderFallback = (existingOrder as { tenantId?: string }).tenantId;
-      const existingTenants = Array.from(
+      const allExistingTenants = Array.from(
         new Set(
           existingOrder.items.map((it) => resolveNormalizedItemTenantId(it, orderFallback))
         )
       );
-      if (!existingTenants.includes(scopedTenantId)) {
+      if (!allExistingTenants.includes(scopedTenantId)) {
         return {
           nextOrders: existingOrders,
           result: {
@@ -685,29 +703,37 @@ async function executeAuthorizedOrderWrite(params: {
         };
       }
 
-      if (existingTenants.length > 1) {
-        const requestsReversal =
-          orderData.status === "CANCELLED" ||
-          orderData.paymentStatus === "REFUNDED" ||
-          Boolean(orderData.voidReason);
-        if (requestsReversal) {
-          return {
-            nextOrders: existingOrders,
-            result: {
-              ok: false,
-              response: NextResponse.json(
-                {
-                  error:
-                    "FORBIDDEN: Pembatalan atau refund pesanan multi-mitra harus diproses oleh kasir atau supervisor hub.",
-                },
-                { status: 403 }
-              ),
-            },
-          };
-        }
+      const requestsReversal =
+        orderData.status === "CANCELLED" ||
+        orderData.paymentStatus === "REFUNDED" ||
+        Boolean(orderData.voidReason);
+      if (allExistingTenants.length > 1 && requestsReversal) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              {
+                error:
+                  "FORBIDDEN: Pembatalan atau refund pesanan multi-mitra harus diproses oleh kasir atau supervisor hub.",
+              },
+              { status: 403 }
+            ),
+          },
+        };
+      }
 
-        const isClosed =
-          existingOrder.status === "CANCELLED" || existingOrder.paymentStatus === "REFUNDED";
+      const fnbExistingItems = existingOrder.items.filter((it) => !isCoworkingOrderItem(it));
+      const statusItems = fnbExistingItems.length > 0 ? fnbExistingItems : existingOrder.items;
+      const existingTenants = Array.from(
+        new Set(
+          statusItems.map((it) => resolveNormalizedItemTenantId(it, orderFallback))
+        )
+      );
+
+      const isClosed =
+        existingOrder.status === "CANCELLED" || existingOrder.paymentStatus === "REFUNDED";
+      if (existingTenants.length > 1) {
         if (!isClosed) {
           const explicitTenantStage =
             action.mode === "PATCH"
@@ -723,10 +749,18 @@ async function executeAuthorizedOrderWrite(params: {
             explicitTenantStage
           );
         }
-      } else if (orderData.tenantStatuses) {
-        const scopedStage = orderData.tenantStatuses[scopedTenantId];
+      } else if (!isClosed && !requestsReversal && (orderData.tenantStatuses || existingOrder.tenantStatuses)) {
+        const explicitTenantStage =
+          action.mode === "PATCH"
+            ? action.rawPatch.tenantStatuses?.[scopedTenantId] ?? action.rawPatch.status
+            : action.mode === "UPSERT"
+            ? action.initialOrderData.tenantStatuses?.[scopedTenantId] ??
+              action.initialOrderData.status
+            : orderData.status;
+        const scopedStage = explicitTenantStage || orderData.tenantStatuses?.[scopedTenantId];
         orderData = {
           ...orderData,
+          ...(scopedStage ? { status: scopedStage } : {}),
           tenantStatuses: {
             ...(existingOrder.tenantStatuses || {}),
             ...(scopedStage ? { [scopedTenantId]: scopedStage } : {}),

@@ -25,6 +25,7 @@ import {
   syncSequenceFromOrderNumber,
 } from "@/lib/receipt-publisher";
 import {
+  isCoworkingOrderItem,
   isKdsGatedStatus,
   isOrderBeforeCooking,
   normalizeTenantId,
@@ -604,8 +605,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     const normTenant = normalizeTenantId(paymentUpdate?.tenantId);
     const orderFallback = (target as { tenantId?: string }).tenantId;
+    const fnbItems = target.items.filter((it) => !isCoworkingOrderItem(it));
+    const statusItems = fnbItems.length > 0 ? fnbItems : target.items;
     const itemTenants = Array.from(
-      new Set(target.items.map((it) => resolveNormalizedItemTenantId(it, orderFallback)))
+      new Set(statusItems.map((it) => resolveNormalizedItemTenantId(it, orderFallback)))
     );
 
     let nextTenantStatuses = target.tenantStatuses ? { ...target.tenantStatuses } : undefined;
