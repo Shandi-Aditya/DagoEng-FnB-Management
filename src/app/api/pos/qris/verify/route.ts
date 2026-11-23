@@ -6,10 +6,15 @@ import {
   getWebhookSecret,
 } from "@/lib/qris-verification";
 import {
+  getCoworkingBookings,
+  getPersistentOrders,
   getPersistentQrisSession,
+  saveCoworkingBooking,
+  savePersistentOrder,
   savePersistentQrisSession,
   isVerifiedQrisStatus,
   appendAuditLog,
+  updatePersistentLoyaltyPoints,
   QrisVerificationSessionRecord,
 } from "@/lib/persistent-storage";
 import { getRequestAuthUser } from "@/lib/server-auth";
@@ -18,6 +23,111 @@ import { RoleSlug } from "@/types/auth";
 const POS_ALLOWED_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
 const SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
 
+async function settleMatchingPendingTarget(params: {
+  session: QrisVerificationSessionRecord;
+  invoiceNumber: string;
+  authoritativeExpectedAmount: number;
+  nowIso: string;
+}): Promise<QrisVerificationSessionRecord> {
+  const { session, invoiceNumber, authoritativeExpectedAmount, nowIso } = params;
+  if (session.consumedByOrderId) {
+    return session;
+  }
+
+  const verificationPayload = {
+    type: "GATEWAY_WEBHOOK" as const,
+    referenceNumber: session.transactionId || invoiceNumber,
+    invoiceNumber,
+    verifiedAt: session.verifiedAt || nowIso,
+    note: "Auto-verified via DagoPay / DOKU QRIS Webhook",
+  };
+
+  const orders = await getPersistentOrders();
+  const matchedOrder = orders.find(
+    (o) =>
+      o.paymentStatus === "PENDING" &&
+      o.status !== "CANCELLED" &&
+      (o.id === session.orderId || o.orderNumber === invoiceNumber) &&
+      Math.round(o.total) === Math.round(authoritativeExpectedAmount)
+  );
+
+  if (matchedOrder) {
+    const nextStatus = matchedOrder.status === "NEW" ? "CONFIRMED" : matchedOrder.status;
+    const loyaltyKey = (matchedOrder.customerPhone || matchedOrder.customerName || "").trim();
+    const earnedPoints = !matchedOrder.loyaltyPointsCredited
+      ? Math.floor(matchedOrder.total / 10000)
+      : 0;
+    const creditsLoyalty = Boolean(loyaltyKey) && earnedPoints > 0;
+
+    await savePersistentOrder({
+      ...matchedOrder,
+      paymentStatus: "PAID",
+      paymentMethod: "QRIS",
+      paymentReference: verificationPayload.referenceNumber,
+      status: nextStatus,
+      confirmedAt: matchedOrder.confirmedAt || nowIso,
+      qrisVerification: verificationPayload,
+      ...(creditsLoyalty ? { loyaltyPointsCredited: true } : {}),
+      statusHistory: [
+        ...(matchedOrder.statusHistory ?? []),
+        {
+          id: `h-qris-wh-${Date.now()}`,
+          orderId: matchedOrder.id,
+          fromStatus: matchedOrder.status,
+          toStatus: nextStatus,
+          timestamp: nowIso,
+          actorName: "DagoPay / DOKU Webhook",
+          note: "Pembayaran QRIS terverifikasi otomatis via webhook gateway",
+        },
+      ],
+    });
+
+    if (creditsLoyalty) {
+      await updatePersistentLoyaltyPoints(
+        loyaltyKey,
+        earnedPoints,
+        matchedOrder.customerName,
+        matchedOrder.id
+      );
+    }
+
+    return savePersistentQrisSession({
+      ...session,
+      consumedByOrderId: matchedOrder.id,
+      updatedAt: nowIso,
+    });
+  }
+
+  const bookings = await getCoworkingBookings();
+  const matchedBooking = bookings.find(
+    (b: Record<string, unknown>) =>
+      b.paymentStatus === "PENDING" &&
+      b.checkInStatus !== "CANCELLED" &&
+      (b.id === session.orderId || b.bookingCode === invoiceNumber) &&
+      Math.round(Number(b.totalAmount || 0)) === Math.round(authoritativeExpectedAmount)
+  );
+
+  if (matchedBooking) {
+    await saveCoworkingBooking({
+      ...matchedBooking,
+      paymentStatus: "PAID",
+      paymentMethod: "QRIS",
+      paidAmount: matchedBooking.totalAmount,
+      remainingAmount: 0,
+      paymentRef: verificationPayload.referenceNumber,
+      qrisVerification: verificationPayload,
+    });
+
+    return savePersistentQrisSession({
+      ...session,
+      consumedByOrderId: String(matchedBooking.id),
+      updatedAt: nowIso,
+    });
+  }
+
+  return session;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
@@ -25,6 +135,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
         { status: 401 }
+      );
+    }
+
+    if (!POS_ALLOWED_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        { error: `FORBIDDEN: Role [${auth.role}] tidak diizinkan mengakses status verifikasi QRIS POS.` },
+        { status: 403 }
       );
     }
 
@@ -186,16 +303,26 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        const replaySession = existing.consumedByOrderId
+          ? existing
+          : await settleMatchingPendingTarget({
+              session: existing,
+              invoiceNumber,
+              authoritativeExpectedAmount,
+              nowIso: new Date().toISOString(),
+            });
+
         return NextResponse.json({
           success: true,
           allowed: true,
           idempotent: true,
           alreadyProcessed: true,
-          session: existing,
+          session: replaySession,
           verification: {
             type: "GATEWAY_WEBHOOK",
-            referenceNumber: existing.invoiceNumber,
-            verifiedAt: existing.verifiedAt || existing.updatedAt,
+            referenceNumber: replaySession.invoiceNumber,
+            invoiceNumber: replaySession.invoiceNumber,
+            verifiedAt: replaySession.verifiedAt || replaySession.updatedAt,
             note: "Idempotent webhook replay (already verified)",
           },
         });
@@ -229,7 +356,13 @@ export async function POST(req: NextRequest) {
         updatedAt: nowIso,
       };
 
-      await savePersistentQrisSession(sessionRecord);
+      const savedSession = await savePersistentQrisSession(sessionRecord);
+      const settledSession = await settleMatchingPendingTarget({
+        session: savedSession,
+        invoiceNumber,
+        authoritativeExpectedAmount,
+        nowIso,
+      });
 
       await appendAuditLog({
         id: `audit-qris-wh-${invoiceNumber}-${Date.now()}`,
@@ -253,7 +386,7 @@ export async function POST(req: NextRequest) {
         success: true,
         allowed: true,
         idempotent: false,
-        session: sessionRecord,
+        session: settledSession,
         verification: { ...webhookCheck.verification, invoiceNumber },
       });
     }

@@ -809,7 +809,7 @@ describe("Task V-06: Full Multi-Domain Server Sync, Outbox Coalescing & Cache Wi
               tableNumber: "T-02",
               customerName: "Tamu Meja 2",
               orderType: "DINE_IN",
-              paymentMethod: "CASH_COUNTER",
+              paymentMethod: "QRIS",
               items: [
                 {
                   id: "it-qr-1",
