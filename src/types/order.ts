@@ -75,6 +75,8 @@ export interface OrderRecord {
     note?: string;
   };
   loyaltyPointsCredited?: boolean;
+  bomDeducted?: boolean;
+  bomRestored?: boolean;
   syncStatus?: "SYNCED" | "PENDING" | "REJECTED";
   syncError?: string;
   targetServiceMinutes: number; // Target SLA in minutes (e.g. 10m or 15m)

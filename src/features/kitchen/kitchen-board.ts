@@ -128,9 +128,17 @@ function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
   return order.orderType === "TAKEAWAY" || order.orderType === "DELIVERY";
 }
 
+/** Only paid, non-cancelled orders may enter the KDS queue or incoming kitchen alerts. */
+export function isOrderEligibleForKds(
+  order: Pick<OrderRecord, "paymentStatus" | "status">
+): boolean {
+  return order.paymentStatus === "PAID" && order.status !== "CANCELLED";
+}
+
 /** Active tickets for the board, oldest first so the queue is served FIFO. */
 export function filterKitchenOrders(orders: readonly OrderRecord[], filters: KitchenFilters): OrderRecord[] {
   return orders
+    .filter((order) => isOrderEligibleForKds(order))
     .filter((order) => ACTIVE_STATUSES.has(effectiveKitchenStatus(order, filters.tenantId)))
     .filter((order) => ticketItems(order, filters.tenantId).length > 0)
     .filter((order) => matchesType(order, filters.type))
@@ -143,8 +151,8 @@ export function filterKitchenOrders(orders: readonly OrderRecord[], filters: Kit
 
 /**
  * Detects newly arrived unaccepted orders for the kitchen station or tenant.
- * Only includes orders in NEW or CONFIRMED status that contain items for the tenant
- * and have not yet been dismissed.
+ * Only includes paid, non-cancelled orders in NEW or CONFIRMED status that contain
+ * items for the tenant and have not yet been dismissed.
  */
 export function getNewIncomingKitchenOrders(
   orders: readonly OrderRecord[],
@@ -153,6 +161,7 @@ export function getNewIncomingKitchenOrders(
 ): OrderRecord[] {
   return orders
     .filter((o) => {
+      if (!isOrderEligibleForKds(o)) return false;
       const status = effectiveKitchenStatus(o, tenantId);
       return (
         (status === "NEW" || status === "CONFIRMED") &&

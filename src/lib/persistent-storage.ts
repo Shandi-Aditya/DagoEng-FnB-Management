@@ -22,10 +22,24 @@ import {
 import type {
   DomainCommandMap,
   DomainStateMap,
+  InventoryDomainState,
   ServerDomainSpec,
   SyncDomainName,
 } from "@/lib/domain-sync-types";
 import type { ServerAuthResult } from "@/lib/server-auth";
+import {
+  ensureUniqueSequentialOrderNumber,
+  resolvePublisherCode,
+} from "@/lib/receipt-publisher";
+import {
+  deductOrderItemsBOM,
+  INITIAL_INGREDIENTS,
+  INITIAL_RECIPES,
+  restoreOrderItemsBOM,
+  type OrderItemBOMInput,
+} from "@/features/inventory/inventory-data";
+import { inventoryDomainSpec } from "@/lib/sync-domains/inventory-spec";
+import type { RecipeBOM } from "@/types/inventory";
 
 const FILE_AUDIT_LOGS = "audit_logs.json";
 const FILE_SHIFTS = "shifts.json";
@@ -319,31 +333,355 @@ export async function saveCoworkingBooking(booking: any): Promise<boolean> {
   return true;
 }
 
+const SEQUENTIAL_ORDER_RE = /^[A-Z]+-[A-Z0-9]+-\d{8}-\d+$/i;
+const PRE_COOK_DISALLOWED_STATUSES = new Set(["COOKING", "READY", "SERVED", "COMPLETED"]);
+
+const SYSTEM_INVENTORY_AUTH: ServerAuthResult = {
+  isAuthenticated: true,
+  role: "SUPER_ADMIN",
+  userId: "system-bom",
+  scopeLevel: "ORGANIZATION",
+};
+
+function inferOrderPublisherCode(
+  order: Pick<OrderRecord, "orderNumber" | "tenantId" | "items">
+): string | undefined {
+  const raw = typeof order.orderNumber === "string" ? order.orderNumber.trim() : "";
+  if (SEQUENTIAL_ORDER_RE.test(raw)) {
+    return undefined;
+  }
+  const itemTenants = Array.from(
+    new Set(
+      (order.items || [])
+        .map((item) => item.tenantId?.trim())
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  if (itemTenants.length > 1) return "DAGO";
+  if (itemTenants.length === 1) return resolvePublisherCode(itemTenants[0]);
+  if (order.tenantId?.trim()) return resolvePublisherCode(order.tenantId);
+  return "DAGO";
+}
+
 export async function getPersistentOrders(): Promise<OrderRecord[]> {
-  return readPersistentData<OrderRecord[]>(FILE_POS_ORDERS, []);
+  return readSeededPersistentData<OrderRecord[]>(FILE_POS_ORDERS, () => []);
 }
 
 export async function resetPersistentOrders(): Promise<boolean> {
   return writePersistentData<OrderRecord[]>(FILE_POS_ORDERS, []);
 }
 
+export async function mutatePersistentOrders<R = OrderRecord[]>(
+  mutator: (
+    current: OrderRecord[]
+  ) => Promise<{ nextOrders: OrderRecord[]; result: R }> | { nextOrders: OrderRecord[]; result: R }
+): Promise<R> {
+  let outcome!: R;
+  await mutateSeededPersistentData<OrderRecord[]>(
+    FILE_POS_ORDERS,
+    () => [],
+    async (existing) => {
+      const current = Array.isArray(existing) ? existing : [];
+      const { nextOrders, result } = await mutator(current);
+      outcome = result;
+      return nextOrders;
+    }
+  );
+  return outcome;
+}
+
+export async function updatePersistentOrderIf(
+  orderId: string,
+  predicate: (current: OrderRecord) => boolean,
+  updater: (current: OrderRecord) => OrderRecord
+): Promise<{
+  updated: boolean;
+  order: OrderRecord | null;
+  reason?: "NOT_FOUND" | "PREDICATE_FAILED";
+}> {
+  return mutatePersistentOrders<{
+    updated: boolean;
+    order: OrderRecord | null;
+    reason?: "NOT_FOUND" | "PREDICATE_FAILED";
+  }>((orders) => {
+    const idx = orders.findIndex((o) => o.id === orderId);
+    if (idx < 0) {
+      return { nextOrders: orders, result: { updated: false, order: null, reason: "NOT_FOUND" } };
+    }
+    const current = orders[idx];
+    if (!predicate(current)) {
+      return {
+        nextOrders: orders,
+        result: { updated: false, order: current, reason: "PREDICATE_FAILED" },
+      };
+    }
+    const nextOrder = updater(current);
+    const nextOrders = [...orders];
+    nextOrders[idx] = nextOrder;
+    return { nextOrders, result: { updated: true, order: nextOrder } };
+  });
+}
+
 export async function savePersistentOrder(order: OrderRecord): Promise<OrderRecord> {
-  let savedOrder: OrderRecord = order;
-  await mutatePersistentData<OrderRecord[]>(FILE_POS_ORDERS, [], (existing) => {
+  return mutatePersistentOrders((existing) => {
     const index = existing.findIndex((o) => o.id === order.id);
+    const otherNumbers = existing
+      .filter((o) => o.id !== order.id)
+      .map((o) => o.orderNumber);
+
     if (index >= 0) {
-      const prev = existing[index] as any;
-      savedOrder = {
+      const prev = existing[index];
+      const candidateNumber =
+        typeof order.orderNumber === "string" && order.orderNumber.trim()
+          ? order.orderNumber
+          : prev.orderNumber;
+      const resolvedOrderNumber = ensureUniqueSequentialOrderNumber({
+        orderNumber: candidateNumber,
+        publisherCode: inferOrderPublisherCode({
+          ...order,
+          orderNumber: candidateNumber,
+        }),
+        existingNumbers: otherNumbers,
+        date: order.createdAt || prev.createdAt,
+        allowCustomFormat: true,
+      });
+
+      const savedOrder: OrderRecord = {
         ...order,
+        orderNumber: resolvedOrderNumber,
         ...(prev.loyaltyPointsCredited ? { loyaltyPointsCredited: true } : {}),
-      } as OrderRecord;
+        ...(prev.bomDeducted ? { bomDeducted: true } : {}),
+        ...(prev.bomRestored ? { bomRestored: true } : {}),
+      };
       const updated = [...existing];
       updated[index] = savedOrder;
-      return updated;
+      return { nextOrders: updated, result: savedOrder };
     }
-    return [order, ...existing];
+
+    const resolvedOrderNumber = ensureUniqueSequentialOrderNumber({
+      orderNumber: order.orderNumber,
+      publisherCode: inferOrderPublisherCode(order),
+      existingNumbers: otherNumbers,
+      date: order.createdAt,
+      allowCustomFormat: true,
+    });
+    const savedOrder: OrderRecord = {
+      ...order,
+      orderNumber: resolvedOrderNumber,
+    };
+    return { nextOrders: [savedOrder, ...existing], result: savedOrder };
   });
-  return savedOrder;
+}
+
+export function isOrderBeforeCooking(
+  order: Pick<OrderRecord, "status" | "cookingStartedAt">
+): boolean {
+  return !order.cookingStartedAt && !PRE_COOK_DISALLOWED_STATUSES.has(order.status);
+}
+
+function mergeRecipesWithInitial(recipes: RecipeBOM[] | undefined): RecipeBOM[] {
+  const stored = Array.isArray(recipes) ? recipes : [];
+  const existingIds = new Set(stored.map((r) => r.menuId));
+  return [
+    ...stored,
+    ...INITIAL_RECIPES.filter((r) => !existingIds.has(r.menuId)).map((r) => ({
+      ...r,
+      ingredients: r.ingredients.map((ing) => ({ ...ing })),
+    })),
+  ];
+}
+
+function normalizeInventoryState(current: InventoryDomainState): InventoryDomainState {
+  return {
+    ...current,
+    ingredients:
+      Array.isArray(current.ingredients) && current.ingredients.length > 0
+        ? current.ingredients
+        : INITIAL_INGREDIENTS.map((item) => ({ ...item })),
+    recipes: mergeRecipesWithInitial(current.recipes),
+    purchaseOrders: Array.isArray(current.purchaseOrders) ? current.purchaseOrders : [],
+    logs: Array.isArray(current.logs) ? current.logs : [],
+    stockOpnames: Array.isArray(current.stockOpnames) ? current.stockOpnames : [],
+    appliedOpIds: Array.isArray(current.appliedOpIds) ? current.appliedOpIds : [],
+  };
+}
+
+function toOrderBomItems(items: OrderRecord["items"]): OrderItemBOMInput[] {
+  return (items || []).map((item) => ({
+    productId: item.productId || item.id,
+    productName: item.productName,
+    quantity: item.quantity,
+    modifiers: item.modifiers,
+  }));
+}
+
+async function markOrderBomFlag(
+  orderId: string,
+  flag: "bomDeducted" | "bomRestored"
+): Promise<void> {
+  await updatePersistentOrderIf(
+    orderId,
+    (current) => !current[flag],
+    (current) => ({ ...current, [flag]: true })
+  );
+}
+
+export async function deductPersistentOrderBOM(
+  order: OrderRecord,
+  options?: { tenantId?: string; outletId?: string; reason?: string }
+): Promise<{ applied: boolean; deductedItems: number }> {
+  if (
+    order.bomDeducted === true ||
+    order.status === "CANCELLED" ||
+    order.paymentStatus === "REFUNDED" ||
+    !Array.isArray(order.items) ||
+    order.items.length === 0
+  ) {
+    return { applied: false, deductedItems: 0 };
+  }
+
+  const storedOrders = await getPersistentOrders();
+  const storedOrder = storedOrders.find((o) => o.id === order.id);
+  if (storedOrder?.bomDeducted === true) {
+    return { applied: false, deductedItems: 0 };
+  }
+
+  const opId = `bom-deduct-${order.id}`;
+  let applied = false;
+  let alreadyDeducted = false;
+  let deductedItems = 0;
+
+  await mutateSeededPersistentData<InventoryDomainState>(
+    inventoryDomainSpec.filename,
+    inventoryDomainSpec.defaultState,
+    (rawCurrent) => {
+      const current = normalizeInventoryState(rawCurrent);
+      if ((current.appliedOpIds || []).includes(opId)) {
+        alreadyDeducted = true;
+        return current;
+      }
+
+      const { logs, deductedCount } = deductOrderItemsBOM(
+        current.ingredients,
+        current.recipes,
+        toOrderBomItems(order.items)
+      );
+      const deltas = logs
+        .filter((l) => l.delta !== 0)
+        .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
+
+      if (deductedCount === 0 || deltas.length === 0) {
+        return current;
+      }
+
+      const reasonSuffix = options?.reason ? ` - ${options.reason}` : "";
+      const annotatedLogs = reasonSuffix
+        ? logs.map((log) => ({ ...log, user: `${log.user}${reasonSuffix}` }))
+        : logs;
+
+      applied = true;
+      deductedItems = deductedCount;
+      return inventoryDomainSpec.applyCommand(
+        current,
+        { op: "APPLY_BOM_DELTAS", opId, deltas, logs: annotatedLogs },
+        SYSTEM_INVENTORY_AUTH
+      );
+    }
+  );
+
+  if (applied || alreadyDeducted) {
+    await markOrderBomFlag(order.id, "bomDeducted");
+  }
+
+  return { applied, deductedItems };
+}
+
+export async function restorePersistentOrderBOMIfBeforeCooking(
+  order: OrderRecord,
+  options?: { reason?: string }
+): Promise<{ restored: boolean; reason: string; restoredItems: number }> {
+  if (!isOrderBeforeCooking(order)) {
+    return { restored: false, reason: "already-cooking-or-beyond", restoredItems: 0 };
+  }
+
+  const storedOrders = await getPersistentOrders();
+  const storedOrder = storedOrders.find((o) => o.id === order.id);
+
+  if (storedOrder && !isOrderBeforeCooking(storedOrder)) {
+    return { restored: false, reason: "already-cooking-or-beyond", restoredItems: 0 };
+  }
+  if (order.bomRestored === true || storedOrder?.bomRestored === true) {
+    return { restored: false, reason: "already-restored", restoredItems: 0 };
+  }
+
+  const deductOpId = `bom-deduct-${order.id}`;
+  const restoreOpId = `bom-restore-${order.id}`;
+  let restored = false;
+  let reason = "bom-not-deducted";
+  let restoredItems = 0;
+
+  await mutateSeededPersistentData<InventoryDomainState>(
+    inventoryDomainSpec.filename,
+    inventoryDomainSpec.defaultState,
+    (rawCurrent) => {
+      const current = normalizeInventoryState(rawCurrent);
+      const appliedOpIds = current.appliedOpIds || [];
+
+      if (appliedOpIds.includes(restoreOpId)) {
+        reason = "already-restored";
+        return current;
+      }
+
+      const wasDeducted =
+        order.bomDeducted === true ||
+        storedOrder?.bomDeducted === true ||
+        appliedOpIds.includes(deductOpId);
+      if (!wasDeducted) {
+        reason = "bom-not-deducted";
+        return current;
+      }
+
+      if (!Array.isArray(order.items) || order.items.length === 0) {
+        reason = "no-items";
+        return current;
+      }
+
+      const { logs, restoredCount } = restoreOrderItemsBOM(
+        current.ingredients,
+        current.recipes,
+        toOrderBomItems(order.items),
+        order.orderNumber
+      );
+      const deltas = logs
+        .filter((l) => l.delta !== 0)
+        .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
+
+      if (restoredCount === 0 || deltas.length === 0) {
+        reason = "no-matching-recipes";
+        return current;
+      }
+
+      const reasonSuffix = options?.reason ? ` - ${options.reason}` : "";
+      const annotatedLogs = reasonSuffix
+        ? logs.map((log) => ({ ...log, user: `${log.user}${reasonSuffix}` }))
+        : logs;
+
+      restored = true;
+      reason = "restored";
+      restoredItems = restoredCount;
+      return inventoryDomainSpec.applyCommand(
+        current,
+        { op: "APPLY_BOM_DELTAS", opId: restoreOpId, deltas, logs: annotatedLogs },
+        SYSTEM_INVENTORY_AUTH
+      );
+    }
+  );
+
+  if (restored || reason === "already-restored") {
+    await markOrderBomFlag(order.id, "bomRestored");
+  }
+
+  return { restored, reason, restoredItems };
 }
 
 export async function getPersistentLoyaltyPoints(): Promise<LoyaltyPointsRecord[]> {

@@ -158,6 +158,19 @@ function writeStoredSequenceMap(map: Record<string, number>): void {
   }
 }
 
+const SEQUENTIAL_ORDER_NUMBER_PATTERN = /^([A-Z]+)-([A-Z0-9]+)-(\d{8})-(\d+)$/i;
+const CUSTOM_ORDER_NUMBER_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)+$/i;
+
+function parseYmdToUtcDate(ymd: string): Date | undefined {
+  if (!/^\d{8}$/.test(ymd)) return undefined;
+  const year = Number(ymd.slice(0, 4));
+  const month = Number(ymd.slice(4, 6));
+  const day = Number(ymd.slice(6, 8));
+  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  // Midday UTC corresponds to 20:00 WITA on the exact same calendar date.
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+}
+
 export function generateSequentialReceiptNumber(params: {
   publisherCode: string;
   existingNumbers?: string[];
@@ -167,7 +180,7 @@ export function generateSequentialReceiptNumber(params: {
   const prefix = (params.prefix || "INV").trim().toUpperCase() || "INV";
   const publisherCode = (params.publisherCode || "DAGO").trim().toUpperCase() || "DAGO";
   const witaYmd = formatWitaYmd(params.date);
-  const pattern = new RegExp(`^${escapeRegex(prefix)}-${escapeRegex(publisherCode)}-${witaYmd}-(\\d+)$`);
+  const pattern = new RegExp(`^${escapeRegex(prefix)}-${escapeRegex(publisherCode)}-${witaYmd}-(\\d+)$`, "i");
 
   let maxExisting = 0;
   for (const num of params.existingNumbers || []) {
@@ -191,6 +204,107 @@ export function generateSequentialReceiptNumber(params: {
   writeStoredSequenceMap(storedMap);
 
   return `${prefix}-${publisherCode}-${witaYmd}-${String(nextSeq).padStart(4, "0")}`;
+}
+
+/**
+ * Advances the browser localStorage sequence counter when a server-assigned sequential
+ * order number (`PREFIX-CODE-YYYYMMDD-NNNN`) is higher than the locally cached sequence.
+ * Safe no-op on server/SSR or non-sequential order numbers.
+ */
+export function syncSequenceFromOrderNumber(orderNumber: string, publisherCode?: string): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
+  const trimmed = typeof orderNumber === "string" ? orderNumber.trim().toUpperCase() : "";
+  if (!trimmed) return;
+
+  const match = trimmed.match(SEQUENTIAL_ORDER_NUMBER_PATTERN);
+  if (!match) return;
+
+  const prefix = match[1].toUpperCase();
+  const code = (publisherCode || match[2]).trim().toUpperCase() || "DAGO";
+  const ymd = match[3];
+  const parsedSeq = parseInt(match[4], 10);
+  if (!Number.isFinite(parsedSeq) || parsedSeq <= 0) return;
+
+  const storageKey = `${prefix}:${code}:${ymd}`;
+  const storedMap = readStoredSequenceMap();
+  const currentSeq =
+    typeof storedMap[storageKey] === "number" && Number.isFinite(storedMap[storageKey])
+      ? storedMap[storageKey]
+      : 0;
+  if (parsedSeq > currentSeq) {
+    storedMap[storageKey] = parsedSeq;
+    writeStoredSequenceMap(storedMap);
+  }
+}
+
+export interface EnsureUniqueSequentialOrderNumberParams {
+  orderNumber?: string | null;
+  publisherCode?: string;
+  existingNumbers?: Iterable<string | null | undefined>;
+  date?: Date | string;
+  prefix?: string;
+  /** Allows non-empty legacy/custom dashed tokens (e.g. SO-SHARED-99) when not colliding. */
+  allowCustomFormat?: boolean;
+}
+
+/**
+ * Ensures an order number is well-formed and does not collide with `existingNumbers`
+ * (trimmed, case-insensitive). When missing, malformed, or colliding, generates a fresh
+ * sequential number via `generateSequentialReceiptNumber` guaranteed absent from `existingNumbers`.
+ */
+export function ensureUniqueSequentialOrderNumber(
+  params: EnsureUniqueSequentialOrderNumberParams
+): string {
+  const existingList: string[] = [];
+  const existingNormalized = new Set<string>();
+  for (const entry of params.existingNumbers ?? []) {
+    if (typeof entry !== "string") continue;
+    const trimmedEntry = entry.trim();
+    if (!trimmedEntry) continue;
+    existingList.push(trimmedEntry);
+    existingNormalized.add(trimmedEntry.toUpperCase());
+  }
+
+  const raw = typeof params.orderNumber === "string" ? params.orderNumber.trim() : "";
+  const seqMatch = raw ? raw.match(SEQUENTIAL_ORDER_NUMBER_PATTERN) : null;
+  const isWellFormed = Boolean(
+    seqMatch || (params.allowCustomFormat && raw && CUSTOM_ORDER_NUMBER_PATTERN.test(raw))
+  );
+
+  if (raw && isWellFormed && !existingNormalized.has(raw.toUpperCase())) {
+    return raw;
+  }
+
+  const resolvedPrefix =
+    params.prefix?.trim().toUpperCase() ||
+    (raw.toUpperCase().startsWith("INV-") ? "INV" : "ORD");
+  const resolvedPublisherCode =
+    params.publisherCode?.trim().toUpperCase() ||
+    (seqMatch ? seqMatch[2].toUpperCase() : "DAGO");
+  const resolvedDate =
+    params.date ?? (seqMatch ? parseYmdToUtcDate(seqMatch[3]) : undefined);
+
+  const workingExisting = [...existingList];
+  let candidate = generateSequentialReceiptNumber({
+    publisherCode: resolvedPublisherCode,
+    existingNumbers: workingExisting,
+    date: resolvedDate,
+    prefix: resolvedPrefix,
+  });
+
+  while (existingNormalized.has(candidate.toUpperCase())) {
+    workingExisting.push(candidate);
+    candidate = generateSequentialReceiptNumber({
+      publisherCode: resolvedPublisherCode,
+      existingNumbers: workingExisting,
+      date: resolvedDate,
+      prefix: resolvedPrefix,
+    });
+  }
+
+  return candidate;
 }
 
 /**
