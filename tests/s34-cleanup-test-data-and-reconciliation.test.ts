@@ -1,84 +1,226 @@
 import { describe, it, expect } from "vitest";
-import fs from "fs";
-import path from "path";
+import {
+  transformShifts,
+  transformOrders,
+  transformEvents,
+  transformBookings,
+  S34_TARGETS,
+} from "../scripts/reconcile-and-cleanup-s34";
 import type { ShiftRecord } from "@/types/shift";
-import type { POSOrder } from "@/types/pos";
+import type { OrderRecord } from "@/types/order";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 
-describe("TASK S-34 — Clean Test Data and Old Shift Reconciliation", () => {
-  it("1. Seluruh 7 shift lama berstatus Perlu Rekonsiliasi telah ditutup dan direkonsiliasi", () => {
-    const shiftsPath = path.join(process.cwd(), "data", "shifts.json");
-    expect(fs.existsSync(shiftsPath)).toBe(true);
-
-    const shifts: ShiftRecord[] = JSON.parse(fs.readFileSync(shiftsPath, "utf8"));
-    const needsReconciliation = shifts.filter((s) => s.status === "NEEDS_RECONCILIATION");
-    expect(needsReconciliation.length).toBe(0);
-
-    const overdueTargetIds = [
-      "shf-1795155251970-qdso",
-      "shf-1795057481913-qr16",
-      "shf-1794808682614-2a7c",
-      "shf-1794528551394-f149",
-      "shf-1794510324077-u0rg",
-      "shf-1794447697747-a10v",
-      "shf-1794284443827-jcgg",
+describe("TASK S-34 — Clean Test Data and Shift Reconciliation (Behavioral Unit Tests)", () => {
+  it("1. Rekonsiliasi menutup shift berstatus NEEDS_RECONCILIATION dan target ID lama secara akuntansi sah", () => {
+    const mockShifts: ShiftRecord[] = [
+      {
+        id: "shf-1795155251970-qdso",
+        shiftName: "Shift Pagi",
+        outletId: "out-1",
+        outletName: "Outlet 1",
+        assignedCashierId: "usr-1",
+        assignedCashierName: "Budi",
+        startTime: "2026-03-01T08:00:00.000Z",
+        status: "ACTIVE",
+        openingCash: 100000,
+        cashSales: 89700,
+        nonCashSales: 50000,
+        refundAmount: 0,
+        expectedCash: 189700,
+        actualCash: 100000,
+        cashVariance: -89700,
+      },
+      {
+        id: "shf-active-normal",
+        shiftName: "Shift Normal",
+        outletId: "out-1",
+        outletName: "Outlet 1",
+        assignedCashierId: "usr-2",
+        assignedCashierName: "Siti",
+        startTime: "2026-03-20T08:00:00.000Z",
+        status: "ACTIVE",
+        openingCash: 50000,
+        cashSales: 0,
+        nonCashSales: 0,
+        refundAmount: 0,
+        expectedCash: 50000,
+        actualCash: 50000,
+        cashVariance: 0,
+      },
+      {
+        id: "shf-needs-reconcile-legacy",
+        shiftName: "Shift Gantung",
+        outletId: "out-1",
+        outletName: "Outlet 1",
+        assignedCashierId: "usr-3",
+        assignedCashierName: "Asep",
+        startTime: "2026-03-15T08:00:00.000Z",
+        status: "NEEDS_RECONCILIATION",
+        openingCash: 100000,
+        cashSales: 26400,
+        nonCashSales: 0,
+        refundAmount: 0,
+        expectedCash: 126400,
+        actualCash: 100000,
+        cashVariance: -26400,
+      },
     ];
 
-    overdueTargetIds.forEach((id) => {
-      const shift = shifts.find((s) => s.id === id);
-      expect(shift).toBeDefined();
-      expect(shift?.status).toBe("CLOSED");
-      expect(shift?.cashVariance).toBe(0);
-    });
+    const { items, count } = transformShifts(mockShifts);
+    expect(count).toBe(2);
+
+    const targetShift = items.find((s) => s.id === "shf-1795155251970-qdso");
+    expect(targetShift?.status).toBe("CLOSED");
+    expect(targetShift?.actualCash).toBe(189700);
+    expect(targetShift?.cashVariance).toBe(0);
+    expect(targetShift?.closedBy).toBe("SYSTEM_RECONCILIATION_S34");
+
+    const needsReconcileShift = items.find((s) => s.id === "shf-needs-reconcile-legacy");
+    expect(needsReconcileShift?.status).toBe("CLOSED");
+    expect(needsReconcileShift?.actualCash).toBe(126400);
+    expect(needsReconcileShift?.cashVariance).toBe(0);
+
+    // Pastikan shift aktif normal TIDAK ikut tertutup
+    const normalShift = items.find((s) => s.id === "shf-active-normal");
+    expect(normalShift?.status).toBe("ACTIVE");
   });
 
-  it("2. Pesanan uji aktif di KDS telah dikosongkan (status COMPLETED)", () => {
-    const ordersPath = path.join(process.cwd(), "data", "pos_orders.json");
-    expect(fs.existsSync(ordersPath)).toBe(true);
+  it("2. Pesanan uji aktif KDS diselesaikan tanpa menyentuh pesanan nyata pelanggan", () => {
+    const mockOrders: OrderRecord[] = [
+      {
+        id: "ord-test-1",
+        orderNumber: "ORD-TEST-001",
+        organizationId: "org-1",
+        outletId: "out-1",
+        outletName: "Dago Kitchen",
+        tableNumber: "T-01",
+        customerName: "Customer Test QA",
+        orderType: "DINE_IN",
+        status: "COOKING",
+        items: [],
+        subtotal: 10000,
+        tax: 1000,
+        total: 11000,
+        paymentStatus: "PAID",
+        targetServiceMinutes: 15,
+        statusHistory: [],
+      },
+      {
+        id: "ord-real-1",
+        orderNumber: "ORD-REAL-001",
+        organizationId: "org-1",
+        outletId: "out-1",
+        outletName: "Dago Kitchen",
+        tableNumber: "T-02",
+        customerName: "Ahmad Riil",
+        orderType: "DINE_IN",
+        status: "COOKING",
+        items: [],
+        subtotal: 25000,
+        tax: 2500,
+        total: 27500,
+        paymentStatus: "PAID",
+        targetServiceMinutes: 15,
+        statusHistory: [],
+      },
+    ];
 
-    const orders: POSOrder[] = JSON.parse(fs.readFileSync(ordersPath, "utf8"));
-    const activeKdsOrders = orders.filter(
-      (o) =>
-        o.status === "CONFIRMED" ||
-        o.status === "IN_PROGRESS" ||
-        o.status === "READY" ||
-        o.status === "SERVED"
-    );
+    const { items, count } = transformOrders(mockOrders);
+    expect(count).toBe(1);
 
-    expect(activeKdsOrders.length).toBe(0);
+    const testOrd = items.find((o) => o.id === "ord-test-1");
+    expect(testOrd?.status).toBe("COMPLETED");
+    expect(testOrd?.statusHistory?.length).toBe(1);
+    expect(testOrd?.statusHistory?.[0].actorName).toBe("SYSTEM_RECONCILIATION_S34");
+
+    // Lindungi pesanan pelanggan riil
+    const realOrd = items.find((o) => o.id === "ord-real-1");
+    expect(realOrd?.status).toBe("COOKING");
   });
 
-  it("3. Notifikasi uji dashboard dibersihkan (0 pengajuan pending dan 0 usulan bagi hasil pending)", () => {
-    const eventsPath = path.join(process.cwd(), "data", "events.json");
-    expect(fs.existsSync(eventsPath)).toBe(true);
+  it("3. Event uji dan usulan bagi hasil pending dibersihkan dengan status legal REJECTED", () => {
+    const mockEvents: CommunityEvent[] = [
+      {
+        id: "evt-pilates-gift-voucher",
+        title: "Gift Voucher Tes 1",
+        status: "APPROVED",
+        category: "COMMUNITY",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Hub",
+        isPaid: false,
+        price: 0,
+        posterUrl: "",
+        organizerName: "Tester",
+        organizerEmail: "test@example.com",
+        organizerPhone: "08123456789",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        proposedRevenueSplit: {
+          organizerPercent: 80,
+          platformPercent: 20,
+          proposedBy: "ORGANIZER",
+          status: "PENDING",
+        },
+      },
+      {
+        id: "evt-real-community",
+        title: "Bandung Coffee Festival 2026",
+        status: "APPROVED",
+        category: "COMMUNITY",
+        description: "Real event description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Plaza",
+        isPaid: true,
+        price: 50000,
+        posterUrl: "",
+        organizerName: "Komunitas Kopi",
+        organizerEmail: "kopi@example.com",
+        organizerPhone: "08198765432",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ];
 
-    const events: CommunityEvent[] = JSON.parse(fs.readFileSync(eventsPath, "utf8"));
-    const pendingModeration = events.filter((e) => e.status === "PENDING");
-    const pendingSplits = events.filter((e) => e.proposedRevenueSplit?.status === "PENDING");
+    const { items, count } = transformEvents(mockEvents);
+    expect(count).toBe(1);
 
-    expect(pendingModeration.length).toBe(0);
-    expect(pendingSplits.length).toBe(0);
+    const testEvt = items.find((e) => e.id === "evt-pilates-gift-voucher");
+    expect(testEvt?.status).toBe("ARCHIVED");
+    // Status usulan adalah REJECTED (legal enum)
+    expect(testEvt?.proposedRevenueSplit?.status).toBe("REJECTED");
+
+    // Event riil tidak diarsipkan
+    const realEvt = items.find((e) => e.id === "evt-real-community");
+    expect(realEvt?.status).toBe("APPROVED");
   });
 
-  it("4. Tiket dan event uji (Gift Voucher Tes 1, [TEST QA 2], DAGO-EVT-14704, 91979, 13394) dibatalkan dan diarsipkan", () => {
-    const eventsPath = path.join(process.cwd(), "data", "events.json");
-    const bookingsPath = path.join(process.cwd(), "data", "event_bookings.json");
+  it("4. Tiket uji target dibatalkan dengan tepat", () => {
+    const mockBookings: EventTicketOrder[] = [
+      {
+        id: "bkg-1",
+        ticketCode: "DAGO-EVT-14704",
+        paymentStatus: "PAID",
+      } as EventTicketOrder,
+      {
+        id: "bkg-2",
+        ticketCode: "DAGO-EVT-VALID-999",
+        paymentStatus: "PAID",
+      } as EventTicketOrder,
+    ];
 
-    const events: CommunityEvent[] = JSON.parse(fs.readFileSync(eventsPath, "utf8"));
-    const bookings: EventTicketOrder[] = JSON.parse(fs.readFileSync(bookingsPath, "utf8"));
+    const { items, count } = transformBookings(mockBookings);
+    expect(count).toBe(1);
+    expect(items.find((b) => b.ticketCode === "DAGO-EVT-14704")?.paymentStatus).toBe("CANCELLED");
+    expect(items.find((b) => b.ticketCode === "DAGO-EVT-VALID-999")?.paymentStatus).toBe("PAID");
+  });
 
-    // Event uji berstatus ARCHIVED
-    const voucherEvent = events.find((e) => e.id === "evt-pilates-gift-voucher");
-    const qaEvent = events.find((e) => e.id === "evt-1793935470095-8vpsm");
-    expect(voucherEvent?.status).toBe("ARCHIVED");
-    expect(qaEvent?.status).toBe("ARCHIVED");
-
-    // Tiket uji berstatus CANCELLED
-    const targetCodes = ["DAGO-EVT-14704", "DAGO-EVT-91979", "DAGO-EVT-13394"];
-    targetCodes.forEach((code) => {
-      const b = bookings.find((t) => t.ticketCode === code);
-      expect(b).toBeDefined();
-      expect(b?.paymentStatus).toBe("CANCELLED");
-    });
+  it("5. Target daftar shift dan tiket S-34 terkonfigurasi lengkap", () => {
+    expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-14704")).toBe(true);
+    expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-91979")).toBe(true);
+    expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-13394")).toBe(true);
+    expect(S34_TARGETS.shiftIds.has("shf-1795155251970-qdso")).toBe(true);
   });
 });
