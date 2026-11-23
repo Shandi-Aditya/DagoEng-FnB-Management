@@ -1,6 +1,6 @@
 # Standar Operasional Prosedur (SOP) Rilis dan Lingkungan Staging
 
-Dokumen ini mengatur alur kerja rilis kode, pemisahan lingkungan server (Staging dan Produksi), pemisahan database, serta siklus rilis berkala setiap hari Senin untuk tim pengembang DagoEng POS & Web Event.
+Dokumen ini mengatur alur kerja rilis kode, pemisahan lingkungan server (Staging dan Produksi), pemisahan database, siklus rilis berkala setiap hari Senin, serta prosedur penanganan darurat (hotfix dan rollback) untuk tim pengembang DagoEng POS & Web Event.
 
 ---
 
@@ -14,6 +14,7 @@ Tujuan SOP ini adalah:
 - Memastikan server produksi (`pos.veryyyy.com`) berjalan stabil dengan kode yang telah diverifikasi penuh.
 - Menyediakan server staging (`staging.pos.veryyyy.com`) dengan database terpisah untuk pengujian QA harian.
 - Menetapkan siklus rilis terprediksi setiap hari Senin pagi dengan pencatatan changelog resmi.
+- Menjamin tersedianya prosedur rollback cepat jika terjadi kegagalan deployment.
 
 ---
 
@@ -24,15 +25,19 @@ Tujuan SOP ini adalah:
 | **URL Aplikasi** | `https://staging.pos.veryyyy.com` | `https://pos.veryyyy.com` |
 | **Cabang Git** | `develop` | `main` |
 | **Repositori Sumber** | `gitlab.com/devdagoeng/dagoeng-management.git` | `gitlab.com/devdagoeng/dagoeng-management.git` |
-| **Database Neon** | Branch `staging` / DB `dagoeng_staging` | Branch `main` / DB `neondb` (produksi) |
+| **Database Neon** | Branch `staging` / DB `neondb` (terisolasi) | Branch `main` / DB `neondb` (produksi) |
 | **Volume Bukti Bayar** | `/app/data/proofs` (volume staging) | `/app/data/proofs` (volume produksi) |
 | **Tujuan Penggunaan** | Pengujian integrasi, UAT staf/Ka Ari/Izzy, verifikasi MR | Operasional nyata kasir outlet, transaksi pelanggan |
 | **Role Simulator** | `ENABLE_ROLE_SIMULATOR=true` | Dikosongkan / `false` |
-| **Login Akun Demo** | Diaktifkan untuk pengujian (`ALLOW_DEMO_UAT=true`) | `DISABLE_DEMO_LOGIN=true` |
+| **Login Akun Demo** | Diaktifkan untuk pengujian (`ALLOW_DEMO_UAT=true`) | `DISABLE_DEMO_LOGIN=true` (wajib ditutup) |
 
 ---
 
 ## 3. Alur Kerja Cabang Git (Git Flow)
+
+> [!NOTE]
+> **Catatan Konfigurasi Remote Git**:
+> Perintah git pada dokumen ini menggunakan remote `origin` sebagai alias repositori resmi GitLab (`gitlab.com/devdagoeng/dagoeng-management.git`). Jika lingkungan lokal Anda menamai remote resmi sebagai `gitlab`, ganti `origin` dengan `gitlab` (contoh: `git push gitlab develop`). Periksa nama remote lokal Anda melalui perintah `git remote -v`.
 
 ```
 [Fitur Baru: feat/* atau fix/*]
@@ -48,8 +53,8 @@ Tujuan SOP ini adalah:
 ```
 
 1. **Pengembangan Harian**:
-   - Seluruh developer (Shandy, Very) mencabangkan pekerjaan dari `develop` dengan format nama `feat/<nama-fitur>` atau `fix/<nama-bug>`.
-   - Setelah pekerjaan selesai dan lulus pemeriksaan statis (`lint:ui`, `type-check`, `vitest`), buat Merge Request ke cabang `develop`.
+   - Seluruh developer mencabangkan pekerjaan dari `develop` dengan format nama `feat/<nama-fitur>` atau `fix/<nama-bug>`.
+   - Setelah pekerjaan selesai dan lulus pemeriksaan gerbang lokal (`npm run lint:ui`, `npm run type-check`, `npm test`), buat Merge Request ke cabang `develop`.
 2. **Penyatuan ke Staging**:
    - Merge Request yang disetujui digabungkan ke `develop`.
    - Webhook GitLab memicu build otomatis di Coolify Staging.
@@ -75,42 +80,61 @@ Rilis ke server produksi dilakukan secara rutin setiap hari **Senin pukul 08.00 
    - Pastikan cabang `develop` lokal mutakhir:
      ```bash
      git checkout develop
-     git pull gitlab develop
+     git pull origin develop
      ```
-   - Jalankan pemeriksaan gerbang rilis:
+   - Jalankan pemeriksaan 4 gerbang rilis secara berurutan:
      ```bash
+     npm run lint:ui
      npm run type-check
      npm test
      npm run build
      ```
-2. **Pencatatan Changelog**:
+   > [!IMPORTANT]
+   > **Catatan Toleransi Gerbang Uji**: Eksekusi `npm test` wajib meluluskan seluruh rangkaian uji dengan toleransi maksimal hanya pada 4 baseline kegagalan warisan yang tercatat pada `AGENTS.md` (`etl-data-validation`, `final-demo-readiness`, `organizer-activation-hardening`, `storage-sync-safety`). Jika terdapat kegagalan uji di luar keempat file tersebut, rilis **DITOLAK**.
+
+2. **Pencadangan dan Migrasi Database**:
+   - Masuk ke dasbor [Neon Console](https://console.neon.tech).
+   - Buka menu **Branches**, lalu klik **Create branch** dari branch `main` dengan nama `backup-release-v1.x.x`. Fitur *instant branching* Neon menjamin salinan basis data siap dalam hitungan detik sebagai jaring pengaman *point-in-time*.
+   - Jika terdapat perubahan pada `prisma/schema.prisma`, jalankan migrasi resmi:
+     ```bash
+     npm run prisma:deploy
+     ```
+
+3. **Pencatatan Changelog**:
    - Buka `CHANGELOG.md`.
-   - Tambahkan entri versi baru (misal `[1.1.0] - YYYY-MM-DD`) dan kelompokkan perubahan ke dalam bagian:
+   - Pindahkan entri dari seksi `[Unreleased]` ke blok versi baru (misal `## [1.1.0] - YYYY-MM-DD`) dan kelompokkan perubahan ke dalam bagian:
      - `Ditambahkan` (fitur baru)
      - `Diubah` (perubahan alur/UI)
-     - `Keamanan` (penutupan celah atau pembatasan akses)
      - `Diperbaiki` (perbaikan bug)
+     - `Keamanan` (penutupan celah atau pembatasan akses)
    - Lakukan commit pembaruan changelog ke `develop`:
      ```bash
      git add CHANGELOG.md
      git commit -m "docs(release): prepare release notes v1.x.x"
-     git push gitlab develop
+     git push origin develop
      ```
-3. **Penggabungan ke Cabang `main`**:
+
+4. **Penggabungan ke Cabang `main`**:
    - Buat Merge Request dari `develop` ke `main` di GitLab dengan judul `Release v1.x.x (Senin, DD Mon YYYY)`, atau gabungkan secara langsung jika memiliki otoritas rilis:
      ```bash
      git checkout main
-     git pull gitlab main
+     git pull origin main
      git merge develop --ff-only
      ```
      *(Catatan: Jika `main` dan `develop` memiliki riwayat terpisah, gunakan `git merge develop -m "Release v1.x.x"`)*.
-4. **Pemberian Tag Rilis**:
+   - Unggah hasil penggabungan ke remote:
+     ```bash
+     git push origin main
+     ```
+
+5. **Pemberian Tag Rilis**:
    - Berikan tag versi resmi:
      ```bash
      git tag -a v1.x.x -m "Release v1.x.x: <ringkasan rilis>"
-     git push gitlab main --tags
+     git push origin main --tags
      ```
-5. **Verifikasi Deployment Produksi**:
+
+6. **Verifikasi Deployment Produksi**:
    - Coolify akan mendeteksi push pada branch `main` dan menjalankan build Nixpacks.
    - Buka `https://pos.veryyyy.com` dan lakukan *smoke test*:
      - Halaman landing & katalog event dapat dimuat tanpa error.
@@ -121,7 +145,7 @@ Rilis ke server produksi dilakukan secara rutin setiap hari **Senin pukul 08.00 
 
 ## 5. Panduan Penyiapan Staging di Coolify dan Neon
 
-Bagi administrator sistem atau lead developer (Ka Ari / Shandy), berikut langkah membuat instance Staging:
+Panduan teknis konfigurasi server, deploy key, dan persistent storage diatur lengkap pada [Dokumentasi Deploy Coolify](./DEPLOY_COOLIFY.md). Berikut ringkasan langkah khusus staging:
 
 ### 5.1 Buat Database Staging di Neon
 1. Masuk ke dasbor [Neon Console](https://console.neon.tech).
@@ -139,43 +163,72 @@ Bagi administrator sistem atau lead developer (Ka Ari / Shandy), berikut langkah
    - **Branch**: `develop`
    - **Build pack**: `Nixpacks`
    - **Port**: `3000`
-4. Masukkan Environment Variables khusus Staging:
+4. Masukkan Environment Variables khusus Staging sesuai tabel di [DEPLOY_COOLIFY.md](./DEPLOY_COOLIFY.md), dengan ketentuan khusus:
    - `DATABASE_URL`: *(Connection string Neon branch staging)*
-   - `SESSION_SECRET`: *(Kunci acak 32 karakter khusus staging)*
-   - `QRIS_WEBHOOK_SECRET`: *(Kunci webhook simulasi)*
-   - `SUPERVISOR_OVERRIDE_PIN`: `123456` *(atau PIN staging yang disepakati)*
-   - `NIXPACKS_NODE_VERSION`: `22`
    - `ENABLE_ROLE_SIMULATOR`: `true`
+   - `DISABLE_DEMO_LOGIN`: *(Kosongkan agar persona demo dapat diuji tim UAT)*
    - `NEXT_PUBLIC_APP_URL`: `https://staging.pos.veryyyy.com`
 5. Pasang Persistent Storage untuk bukti bayar:
    - Mount Destination: `/app/data/proofs`
 6. Atur Domain:
    - Isi kolom Domains dengan: `https://staging.pos.veryyyy.com`
-7. Pasang Webhook Auto-Deploy GitLab:
-   - Buka **Webhooks** di Coolify, salin Webhook URL dan Secret.
-   - Di GitLab, buka **Settings** -> **Webhooks**, pasang URL tersebut, centang **Push events**, dan kunci ke branch `develop`.
+7. Pasang Webhook Auto-Deploy GitLab untuk branch `develop`.
 
 ---
 
 ## 6. Prosedur Hotfix Darurat di Luar Hari Senin
 
-Jika ditemukan bug kritis di server produksi (`pos.veryyyy.com`) yang menghentikan transaksi operasional:
+Jika ditemukan bug kritis di server produksi (`pos.veryyyy.com`) yang menghentikan transaksi operasional kasir atau event:
+
 1. Buat branch hotfix langsung dari `main`:
    ```bash
    git checkout main
    git checkout -b hotfix/nama-bug-kritis
    ```
-2. Terapkan perbaikan seminimal mungkin sesuai prinsip **Laziness Protocol**.
-3. Verifikasi dengan unit test lokal.
-4. Gabungkan hotfix ke `main` dan beri tag `v1.x.x-hotfix`:
+2. Terapkan perbaikan minimal yang berfokus langsung pada akar masalah (*root cause*) tanpa menambahkan refaktor atau dependensi baru di luar cakupan bug.
+3. Jalankan verifikasi lengkap di lokal:
+   ```bash
+   npm run lint:ui
+   npm run type-check
+   npm test
+   npm run build
+   ```
+4. Perbarui `CHANGELOG.md` dengan nomor versi patch (misal `## [1.0.1] - YYYY-MM-DD`).
+5. Gabungkan hotfix ke `main` dan beri tag `v1.x.x-hotfix`:
    ```bash
    git checkout main
    git merge hotfix/nama-bug-kritis
-   git push gitlab main
+   git push origin main
+   git tag -a v1.0.1 -m "Hotfix v1.0.1: <ringkasan perbaikan>"
+   git push origin main --tags
    ```
-5. **Wajib sinkronkan balik ke `develop`** agar perbaikan tidak hilang pada rilis Senin berikutnya:
+6. **Wajib sinkronkan balik ke `develop`** agar perbaikan tidak tertimpa pada rilis Senin berikutnya:
    ```bash
    git checkout develop
    git merge main
-   git push gitlab develop
+   git push origin develop
    ```
+
+---
+
+## 7. Prosedur Rollback Darurat Rilis Produksi
+
+Apabila rilis Senin atau hotfix memicu galat runtime fatal di outlet operasional:
+
+1. **Rollback Aplikasi Cepat via Dasbor Coolify (< 2 Menit)**:
+   - Buka dasbor Coolify -> Pilih aplikasi **Produksi**.
+   - Buka menu **Deployments**.
+   - Cari baris deployment sukses terakhir sebelum rilis bermasalah.
+   - Klik tombol **Redeploy** pada deployment tersebut. Container lama yang stabil akan langsung dipulihkan tanpa menunggu commit git baru.
+2. **Rollback Kode pada Cabang `main`**:
+   - Jika perbaikan membutuhkan waktu analisis, revert commit rilis di cabang `main`:
+     ```bash
+     git checkout main
+     git pull origin main
+     git revert -m 1 HEAD
+     git commit -m "revert(release): rollback to previous stable release due to <alasan-insiden>"
+     git push origin main
+     ```
+3. **Rollback Skema Database Neon**:
+   - Jika kegagalan disebabkan oleh migrasi skema destruktif, buka [Neon Console](https://console.neon.tech).
+   - Pilih branch `main`, lakukan *restore* atau alihkan koneksi ke branch snapshot `backup-release-v1.x.x` yang telah dibuat pada Langkah 4.2.
