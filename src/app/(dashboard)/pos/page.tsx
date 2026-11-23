@@ -43,6 +43,7 @@ import {
   resolveCoworkingReceiptPublisher,
   resolvePosReceiptPublisher,
   resolvePublisherCode,
+  syncSequenceFromOrderNumber,
 } from "@/lib/receipt-publisher";
 import {
   getNextOpenCoworkingDate,
@@ -121,7 +122,7 @@ import {
 export default function POSPage() {
   const { user } = useAuth();
   const { activeOutlet, activeOutletId } = useOutlet();
-  const { orders, createPosOrder } = useOrders();
+  const { orders, createPosOrderWithSync } = useOrders();
   const { getAvailableTables, occupyTableWithOrder, areas, filteredAreas } = useTables();
   const { simulateBOMDeduction, deductOrderBOM, checkProductStockStatus } = useInventory();
   const { filteredProducts: masterProducts, categories } = useProducts();
@@ -685,7 +686,7 @@ export default function POSPage() {
   };
 
   // Process Successful Payment & Complete Business Actions
-  const handlePaymentSuccess = (paymentData: {
+  const handlePaymentSuccess = async (paymentData: {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
@@ -724,7 +725,7 @@ export default function POSPage() {
         customerName.trim() ||
         (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
 
-      const createdOrder = createPosOrder({
+      const { order: optimisticOrder, serverSync } = createPosOrderWithSync({
         orderNumber: receiptNo,
         cashierName: user?.name,
         tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
@@ -763,6 +764,20 @@ export default function POSPage() {
           notes: c.notes,
         })),
       });
+
+      const syncResult = await serverSync;
+      if (syncResult.rejected) {
+        notify.error(
+          "Transaksi ditolak server",
+          syncResult.error || "Pembayaran tidak dapat diselesaikan."
+        );
+        return;
+      }
+
+      const createdOrder = syncResult.order ?? optimisticOrder;
+      if (createdOrder.orderNumber) {
+        syncSequenceFromOrderNumber(createdOrder.orderNumber);
+      }
 
       const kitchenTicket: KitchenTicketData = {
         orderId: createdOrder.id,
@@ -818,7 +833,9 @@ export default function POSPage() {
           ...c.selectedModifiers.map((m) => m.name),
         ],
       }));
-      deductOrderBOM(bomItems);
+      if (createdOrder.paymentStatus === "PAID") {
+        deductOrderBOM(bomItems, createdOrder.id);
+      }
 
       if (orderType === "DINE_IN" && selectedTable) {
         occupyTableWithOrder(selectedTable, {

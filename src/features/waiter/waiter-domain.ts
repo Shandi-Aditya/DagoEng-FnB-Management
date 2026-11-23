@@ -193,7 +193,7 @@ export function findActiveOrderForTable(
 
 /**
  * Detects newly ready orders for floor waiters to serve to guests.
- * Only includes orders in READY status for the outlet that have not yet been dismissed.
+ * Only includes paid orders in READY status for the outlet that have not yet been dismissed.
  */
 export function getReadyWaiterOrders(
   orders: readonly OrderRecord[],
@@ -204,6 +204,7 @@ export function getReadyWaiterOrders(
     .filter(
       (o) =>
         o.status === "READY" &&
+        o.paymentStatus === "PAID" &&
         (!outletId || outletId === "ALL" || o.outletId === outletId) &&
         !dismissedIds.has(o.id)
     )

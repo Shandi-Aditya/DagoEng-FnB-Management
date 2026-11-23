@@ -9,7 +9,12 @@ import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { normalizeLoyaltyPhone, useLoyalty } from "@/contexts/LoyaltyContext";
-import { useOrders } from "@/contexts/OrderContext";
+import {
+  isClientOrderBeforeCooking,
+  resolvePostPaymentOrderStatus,
+  shouldRestoreClientOrderBOM,
+  useOrders,
+} from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -128,6 +133,7 @@ export default function OrdersPage() {
   const [openingCashInput, setOpeningCashInput] = useState<number | "">(200000);
   const [isOpeningShift, setIsOpeningShift] = useState(false);
   const paymentSubmittingRef = useRef(false);
+  const refundSubmittingRef = useRef(false);
 
   const handleExportOrdersCSV = () => {
     if (!canExportNominalReports) return;
@@ -216,9 +222,11 @@ export default function OrdersPage() {
         method: guest.paymentMethod,
       }));
 
+      const nextStatus = resolvePostPaymentOrderStatus(paymentOrder.status);
+
       advanceOrderStatus(
         paymentOrder.id,
-        "COMPLETED",
+        nextStatus,
         `Pembayaran lunas via ${paymentData.method} (${formatCurrencyIDR(paymentOrder.total)})`,
         {
           paymentStatus: "PAID",
@@ -247,7 +255,9 @@ export default function OrdersPage() {
         quantity: it.quantity,
         modifiers: it.modifiers,
       }));
-      deductOrderBOM(bomItems);
+      if (!paymentOrder.bomDeducted) {
+        deductOrderBOM(bomItems, paymentOrder.id);
+      }
 
       const orderNormPhone = paymentOrder.customerPhone
         ? normalizeLoyaltyPhone(paymentOrder.customerPhone)
@@ -272,6 +282,7 @@ export default function OrdersPage() {
       }
 
       if (
+        nextStatus === "COMPLETED" &&
         paymentOrder.orderType === "DINE_IN" &&
         paymentOrder.tableNumber &&
         paymentOrder.tableNumber !== "TAKEAWAY"
@@ -284,8 +295,11 @@ export default function OrdersPage() {
         action: "ORDER_PAYMENT_AND_COMPLETED",
         recordId: paymentOrder.orderNumber,
         previousValue: `Status: ${paymentOrder.status} (${paymentOrder.paymentStatus})`,
-        newValue: `Status: COMPLETED (PAID via ${paymentData.method})`,
-        description: `Pesanan ${paymentOrder.orderNumber} (Meja ${paymentOrder.tableNumber}, ${paymentOrder.customerName}) lunas & diselesaikan`,
+        newValue: `Status: ${nextStatus} (PAID via ${paymentData.method})`,
+        description:
+          nextStatus === "COMPLETED"
+            ? `Pesanan ${paymentOrder.orderNumber} (Meja ${paymentOrder.tableNumber}, ${paymentOrder.customerName}) lunas & diselesaikan`
+            : `Pesanan ${paymentOrder.orderNumber} (Meja ${paymentOrder.tableNumber}, ${paymentOrder.customerName}) lunas & masuk antrean dapur`,
         reason: `Pembayaran kasir selesai via ${paymentData.method}`,
         status: "SUCCESS",
         outletId: paymentOrder.outletId,
@@ -308,9 +322,10 @@ export default function OrdersPage() {
           prev
             ? {
                 ...prev,
-                status: "COMPLETED",
+                status: nextStatus,
                 paymentStatus: "PAID",
                 paymentMethod: chosenMethod,
+                bomDeducted: true,
                 qrisVerification: paymentData.qrisVerification ?? prev.qrisVerification,
                 splitDetails: mappedSplitDetails ?? prev.splitDetails,
                 cashierName: user?.name || prev.cashierName,
@@ -407,131 +422,141 @@ export default function OrdersPage() {
     supervisorPin?: string;
   }): Promise<{ ok: boolean; error?: string }> => {
     if (!refundOrderTarget) return { ok: false, error: "Pesanan tidak ditemukan." };
-
-    const isVoid = refundModalMode === "VOID";
-    const result = isVoid
-      ? voidOrder(refundOrderTarget.id, {
-          reason: params.reason,
-          supervisorName: params.supervisorName,
-          supervisorRole: params.supervisorRole,
-          supervisorPin: params.supervisorPin,
-        })
-      : refundOrder(refundOrderTarget.id, {
-          reason: params.reason,
-          supervisorName: params.supervisorName,
-          supervisorRole: params.supervisorRole,
-          supervisorPin: params.supervisorPin,
-          refundMethod: "CASH",
-        });
-
-    if (!result.success) {
-      notify.error(isVoid ? "Gagal membatalkan pesanan" : "Gagal melakukan refund", result.error);
-      return { ok: false, error: result.error };
+    if (refundSubmittingRef.current) {
+      return { ok: false, error: "Permintaan refund/pembatalan sedang diproses." };
     }
 
-    if (result.serverSync) {
-      const syncResult = await result.serverSync;
-      if (syncResult.rejected) {
-        const errorMessage = syncResult.error || "Otorisasi supervisor ditolak oleh server.";
-        notify.error(
-          isVoid ? "Pembatalan pesanan ditolak" : "Refund pesanan ditolak",
-          errorMessage
-        );
-        return { ok: false, error: errorMessage };
+    refundSubmittingRef.current = true;
+    try {
+      const isVoid = refundModalMode === "VOID";
+      const result = isVoid
+        ? voidOrder(refundOrderTarget.id, {
+            reason: params.reason,
+            supervisorName: params.supervisorName,
+            supervisorRole: params.supervisorRole,
+            supervisorPin: params.supervisorPin,
+          })
+        : refundOrder(refundOrderTarget.id, {
+            reason: params.reason,
+            supervisorName: params.supervisorName,
+            supervisorRole: params.supervisorRole,
+            supervisorPin: params.supervisorPin,
+            refundMethod: "CASH",
+          });
+
+      if (!result.success) {
+        notify.error(isVoid ? "Gagal membatalkan pesanan" : "Gagal melakukan refund", result.error);
+        return { ok: false, error: result.error };
       }
-    }
 
-    if (!isVoid) {
-      recordShiftRefund(
-        refundOrderTarget.total,
-        refundOrderTarget.id,
-        refundOrderTarget.outletId
+      if (result.serverSync) {
+        const syncResult = await result.serverSync;
+        if (syncResult.rejected) {
+          const errorMessage = syncResult.error || "Otorisasi supervisor ditolak oleh server.";
+          notify.error(
+            isVoid ? "Pembatalan pesanan ditolak" : "Refund pesanan ditolak",
+            errorMessage
+          );
+          return { ok: false, error: errorMessage };
+        }
+      }
+
+      if (!isVoid) {
+        recordShiftRefund(
+          refundOrderTarget.total,
+          refundOrderTarget.id,
+          refundOrderTarget.outletId
+        );
+      }
+
+      const bomItems = refundOrderTarget.items.map((it) => ({
+        productId: it.productId || it.id,
+        productName: it.productName,
+        quantity: it.quantity,
+        modifiers: it.modifiers,
+      }));
+      const isBeforeCooking = isClientOrderBeforeCooking(refundOrderTarget);
+      const shouldRestoreBom = shouldRestoreClientOrderBOM(refundOrderTarget);
+
+      if (!isBeforeCooking) {
+        recordOrderWasteBOM(
+          bomItems,
+          refundOrderTarget.paymentStatus !== "PAID",
+          refundOrderTarget.orderNumber
+        );
+      } else if (shouldRestoreBom) {
+        restoreOrderBOM(bomItems, refundOrderTarget.orderNumber, refundOrderTarget.id);
+      }
+
+      const targetNormPhone = refundOrderTarget.customerPhone
+        ? normalizeLoyaltyPhone(refundOrderTarget.customerPhone)
+        : "";
+      const matchingMember =
+        (targetNormPhone
+          ? members.find((m) => normalizeLoyaltyPhone(m.phone) === targetNormPhone)
+          : undefined) ??
+        members.find(
+          (m) => m.name.toLowerCase().trim() === refundOrderTarget.customerName.toLowerCase().trim()
+        );
+      if (matchingMember) {
+        reverseTransactionPoints(
+          matchingMember.id,
+          refundOrderTarget.id,
+          `${isVoid ? "Pembatalan" : "Refund"} pesanan #${refundOrderTarget.orderNumber}: ${params.reason}`,
+          !isVoid ? refundOrderTarget.total : 0
+        );
+      }
+
+      if (
+        refundOrderTarget.orderType === "DINE_IN" &&
+        refundOrderTarget.tableNumber &&
+        refundOrderTarget.tableNumber !== "TAKEAWAY"
+      ) {
+        releaseTableToAvailable(refundOrderTarget.tableNumber);
+      }
+
+      notify.success(
+        isVoid
+          ? `Pesanan ${refundOrderTarget.orderNumber} dibatalkan`
+          : `Pesanan ${refundOrderTarget.orderNumber} di-refund`,
+        isVoid
+          ? `Alasan: ${params.reason}`
+          : `Uang tunai ${formatCurrencyIDR(refundOrderTarget.total)} dikembalikan ke pelanggan`
       );
+
+      if (selectedOrder?.id === refundOrderTarget.id) {
+        setSelectedOrder((prev) =>
+          prev
+            ? {
+                ...(result.order || {
+                  ...prev,
+                  status: "CANCELLED",
+                  ...(isVoid
+                    ? {
+                        voidReason: params.reason,
+                        voidApprovedBy: params.supervisorName,
+                        voidedAt: new Date().toISOString(),
+                      }
+                    : {
+                        paymentStatus: "REFUNDED",
+                        refundReason: params.reason,
+                        refundApprovedBy: params.supervisorName,
+                        refundedAt: new Date().toISOString(),
+                        refundMethod: "CASH",
+                      }),
+                }),
+                ...(shouldRestoreBom ? { bomRestored: true } : {}),
+              }
+            : null
+        );
+      }
+
+      setIsRefundModalOpen(false);
+      setRefundOrderTarget(null);
+      return { ok: true };
+    } finally {
+      refundSubmittingRef.current = false;
     }
-
-    const bomItems = refundOrderTarget.items.map((it) => ({
-      productId: it.productId || it.id,
-      productName: it.productName,
-      quantity: it.quantity,
-      modifiers: it.modifiers,
-    }));
-    const isBeforeCooking =
-      !refundOrderTarget.cookingStartedAt &&
-      ["NEW", "CONFIRMED", "KITCHEN_RECEIVED"].includes(refundOrderTarget.status);
-
-    if (!isBeforeCooking) {
-      recordOrderWasteBOM(
-        bomItems,
-        refundOrderTarget.paymentStatus !== "PAID",
-        refundOrderTarget.orderNumber
-      );
-    } else if (refundOrderTarget.paymentStatus === "PAID") {
-      restoreOrderBOM(bomItems, refundOrderTarget.orderNumber);
-    }
-
-    const targetNormPhone = refundOrderTarget.customerPhone
-      ? normalizeLoyaltyPhone(refundOrderTarget.customerPhone)
-      : "";
-    const matchingMember =
-      (targetNormPhone
-        ? members.find((m) => normalizeLoyaltyPhone(m.phone) === targetNormPhone)
-        : undefined) ??
-      members.find(
-        (m) => m.name.toLowerCase().trim() === refundOrderTarget.customerName.toLowerCase().trim()
-      );
-    if (matchingMember) {
-      reverseTransactionPoints(
-        matchingMember.id,
-        refundOrderTarget.id,
-        `${isVoid ? "Pembatalan" : "Refund"} pesanan #${refundOrderTarget.orderNumber}: ${params.reason}`,
-        !isVoid ? refundOrderTarget.total : 0
-      );
-    }
-
-    if (
-      refundOrderTarget.orderType === "DINE_IN" &&
-      refundOrderTarget.tableNumber &&
-      refundOrderTarget.tableNumber !== "TAKEAWAY"
-    ) {
-      releaseTableToAvailable(refundOrderTarget.tableNumber);
-    }
-
-    notify.success(
-      isVoid
-        ? `Pesanan ${refundOrderTarget.orderNumber} dibatalkan`
-        : `Pesanan ${refundOrderTarget.orderNumber} di-refund`,
-      isVoid
-        ? `Alasan: ${params.reason}`
-        : `Uang tunai ${formatCurrencyIDR(refundOrderTarget.total)} dikembalikan ke pelanggan`
-    );
-
-    if (selectedOrder?.id === refundOrderTarget.id) {
-      setSelectedOrder((prev) =>
-        prev
-          ? result.order || {
-              ...prev,
-              status: "CANCELLED",
-              ...(isVoid
-                ? {
-                    voidReason: params.reason,
-                    voidApprovedBy: params.supervisorName,
-                    voidedAt: new Date().toISOString(),
-                  }
-                : {
-                    paymentStatus: "REFUNDED",
-                    refundReason: params.reason,
-                    refundApprovedBy: params.supervisorName,
-                    refundedAt: new Date().toISOString(),
-                    refundMethod: "CASH",
-                  }),
-            }
-          : null
-      );
-    }
-
-    setIsRefundModalOpen(false);
-    setRefundOrderTarget(null);
-    return { ok: true };
   };
 
   return (
