@@ -8,9 +8,19 @@ import {
   PrintJobStatus,
   DEFAULT_PRINTING_SETTINGS,
   PrinterPaperWidth,
+  OutletReceiptCombineMode,
 } from "@/types/printer";
-import { POSReceiptData } from "@/features/pos/types";
-import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
+import { POSReceiptData, type ReceiptLineItem } from "@/features/pos/types";
+import {
+  resolveCoworkingReceiptPublisher,
+  resolvePosReceiptPublisher,
+} from "@/lib/receipt-publisher";
+import {
+  allocateCategoryTaxAndService,
+  allocateIntegerProRata,
+  isCoworkingOrderItem,
+  normalizeTenantId,
+} from "@/lib/tax-breakdown";
 import { DEFAULT_FNB_TENANTS, getTenantName, getTenantProfile } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 
@@ -199,39 +209,54 @@ export function generateKitchenTicketText(
   return lines.join("\n");
 }
 
-type ReceiptLineItem = POSReceiptData["items"][number];
+export type { ReceiptLineItem };
 
 interface ReceiptTenantGroup {
   tenantId: string;
   tenantName: string;
+  isCoworking: boolean;
   items: ReceiptLineItem[];
   subtotal: number;
 }
 
-function resolveReceiptItemTenantKey(item: ReceiptLineItem): { tenantId: string; tenantName: string } {
-  const matchedByName = !item.tenantId && item.tenantName
+function resolveReceiptItemTenantKey(item: ReceiptLineItem): {
+  tenantId: string;
+  tenantName: string;
+  isCoworking: boolean;
+} {
+  if (isCoworkingOrderItem(item)) {
+    return {
+      tenantId: "DAGO_HUB",
+      tenantName: item.tenantName || "Dago Creative Hub (Co-Working)",
+      isCoworking: true,
+    };
+  }
+  const normalizedId = normalizeTenantId(item.tenantId);
+  const matchedByName = !normalizedId && item.tenantName
     ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === item.tenantName?.toLowerCase())?.id
     : undefined;
-  const tenantId = item.tenantId || matchedByName || "default";
+  const tenantId = normalizedId || matchedByName || "default";
   const tenantName =
     item.tenantName ||
     (tenantId !== "default" ? getTenantName(tenantId) : undefined) ||
     "Mitra F&B";
-  return { tenantId, tenantName };
+  return { tenantId, tenantName, isCoworking: false };
 }
 
 function groupReceiptItemsByTenant(items: readonly ReceiptLineItem[] = []): ReceiptTenantGroup[] {
   const groups = new Map<string, ReceiptTenantGroup>();
   for (const item of items) {
-    const { tenantId, tenantName } = resolveReceiptItemTenantKey(item);
+    const { tenantId, tenantName, isCoworking } = resolveReceiptItemTenantKey(item);
     const existing = groups.get(tenantId);
     if (existing) {
       existing.items.push(item);
       existing.subtotal += item.subtotal;
+      existing.isCoworking = existing.isCoworking && isCoworking;
     } else {
       groups.set(tenantId, {
         tenantId,
         tenantName,
+        isCoworking,
         items: [item],
         subtotal: item.subtotal,
       });
@@ -261,25 +286,42 @@ function extractBranchName(outletName?: string): string | undefined {
   return parts.length > 1 ? parts[parts.length - 1].trim() : outletName;
 }
 
-function allocateProRataValues(
-  totalAmount: number,
-  groupSubtotals: readonly number[],
-  totalSubtotal: number
-): number[] {
-  const count = groupSubtotals.length;
-  if (count === 0) return [];
-  if (count === 1) return [totalAmount];
+function allocateReceiptPayments(
+  parentReceipt: POSReceiptData,
+  subReceipts: POSReceiptData[]
+): POSReceiptData[] {
+  if (subReceipts.length <= 1) return subReceipts;
 
-  const denominator = totalSubtotal > 0 ? totalSubtotal : count;
-  let allocated = 0;
-  return groupSubtotals.map((sub, idx) => {
-    if (idx === count - 1) {
-      return Math.max(0, totalAmount - allocated);
+  const totalItemsSubtotal = subReceipts.reduce((sum, r) => sum + r.subtotal, 0);
+  const totalPaid = parentReceipt.amountPaid || 0;
+  const totalChange = parentReceipt.changeDue || 0;
+  let paidAllocated = 0;
+  let changeAllocated = 0;
+
+  return subReceipts.map((sub, idx) => {
+    const isLast = idx === subReceipts.length - 1;
+    let groupAmountPaid: number;
+    let groupChangeDue: number;
+
+    if (totalPaid >= (parentReceipt.grandTotal || 0)) {
+      groupAmountPaid = isLast
+        ? Math.max(sub.grandTotal, totalPaid - paidAllocated)
+        : sub.grandTotal;
+      groupChangeDue = isLast ? Math.max(0, totalChange - changeAllocated) : 0;
+    } else {
+      groupAmountPaid = isLast
+        ? Math.max(0, totalPaid - paidAllocated)
+        : Math.round((totalPaid * sub.subtotal) / (totalItemsSubtotal || 1));
+      groupChangeDue = 0;
     }
-    const ratio = totalSubtotal > 0 ? sub / denominator : 1 / count;
-    const share = Math.round(totalAmount * ratio);
-    allocated += share;
-    return Math.max(0, share);
+    paidAllocated += groupAmountPaid;
+    changeAllocated += groupChangeDue;
+
+    return {
+      ...sub,
+      amountPaid: groupAmountPaid,
+      changeDue: groupChangeDue,
+    };
   });
 }
 
@@ -294,13 +336,11 @@ export function splitCustomerReceiptByTenant(receipt: POSReceiptData): POSReceip
   }
 
   const groupSubtotals = groups.map((g) => g.subtotal);
-  const totalItemsSubtotal = groupSubtotals.reduce((sum, val) => sum + val, 0);
-  const discounts = allocateProRataValues(receipt.discount || 0, groupSubtotals, totalItemsSubtotal);
-  const taxes = allocateProRataValues(receipt.tax || 0, groupSubtotals, totalItemsSubtotal);
-  const serviceCharges = allocateProRataValues(
-    receipt.serviceCharge || 0,
-    groupSubtotals,
-    totalItemsSubtotal
+  const discounts = allocateIntegerProRata(receipt.discount || 0, groupSubtotals);
+  const categoryTaxAllocations = allocateCategoryTaxAndService(
+    groups.map((g) => ({ isCoworking: g.isCoworking, subtotal: g.subtotal })),
+    receipt.tax || 0,
+    receipt.serviceCharge || 0
   );
 
   const branchName = extractBranchName(receipt.outletName);
@@ -310,10 +350,36 @@ export function splitCustomerReceiptByTenant(receipt: POSReceiptData): POSReceip
     phone: receipt.outletPhone,
   };
 
-  let paidAllocated = 0;
-  let changeAllocated = 0;
+  const subReceipts = groups.map((group, idx) => {
+    const groupSubtotal = group.subtotal;
+    const groupDiscount = Math.min(groupSubtotal, discounts[idx] ?? 0);
+    const groupTax = categoryTaxAllocations[idx]?.tax ?? 0;
+    const groupService = categoryTaxAllocations[idx]?.serviceCharge ?? 0;
+    const groupGrandTotal = Math.max(0, groupSubtotal - groupDiscount) + groupTax + groupService;
 
-  return groups.map((group, idx) => {
+    if (group.isCoworking || group.tenantId === "DAGO_HUB") {
+      const cwPublisher = resolveCoworkingReceiptPublisher(outletFallback);
+      return {
+        ...receipt,
+        orderNumber: `${receipt.orderNumber}-${idx + 1}`,
+        tenantId: "DAGO_HUB",
+        tenantName: cwPublisher.brandName,
+        brandName: cwPublisher.brandName,
+        tagline: cwPublisher.tagline,
+        receiptHeader: `${cwPublisher.brandName} — ${cwPublisher.tagline}`,
+        receiptFooter: receipt.receiptFooter,
+        outletName: cwPublisher.outletName,
+        outletAddress: cwPublisher.outletAddress,
+        outletPhone: cwPublisher.outletPhone,
+        items: group.items,
+        subtotal: groupSubtotal,
+        discount: groupDiscount,
+        tax: groupTax,
+        serviceCharge: groupService,
+        grandTotal: groupGrandTotal,
+      };
+    }
+
     const resolvedTenantId = group.tenantId === "default" ? undefined : group.tenantId;
     const publisher = resolvePosReceiptPublisher(
       group.items.map((item) => ({
@@ -325,37 +391,13 @@ export function splitCustomerReceiptByTenant(receipt: POSReceiptData): POSReceip
     );
     const tenantProfile = resolvedTenantId ? getTenantProfile(resolvedTenantId) : null;
 
-    const groupSubtotal = group.subtotal;
-    const groupDiscount = Math.min(groupSubtotal, discounts[idx] ?? 0);
-    const groupTax = taxes[idx] ?? 0;
-    const groupService = serviceCharges[idx] ?? 0;
-    const groupGrandTotal = Math.max(0, groupSubtotal - groupDiscount) + groupTax + groupService;
-
-    const isLast = idx === groups.length - 1;
-    let groupAmountPaid: number;
-    let groupChangeDue: number;
-
-    if ((receipt.amountPaid || 0) >= (receipt.grandTotal || 0)) {
-      groupAmountPaid = isLast
-        ? Math.max(groupGrandTotal, (receipt.amountPaid || 0) - paidAllocated)
-        : groupGrandTotal;
-      groupChangeDue = isLast
-        ? Math.max(0, (receipt.changeDue || 0) - changeAllocated)
-        : 0;
-    } else {
-      groupAmountPaid = isLast
-        ? Math.max(0, (receipt.amountPaid || 0) - paidAllocated)
-        : Math.round(((receipt.amountPaid || 0) * groupSubtotal) / (totalItemsSubtotal || 1));
-      groupChangeDue = 0;
-    }
-    paidAllocated += groupAmountPaid;
-    changeAllocated += groupChangeDue;
-
     return {
       ...receipt,
       orderNumber: `${receipt.orderNumber}-${idx + 1}`,
       tenantId: publisher.tenantId || resolvedTenantId,
       tenantName: publisher.brandName,
+      brandName: publisher.brandName,
+      tagline: publisher.tagline,
       receiptHeader: tenantProfile?.receiptHeader || publisher.brandName,
       receiptFooter: tenantProfile?.receiptFooter || receipt.receiptFooter,
       outletName: publisher.outletName,
@@ -367,10 +409,126 @@ export function splitCustomerReceiptByTenant(receipt: POSReceiptData): POSReceip
       tax: groupTax,
       serviceCharge: groupService,
       grandTotal: groupGrandTotal,
-      amountPaid: groupAmountPaid,
-      changeDue: groupChangeDue,
     };
   });
+
+  return allocateReceiptPayments(receipt, subReceipts);
+}
+
+export function splitCustomerReceiptByMode(
+  receipt: POSReceiptData,
+  options?: {
+    receiptCombineMode?: OutletReceiptCombineMode;
+    splitCustomerReceiptPerTenant?: boolean;
+  }
+): POSReceiptData[] {
+  if (!receipt.items || receipt.items.length === 0) {
+    return [receipt];
+  }
+
+  const mode: OutletReceiptCombineMode = options?.receiptCombineMode ?? "COMBINED";
+  const splitPerTenant = Boolean(options?.splitCustomerReceiptPerTenant);
+
+  if (mode === "COMBINED") {
+    return splitPerTenant ? splitCustomerReceiptByTenant(receipt) : [receipt];
+  }
+
+  const cwItems = receipt.items.filter((item) => isCoworkingOrderItem(item));
+  const fnbItems = receipt.items.filter((item) => !isCoworkingOrderItem(item));
+
+  if (cwItems.length === 0) {
+    return splitPerTenant ? splitCustomerReceiptByTenant(receipt) : [receipt];
+  }
+
+  if (fnbItems.length === 0) {
+    return [receipt];
+  }
+
+  const cwSubtotal = cwItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const fnbSubtotal = fnbItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const [cwDiscountRaw, fnbDiscountRaw] = allocateIntegerProRata(receipt.discount || 0, [
+    cwSubtotal,
+    fnbSubtotal,
+  ]);
+  const cwDiscount = Math.min(cwSubtotal, cwDiscountRaw);
+  const fnbDiscount = Math.min(fnbSubtotal, fnbDiscountRaw);
+
+  const [cwTaxAlloc, fnbTaxAlloc] = allocateCategoryTaxAndService(
+    [
+      { isCoworking: true, subtotal: cwSubtotal },
+      { isCoworking: false, subtotal: fnbSubtotal },
+    ],
+    receipt.tax || 0,
+    receipt.serviceCharge || 0
+  );
+
+  const cwGrandTotal =
+    Math.max(0, cwSubtotal - cwDiscount) + cwTaxAlloc.tax + cwTaxAlloc.serviceCharge;
+  const fnbGrandTotal =
+    Math.max(0, fnbSubtotal - fnbDiscount) + fnbTaxAlloc.tax + fnbTaxAlloc.serviceCharge;
+
+  const branchName = extractBranchName(receipt.outletName);
+  const outletFallback = {
+    name: branchName,
+    address: receipt.outletAddress,
+    phone: receipt.outletPhone,
+  };
+
+  const cwPublisher = resolveCoworkingReceiptPublisher(outletFallback);
+  const cwReceipt: POSReceiptData = {
+    ...receipt,
+    orderNumber: `${receipt.orderNumber}-CW`,
+    tenantId: "DAGO_HUB",
+    tenantName: cwPublisher.brandName,
+    brandName: cwPublisher.brandName,
+    tagline: cwPublisher.tagline,
+    receiptHeader: `${cwPublisher.brandName} — ${cwPublisher.tagline}`,
+    outletName: cwPublisher.outletName,
+    outletAddress: cwPublisher.outletAddress,
+    outletPhone: cwPublisher.outletPhone,
+    items: cwItems,
+    subtotal: cwSubtotal,
+    discount: cwDiscount,
+    tax: cwTaxAlloc.tax,
+    serviceCharge: cwTaxAlloc.serviceCharge,
+    grandTotal: cwGrandTotal,
+  };
+
+  const fnbPublisher = resolvePosReceiptPublisher(
+    fnbItems.map((item) => ({
+      tenantId: item.tenantId,
+      tenantName: item.tenantName,
+    })),
+    outletFallback
+  );
+  const fnbTenantProfile = fnbPublisher.tenantId
+    ? getTenantProfile(fnbPublisher.tenantId)
+    : null;
+  const fnbReceiptBase: POSReceiptData = {
+    ...receipt,
+    orderNumber: `${receipt.orderNumber}-FNB`,
+    tenantId: fnbPublisher.tenantId,
+    tenantName: fnbPublisher.brandName,
+    brandName: fnbPublisher.brandName,
+    tagline: fnbPublisher.tagline,
+    receiptHeader: fnbTenantProfile?.receiptHeader || fnbPublisher.brandName,
+    receiptFooter: fnbTenantProfile?.receiptFooter || receipt.receiptFooter,
+    outletName: fnbPublisher.outletName,
+    outletAddress: fnbPublisher.outletAddress,
+    outletPhone: fnbTenantProfile?.contactPhone || fnbPublisher.outletPhone,
+    items: fnbItems,
+    subtotal: fnbSubtotal,
+    discount: fnbDiscount,
+    tax: fnbTaxAlloc.tax,
+    serviceCharge: fnbTaxAlloc.serviceCharge,
+    grandTotal: fnbGrandTotal,
+  };
+
+  const fnbReceipts = splitPerTenant
+    ? splitCustomerReceiptByTenant(fnbReceiptBase)
+    : [fnbReceiptBase];
+
+  return allocateReceiptPayments(receipt, [cwReceipt, ...fnbReceipts]);
 }
 
 /**

@@ -3,6 +3,7 @@ import type { ServerAuthResult } from "@/lib/server-auth";
 import {
   DEFAULT_CATEGORY_TAX_CONFIG,
   DEFAULT_PLATFORM_SETTINGS,
+  type OutletReceiptCombineMode,
   type PlatformSettings,
 } from "@/types/settings";
 import {
@@ -614,6 +615,13 @@ function normalizeActiveOrgModules(
   return Array.from(set);
 }
 
+function normalizeReceiptCombineMode(
+  mode: unknown,
+  fallback: OutletReceiptCombineMode = "COMBINED"
+): OutletReceiptCombineMode {
+  return mode === "SEPARATE" || mode === "COMBINED" ? mode : fallback;
+}
+
 export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
   return {
     ...DEFAULT_PLATFORM_SETTINGS,
@@ -655,6 +663,9 @@ export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
       DEFAULT_PLATFORM_SETTINGS.activeOrgModules
     ),
     qrSelfOrderQrisOnly: DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
+    receiptCombineMode: normalizeReceiptCombineMode(
+      DEFAULT_PLATFORM_SETTINGS.receiptCombineMode
+    ),
     appliedPromoOpIds: [],
   };
 }
@@ -744,6 +755,10 @@ export function mergePlatformSettingsState(
         : typeof base.qrSelfOrderQrisOnly === "boolean"
           ? base.qrSelfOrderQrisOnly
           : DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
+    receiptCombineMode: normalizeReceiptCombineMode(
+      patch.receiptCombineMode,
+      normalizeReceiptCombineMode(base.receiptCombineMode)
+    ),
     appliedPromoOpIds: Array.isArray(patch.appliedPromoOpIds)
       ? patch.appliedPromoOpIds.slice(-MAX_APPLIED_OP_IDS)
       : base.appliedPromoOpIds ?? [],
@@ -1895,6 +1910,9 @@ export function defaultPrinterConfigState(): PrinterConfigDomainState {
     devices: DEFAULT_PRINTER_DEVICES.map((d) => ({ ...d })),
     settings: {
       ...DEFAULT_PRINTING_SETTINGS,
+      receiptCombineMode: normalizeReceiptCombineMode(
+        DEFAULT_PRINTING_SETTINGS.receiptCombineMode
+      ),
       cashierReceiptRoles: [
         ...(DEFAULT_PRINTING_SETTINGS.cashierReceiptRoles ?? []),
       ],
@@ -1947,12 +1965,19 @@ export function applyPrinterConfigCommand(
     }
     case "PATCH_SETTINGS": {
       if (!isPlainRecord(command.updates)) return current;
+      const nextSettings: POSPrintingSettings = {
+        ...current.settings,
+        ...command.updates,
+      };
+      nextSettings.receiptCombineMode = normalizeReceiptCombineMode(
+        "receiptCombineMode" in command.updates
+          ? command.updates.receiptCombineMode
+          : current.settings.receiptCombineMode,
+        normalizeReceiptCombineMode(current.settings.receiptCombineMode)
+      );
       return {
         ...current,
-        settings: {
-          ...current.settings,
-          ...command.updates,
-        },
+        settings: nextSettings,
       };
     }
     default: {
@@ -2047,6 +2072,10 @@ function createPrinterConfigMirror(): LocalStorageMirrorAdapter<PrinterConfigDom
             settings = {
               ...fallback.settings,
               ...(parsed as Partial<POSPrintingSettings>),
+              receiptCombineMode: normalizeReceiptCombineMode(
+                (parsed as Partial<POSPrintingSettings>).receiptCombineMode,
+                normalizeReceiptCombineMode(fallback.settings.receiptCombineMode)
+              ),
             };
           }
         } catch {}

@@ -21,10 +21,27 @@ export interface OrderStatusHistoryItem {
   note?: string;
 }
 
+export type OrderItemCategoryType = "FNB" | "COWORKING";
+
+export type CoworkingOrderItemMeta = {
+  spaceId: string;
+  spaceName: string;
+  spaceType?: string;
+  durationHours: number;
+  startTime?: string;
+  endTime?: string;
+  bookingDate?: string;
+  rateLabel?: string;
+};
+
 export interface OrderItemRecord {
   id: string;
   productId?: string;
   tenantId?: string;
+  tenantName?: string;
+  itemType?: OrderItemCategoryType;
+  category?: string;
+  coworkingMeta?: CoworkingOrderItemMeta;
   productName: string;
   quantity: number;
   unitPrice: number;

@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/components/app/status-badge";
-import { normalizeTenantId } from "@/features/orders/orders-domain";
+import { isCoworkingOrderItem, normalizeTenantId } from "@/features/orders/orders-domain";
 import { resolveItemTenantId } from "@/lib/settlement";
 import type { OrderItemRecord, OrderRecord, OrderStatus, SLAStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
@@ -108,12 +108,13 @@ export function ticketItems(
   tenantId: string | undefined,
   station: KitchenStation = "ALL"
 ): OrderItemRecord[] {
+  const fnbItems = (order.items || []).filter((item) => !isCoworkingOrderItem(item));
   const normTenant = normalizeTenantId(tenantId);
   const fallbackTenantId = (order as { tenantId?: string }).tenantId;
   const byTenant =
     !normTenant || normTenant === "ALL"
-      ? order.items
-      : order.items.filter((item) => {
+      ? fnbItems
+      : fnbItems.filter((item) => {
           const itemTenant = normalizeTenantId(resolveItemTenantId(item, fallbackTenantId));
           return itemTenant === normTenant;
         });
@@ -178,6 +179,7 @@ export function buildReprintTicket(
   queueNumber: number,
   timestamp: string,
 ): KitchenTicketData {
+  const fnbItems = (items || []).filter((item) => !isCoworkingOrderItem(item));
   return {
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -188,7 +190,7 @@ export function buildReprintTicket(
     orderType: order.orderType,
     purpose: "REPRINT",
     sequenceNumber: queueNumber,
-    items: items.map((item) => ({
+    items: fnbItems.map((item) => ({
       id: item.id,
       productName: item.productName,
       quantity: item.quantity,
