@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, Ticket, X } from "lucide-react";
+import { Building2, Crown, Ticket, Users, X } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTableSelectableForPos } from "@/contexts/TableContext";
+import type { CorporateBillingType } from "@/types/order";
 
 export type PosOrderType = "DINE_IN" | "TAKEAWAY";
 
@@ -52,6 +53,22 @@ interface CartOrderSetupProps {
   onRemoveVoucher: () => void;
   orderNotes?: string;
   onOrderNotesChange?: (notes: string) => void;
+  // Corporate Order Props
+  isCorporateOrder?: boolean;
+  onIsCorporateOrderChange?: (val: boolean) => void;
+  companyName?: string;
+  onCompanyNameChange?: (val: string) => void;
+  picName?: string;
+  onPicNameChange?: (val: string) => void;
+  picPhone?: string;
+  onPicPhoneChange?: (val: string) => void;
+  headcount?: number;
+  onHeadcountChange?: (val: number) => void;
+  billingType?: CorporateBillingType;
+  onBillingTypeChange?: (val: CorporateBillingType) => void;
+  meetingRooms?: { id: string; name: string; hourlyRate: number }[];
+  selectedMeetingRoomId?: string;
+  onSelectedMeetingRoomChange?: (roomId: string) => void;
 }
 
 /** Who the order is for: dine in table or takeaway, plus the loyalty member. */
@@ -70,6 +87,21 @@ export function CartOrderSetup({
   onRemoveVoucher,
   orderNotes,
   onOrderNotesChange,
+  isCorporateOrder = false,
+  onIsCorporateOrderChange,
+  companyName = "",
+  onCompanyNameChange,
+  picName = "",
+  onPicNameChange,
+  picPhone = "",
+  onPicPhoneChange,
+  headcount = 1,
+  onHeadcountChange,
+  billingType = "PREPAID",
+  onBillingTypeChange,
+  meetingRooms = [],
+  selectedMeetingRoomId = "",
+  onSelectedMeetingRoomChange,
 }: CartOrderSetupProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -123,6 +155,133 @@ export function CartOrderSetup({
             ))}
           </NativeSelect>
         </Field>
+      </div>
+
+      {/* Corporate Order Toggle */}
+      <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Building2 className="size-4 shrink-0 text-primary" aria-hidden="true" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold leading-tight text-foreground">Order Perusahaan (Corporate)</span>
+              <span className="text-xs text-muted-foreground leading-tight truncate">Tim, instansi, atau paket konsumsi + meeting room</span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant={isCorporateOrder ? "default" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => onIsCorporateOrderChange?.(!isCorporateOrder)}
+            aria-pressed={isCorporateOrder}
+          >
+            {isCorporateOrder ? "Aktif" : "Aktifkan"}
+          </Button>
+        </div>
+
+        {isCorporateOrder ? (
+          <div className="flex flex-col gap-2.5 pt-1 border-t mt-1">
+            <Field className="gap-1">
+              <FieldLabel htmlFor="pos-corporate-company" className="text-xs">
+                Nama Perusahaan / Instansi <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="pos-corporate-company"
+                className="h-8 text-xs"
+                value={companyName}
+                onChange={(e) => onCompanyNameChange?.(e.target.value)}
+                placeholder="Contoh: PT Dago Eng Kreatif"
+                required
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Field className="gap-1">
+                <FieldLabel htmlFor="pos-corporate-pic" className="text-xs">
+                  Nama PIC <span className="text-destructive">*</span>
+                </FieldLabel>
+                <Input
+                  id="pos-corporate-pic"
+                  className="h-8 text-xs"
+                  value={picName}
+                  onChange={(e) => onPicNameChange?.(e.target.value)}
+                  placeholder="Nama PIC tim"
+                  required
+                />
+              </Field>
+
+              <Field className="gap-1">
+                <FieldLabel htmlFor="pos-corporate-phone" className="text-xs">
+                  WhatsApp PIC <span className="text-destructive">*</span>
+                </FieldLabel>
+                <Input
+                  id="pos-corporate-phone"
+                  className="h-8 text-xs"
+                  value={picPhone}
+                  onChange={(e) => onPicPhoneChange?.(e.target.value)}
+                  placeholder="0812xxxx"
+                  required
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Field className="gap-1">
+                <FieldLabel htmlFor="pos-corporate-headcount" className="text-xs">
+                  Jumlah Peserta
+                </FieldLabel>
+                <div className="relative">
+                  <Input
+                    id="pos-corporate-headcount"
+                    type="number"
+                    min={1}
+                    max={200}
+                    className="h-8 text-xs pl-7"
+                    value={headcount || 1}
+                    onChange={(e) => onHeadcountChange?.(Math.max(1, parseInt(e.target.value) || 1))}
+                  />
+                  <Users className="size-3.5 absolute left-2 top-2.5 text-muted-foreground" aria-hidden="true" />
+                </div>
+              </Field>
+
+              <Field className="gap-1">
+                <FieldLabel htmlFor="pos-corporate-billing" className="text-xs">
+                  Skema Penagihan
+                </FieldLabel>
+                <NativeSelect
+                  id="pos-corporate-billing"
+                  className="h-8 text-xs w-full"
+                  value={billingType}
+                  onChange={(e) => onBillingTypeChange?.(e.target.value as CorporateBillingType)}
+                >
+                  <NativeSelectOption value="PREPAID">Bayar di Muka (Prepaid)</NativeSelectOption>
+                  <NativeSelectOption value="INVOICE">Tagihan Bertempo (Invoice)</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+            </div>
+
+            {meetingRooms.length > 0 ? (
+              <Field className="gap-1">
+                <FieldLabel htmlFor="pos-corporate-room" className="text-xs">
+                  Bundling Ruang Meeting (Opsional)
+                </FieldLabel>
+                <NativeSelect
+                  id="pos-corporate-room"
+                  className="h-8 text-xs w-full"
+                  value={selectedMeetingRoomId}
+                  onChange={(e) => onSelectedMeetingRoomChange?.(e.target.value)}
+                >
+                  <NativeSelectOption value="">Tanpa ruang meeting (hanya F&B)</NativeSelectOption>
+                  {meetingRooms.map((room) => (
+                    <NativeSelectOption key={room.id} value={room.id}>
+                      {room.name} · Rp {room.hourlyRate.toLocaleString("id-ID")}/jam
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <Field className="gap-1">

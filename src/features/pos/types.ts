@@ -1,4 +1,5 @@
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
+import type { CorporateOrderInfo } from "@/types/order";
 
 export interface POSVariantOption {
   name: string;
@@ -46,7 +47,7 @@ export interface POSCartItem {
   tenantId?: string;
 }
 
-export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "SPLIT";
+export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "SPLIT" | "INVOICE";
 
 export interface SplitGuestBill {
   id: string;
@@ -118,6 +119,7 @@ export interface POSReceiptData {
     pointsRemaining: number;
     voucherTitle?: string;
   };
+  corporateInfo?: CorporateOrderInfo;
 }
 
 export type POSReceiptItem = POSReceiptData["items"][number];

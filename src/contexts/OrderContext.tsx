@@ -102,7 +102,7 @@ interface OrderContextType {
     note?: string,
     paymentUpdate?: {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
-      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+      paymentMethod?: OrderRecord["paymentMethod"];
       qrisVerification?: OrderRecord["qrisVerification"];
       splitDetails?: OrderRecord["splitDetails"];
       cashierName?: string;
@@ -493,7 +493,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     note?: string,
     paymentUpdate?: {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
-      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+      paymentMethod?: OrderRecord["paymentMethod"];
       qrisVerification?: OrderRecord["qrisVerification"];
       splitDetails?: OrderRecord["splitDetails"];
       cashierName?: string;
@@ -924,11 +924,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       taxRatePercent: newOrderData.taxRatePercent,
       serviceChargePercent: newOrderData.serviceChargePercent,
       total: newOrderData.total || 0,
-      paymentStatus: "PAID",
+      paymentStatus: newOrderData.paymentStatus || "PAID",
       paymentMethod: newOrderData.paymentMethod || "QRIS",
       paymentReference: newOrderData.paymentReference,
       cashierName: newOrderData.cashierName || user?.name || "Kasir POS",
       qrisVerification: newOrderData.qrisVerification,
+      corporateInfo: newOrderData.corporateInfo,
       createdAt: nowIso,
       confirmedAt: nowIso,
       statusHistory: [
@@ -948,7 +949,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
           toStatus: "CONFIRMED",
           timestamp: nowIso,
           actorName: user?.name || "Kasir POS",
-          note: `Pembayaran lunas via ${newOrderData.paymentMethod || "QRIS"}`,
+          note:
+            newOrderData.paymentStatus === "PENDING"
+              ? `Pesanan tagihan bertempo via ${newOrderData.paymentMethod || "INVOICE"}`
+              : `Pembayaran lunas via ${newOrderData.paymentMethod || "QRIS"}`,
         },
       ],
       ...newOrderData,

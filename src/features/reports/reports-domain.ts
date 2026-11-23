@@ -276,6 +276,7 @@ export interface BuildReportParams {
   operatorName?: string;
   settlementBasis?: SettlementBasisMode;
   customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
+  companyName?: string;
 }
 
 export interface ReportCategoryMeta {
@@ -459,11 +460,25 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     operatorName,
     settlementBasis,
     customSplits,
+    companyName,
   } = params;
 
-  const orders = tenantId ? projectOrdersForTenant(rawOrders, tenantId) : rawOrders;
+  const tenantOrders = tenantId ? projectOrdersForTenant(rawOrders, tenantId) : rawOrders;
+  const orders =
+    companyName && companyName !== "ALL"
+      ? tenantOrders.filter(
+          (o) => o.corporateInfo?.companyName?.trim().toLowerCase() === companyName.trim().toLowerCase()
+        )
+      : tenantOrders;
+
   const products = tenantId ? rawProducts.filter((p) => p.tenantId === tenantId) : rawProducts;
-  const effectiveCoworking = tenantId ? [] : coworkingBookings;
+  const tenantCoworking = tenantId ? [] : coworkingBookings;
+  const effectiveCoworking =
+    companyName && companyName !== "ALL"
+      ? tenantCoworking.filter(
+          (b) => b.company?.trim().toLowerCase() === companyName.trim().toLowerCase()
+        )
+      : tenantCoworking;
 
   switch (type) {
     case "SALES": {
@@ -519,9 +534,12 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         const disc = breakdown.discount;
         const pb1 = breakdown.pb1;
         const service = breakdown.serviceCharge;
+        const customerDisplayName = o.corporateInfo?.companyName
+          ? `${o.customerName} [${o.corporateInfo.companyName}]`
+          : o.customerName || "Tamu";
         return [
           o.orderNumber || o.id,
-          o.customerName || "Tamu",
+          customerDisplayName,
           o.tableNumber ? `Meja ${o.tableNumber}` : o.orderType === "DELIVERY" ? "Delivery" : "Takeaway",
           formatMakassarDate(o.createdAt),
           promoName,
@@ -538,9 +556,12 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         const disc = b.discount || 0;
         const tax = b.tax || 0;
         const amount = (b as { paidAmount?: number }).paidAmount ?? b.totalAmount ?? 0;
+        const guestDisplayName = b.company
+          ? `${b.guestName || "Tamu"} [${b.company}]`
+          : b.guestName || "Tamu";
         return [
           b.bookingCode || b.id,
-          b.guestName || "Tamu",
+          guestDisplayName,
           `Co-working · ${b.spaceName}`,
           formatMakassarDate(b.createdAt || b.date),
           b.promoTitle || "-",
@@ -558,7 +579,9 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       return {
         title: "Laporan penjualan POS",
         subtitle:
-          paidCoworking.length > 0
+          companyName && companyName !== "ALL"
+            ? `Filter perusahaan: ${companyName} di ${scopeName}`
+            : paidCoworking.length > 0
             ? `Semua transaksi kasir dan co-working di ${scopeName}`
             : `Semua transaksi kasir di ${scopeName}`,
         summaryCards: [

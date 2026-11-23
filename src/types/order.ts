@@ -10,6 +10,22 @@ export type OrderStatus =
 
 export type SLAStatus = "ON_TIME" | "AT_RISK" | "DELAYED";
 
+export type CorporateBillingType = "PREPAID" | "INVOICE";
+
+export interface CorporateOrderInfo {
+  companyName: string;
+  picName: string;
+  picPhone: string;
+  picEmail?: string;
+  headcount?: number;
+  billingType: CorporateBillingType;
+  invoiceNumber?: string;
+  invoiceDueDate?: string;
+  notes?: string;
+  linkedBookingCode?: string;
+  linkedSpaceName?: string;
+}
+
 export interface OrderStatusHistoryItem {
   id: string;
   orderId: string;
@@ -30,6 +46,7 @@ export interface OrderItemRecord {
   unitPrice: number;
   notes?: string;
   modifiers?: string[];
+  itemType?: "FNB" | "COWORKING_SPACE";
 }
 
 export interface OrderRecord {
@@ -43,6 +60,7 @@ export interface OrderRecord {
   customerName: string;
   /** Phone left by the guest at self-order checkout; the customer app finds "my orders" by this, never by name. */
   customerPhone?: string;
+  corporateInfo?: CorporateOrderInfo;
   cashierName?: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   status: OrderStatus;
@@ -57,7 +75,7 @@ export interface OrderRecord {
   serviceChargePercent?: number;
   total: number;
   paymentStatus: "PENDING" | "PAID" | "REFUNDED";
-  paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+  paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT" | "INVOICE";
   paymentReference?: string;
   splitDetails?: Array<{
     guestNumber: number;

@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Building2 } from "lucide-react";
 
 import { notify } from "@/components/app/notify";
+import { Button } from "@/components/ui/button";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
@@ -49,6 +52,7 @@ export default function ReportsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<string>("ALL");
 
   const isTenantScope = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
   const tenantId = isTenantScope ? user?.tenant?.id : undefined;
@@ -216,6 +220,21 @@ export default function ReportsPage() {
     ? selectedReportType
     : "SALES";
 
+  const availableCompanies = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach((o) => {
+      if (o.corporateInfo?.companyName?.trim()) {
+        set.add(o.corporateInfo.companyName.trim());
+      }
+    });
+    coworkingBookings.forEach((b) => {
+      if (b.company?.trim()) {
+        set.add(b.company.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [orders, coworkingBookings]);
+
   const currentReport = buildReportData({
     type: effectiveReportType,
     scopeName,
@@ -229,6 +248,7 @@ export default function ReportsPage() {
     coworkingBookings: filteredCoworkingBookings,
     tenantId,
     operatorName: user?.name,
+    companyName: selectedCompany,
   });
 
   const exportableReportRows = useMemo(
@@ -269,6 +289,12 @@ export default function ReportsPage() {
       const needle = searchQuery.trim().toLowerCase();
       const paidOrders = filteredOrders.filter((o) => {
         if (!isSettledPaidOrder(o)) return false;
+        if (
+          selectedCompany !== "ALL" &&
+          o.corporateInfo?.companyName?.trim().toLowerCase() !== selectedCompany.trim().toLowerCase()
+        ) {
+          return false;
+        }
         if (!needle) return true;
         const fields = [
           o.orderNumber,
@@ -341,6 +367,14 @@ export default function ReportsPage() {
         onPageSizeChange={(newSize) => {
           setPageSize(newSize);
           setCurrentPage(1);
+        }}
+        companyFilter={{
+          selectedCompany,
+          availableCompanies,
+          onCompanyChange: (company) => {
+            setSelectedCompany(company);
+            setCurrentPage(1);
+          },
         }}
       />
 

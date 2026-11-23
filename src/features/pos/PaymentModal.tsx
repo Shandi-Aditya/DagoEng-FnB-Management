@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
+  Building2,
   Check,
   CheckCircle2,
   Clock,
@@ -31,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
+import type { CorporateBillingType } from "@/types/order";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
 import {
@@ -54,6 +56,9 @@ interface PaymentModalProps {
   tableNumber: string;
   customerName: string;
   orderType: "DINE_IN" | "TAKEAWAY";
+  isCorporateOrder?: boolean;
+  corporateBillingType?: CorporateBillingType;
+  corporateCompany?: string;
   onPaymentSuccess: (paymentData: {
     method: POSPaymentMethod;
     amountPaid: number;
@@ -77,6 +82,9 @@ export function PaymentModal({
   tableNumber,
   customerName,
   orderType,
+  isCorporateOrder = false,
+  corporateBillingType = "PREPAID",
+  corporateCompany = "",
   onPaymentSuccess,
 }: PaymentModalProps) {
   const { logActivity } = useActivityLog();
@@ -113,6 +121,11 @@ export function PaymentModal({
 
   useEffect(() => {
     if (isOpen) {
+      if (isCorporateOrder && corporateBillingType === "INVOICE") {
+        setActiveTab("INVOICE");
+      } else {
+        setActiveTab("QRIS");
+      }
       const newTxId = `GW-DAGO-${Date.now().toString().slice(-6)}`;
       // POS-29: Leave cash input empty to prevent accidental auto-fill of exact change
       setCashGiven(0);
@@ -360,6 +373,21 @@ export function PaymentModal({
       onPaymentSuccess({
         method: "EDC",
         amountPaid: grandTotal,
+        changeDue: 0,
+      });
+    } else if (activeTab === "INVOICE") {
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      logActivity({
+        module: "POS",
+        action: "CORPORATE_INVOICE_ISSUED",
+        description: `Penerbitan invoice perusahaan ${corporateCompany || customerName}: ${formatCurrencyIDR(grandTotal)} (Tempo 14 hari)`,
+        recordId: corporateCompany || customerName,
+        newValue: `Tagihan diterbitkan: ${formatCurrencyIDR(grandTotal)}`,
+      });
+      onPaymentSuccess({
+        method: "INVOICE",
+        amountPaid: 0,
         changeDue: 0,
       });
     } else if (activeTab === "SPLIT") {
@@ -611,7 +639,7 @@ export function PaymentModal({
             onValueChange={(val) => setActiveTab(val as POSPaymentMethod)}
             className="w-full"
           >
-            <TabsList aria-label="Metode pembayaran" className="w-full grid grid-cols-4 h-10">
+            <TabsList aria-label="Metode pembayaran" className={`w-full grid ${isCorporateOrder ? "grid-cols-5" : "grid-cols-4"} h-10`}>
               <TabsTrigger value="QRIS" className="gap-1.5 text-xs">
                 <QrCode />
                 <span>QRIS</span>
@@ -628,6 +656,12 @@ export function PaymentModal({
                 <Users />
                 <span>Bagi tagihan</span>
               </TabsTrigger>
+              {isCorporateOrder ? (
+                <TabsTrigger value="INVOICE" className="gap-1.5 text-xs">
+                  <Building2 />
+                  <span>Invoice</span>
+                </TabsTrigger>
+              ) : null}
             </TabsList>
           </Tabs>
         </div>
@@ -912,6 +946,49 @@ export function PaymentModal({
               ) : null}
             </div>
           )}
+
+          {/* TAB 5: INVOICE / TAGIHAN PERUSAHAAN */}
+          {activeTab === "INVOICE" && (
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Building2 className="size-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">Tagihan Bertempo Perusahaan (Corporate Invoice)</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Pesanan akan diterbitkan sebagai tagihan resmi atas nama perusahaan dengan termin pembayaran 14 hari kerja.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-md border bg-background p-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Instansi / Perusahaan:</span>
+                  <span className="font-semibold text-foreground">{corporateCompany || customerName || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status Pembayaran:</span>
+                  <span className="font-semibold text-foreground">Pending (Tagihan Bertempo)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Jatuh Tempo:</span>
+                  <span className="font-medium text-foreground">14 Hari dari Pemesanan</span>
+                </div>
+                <div className="flex justify-between border-t border-border pt-2">
+                  <span className="font-semibold text-muted-foreground">Total Tagihan:</span>
+                  <span className="font-semibold text-foreground text-sm">{formatCurrencyIDR(grandTotal)}</span>
+                </div>
+              </div>
+
+              <Alert className="py-2 text-xs">
+                <ShieldCheck className="size-4" />
+                <AlertDescription className="text-muted-foreground">
+                  Invoice PDF resmi berkop Dago Creative Hub akan otomatis tersedia untuk dicetak atau diunduh setelah konfirmasi.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
         </div>
 
         {/* Footer: Confirm Payment Button */}
@@ -951,7 +1028,9 @@ export function PaymentModal({
               <span className="flex items-center justify-center gap-2 truncate">
                 <CheckCircle2 className="size-4 shrink-0" />
                 <span className="truncate">
-                  {activeTab === "QRIS"
+                  {activeTab === "INVOICE"
+                    ? "Terbitkan Invoice Perusahaan"
+                    : activeTab === "QRIS"
                     ? "Selesaikan pembayaran QRIS"
                     : `Konfirmasi pembayaran (${activeTab})`}
                 </span>

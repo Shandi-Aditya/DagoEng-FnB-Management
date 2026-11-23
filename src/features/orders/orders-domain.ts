@@ -181,6 +181,7 @@ const PAYMENT_METHOD_LABEL: Record<NonNullable<OrderRecord["paymentMethod"]>, st
   EDC: "Kartu (EDC)",
   TRANSFER: "Transfer",
   SPLIT: "Split bill",
+  INVOICE: "Invoice (Tempo)",
 };
 
 export function paymentMethodLabel(method: OrderRecord["paymentMethod"] | undefined): string {

@@ -2,7 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import { CheckCircle2, MessageSquare, Printer, RotateCcw, UtensilsCrossed } from "lucide-react";
+import { CheckCircle2, FileText, MessageSquare, Printer, RotateCcw, UtensilsCrossed } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CorporateInvoicePDFModal } from "@/features/pos/CorporateInvoicePDFModal";
 import {
   calculateTenantReceiptGroups,
   formatReceiptLoyaltyPoints,
@@ -51,6 +52,7 @@ export function ReceiptModal({
   const receiptData = rawReceiptData || order;
   const { printCustomerReceipt, printKitchenOrder, settings: printerSettings } = usePrinter();
   const [selectedSplitIdx, setSelectedSplitIdx] = React.useState(0);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = React.useState(false);
 
   const splitReceipts = React.useMemo(() => {
     if (!receiptData) return [];
@@ -543,6 +545,19 @@ export function ReceiptModal({
               </Button>
             )}
 
+            {receiptData.corporateInfo && (
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="w-full col-span-2 border-primary/40 text-primary hover:bg-primary/5 font-semibold text-xs gap-1.5"
+              >
+                <FileText className="size-4" />
+                <span>Lihat / Cetak Invoice Perusahaan ({receiptData.corporateInfo.companyName})</span>
+              </Button>
+            )}
+
             {onNewTransaction ? (
               <Button
                 type="button"
@@ -567,6 +582,12 @@ export function ReceiptModal({
           </div>
         </DialogContent>
       </Dialog>
+
+      <CorporateInvoicePDFModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        order={receiptData}
+      />
     </>
   );
 }

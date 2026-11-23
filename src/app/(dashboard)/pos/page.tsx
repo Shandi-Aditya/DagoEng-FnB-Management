@@ -18,6 +18,7 @@ import { useCoworking } from "@/contexts/CoworkingContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
 import { CoworkingSpaceItem, SpaceType } from "@/types/coworking";
+import type { CorporateBillingType } from "@/types/order";
 import {
   POSProductItem,
   POSCartItem,
@@ -242,6 +243,52 @@ export default function POSPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [appliedVoucher, setAppliedVoucher] = useState<LoyaltyVoucher | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState<boolean>(false);
+
+  // Corporate Order States (Task S-36)
+  const [isCorporateOrder, setIsCorporateOrder] = useState<boolean>(false);
+  const [corporateCompany, setCorporateCompany] = useState<string>("");
+  const [corporatePicName, setCorporatePicName] = useState<string>("");
+  const [corporatePicPhone, setCorporatePicPhone] = useState<string>("");
+  const [corporateHeadcount, setCorporateHeadcount] = useState<number>(1);
+  const [corporateBillingType, setCorporateBillingType] = useState<CorporateBillingType>("PREPAID");
+  const [corporateMeetingRoomId, setCorporateMeetingRoomId] = useState<string>("");
+
+  const meetingRoomsList = useMemo(() => {
+    return (cwSpaces || [])
+      .filter((s) => s.type === "MEETING_ROOM")
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        hourlyRate: s.hourlyRate,
+      }));
+  }, [cwSpaces]);
+
+  const handleCorporateMeetingRoomChange = (roomId: string) => {
+    setCorporateMeetingRoomId(roomId);
+    if (!roomId) {
+      setCartItems((prev) => prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-")));
+      return;
+    }
+    const room = cwSpaces.find((s) => s.id === roomId);
+    if (room) {
+      const roomCartItem: POSCartItem = {
+        cartItemId: `bundle-meeting-${room.id}`,
+        productId: `space-${room.id}`,
+        productName: `Sewa Ruang Meeting: ${room.name}`,
+        quantity: 1,
+        basePrice: room.hourlyRate,
+        selectedModifiers: [],
+        unitFinalPrice: room.hourlyRate,
+        itemTotal: room.hourlyRate,
+        tenantId: "tenant-dago-hub",
+        notes: `Paket Ruang Meeting Perusahaan (${room.capacity} Pax)`,
+      };
+      setCartItems((prev) => {
+        const withoutRoom = prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-"));
+        return [...withoutRoom, roomCartItem];
+      });
+    }
+  };
 
   // Tax Settings State
   const [isTaxEnabled, setIsTaxEnabled] = useState<boolean>(true);
@@ -720,9 +767,30 @@ export default function POSPage() {
         existingNumbers: orders.map((o) => o.orderNumber),
       });
 
-      const effectiveCustomerName =
-        customerName.trim() ||
-        (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
+      const corporateInfo =
+        isCorporateOrder && corporateCompany.trim()
+          ? {
+              companyName: corporateCompany.trim(),
+              picName: corporatePicName.trim() || "PIC Tim",
+              picPhone: corporatePicPhone.trim() || "-",
+              headcount: corporateHeadcount || 1,
+              billingType: paymentData.method === "INVOICE" ? "INVOICE" as const : corporateBillingType,
+              invoiceNumber: `INV-${receiptNo}`,
+              invoiceDueDate:
+                paymentData.method === "INVOICE" || corporateBillingType === "INVOICE"
+                  ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+                  : undefined,
+              notes: orderNotes.trim() || undefined,
+              linkedSpaceName: corporateMeetingRoomId
+                ? cwSpaces.find((s) => s.id === corporateMeetingRoomId)?.name
+                : undefined,
+            }
+          : undefined;
+
+      const effectiveCustomerName = corporateInfo
+        ? `${corporateInfo.companyName} (PIC: ${corporateInfo.picName})`
+        : customerName.trim() ||
+          (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
 
       const createdOrder = createPosOrder({
         orderNumber: receiptNo,
@@ -730,6 +798,8 @@ export default function POSPage() {
         tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
         customerName: effectiveCustomerName,
         customerPhone: selectedMember?.phone,
+        corporateInfo,
+        paymentStatus: paymentData.method === "INVOICE" ? "PENDING" : "PAID",
         orderType,
         subtotal,
         discount: totalDiscount,
@@ -920,6 +990,7 @@ export default function POSPage() {
         splitDetails: paymentData.splitDetails,
         qrisVerification: paymentData.qrisVerification,
         loyaltyMember: loyaltyReceiptInfo,
+        corporateInfo,
       };
 
       if (totalDiscount > 0) {
@@ -960,6 +1031,13 @@ export default function POSPage() {
     setSelectedCategory("Semua Kategori");
     setSelectedTable("");
     setOrderType("DINE_IN");
+    setIsCorporateOrder(false);
+    setCorporateCompany("");
+    setCorporatePicName("");
+    setCorporatePicPhone("");
+    setCorporateHeadcount(1);
+    setCorporateBillingType("PREPAID");
+    setCorporateMeetingRoomId("");
     notify.success("Transaksi baru siap", "Keranjang dan formulir kasir sudah dikosongkan.");
   };
 
@@ -1501,6 +1579,21 @@ export default function POSPage() {
                 onRemoveVoucher={() => setAppliedVoucher(null)}
                 orderNotes={orderNotes}
                 onOrderNotesChange={setOrderNotes}
+                isCorporateOrder={isCorporateOrder}
+                onIsCorporateOrderChange={setIsCorporateOrder}
+                companyName={corporateCompany}
+                onCompanyNameChange={setCorporateCompany}
+                picName={corporatePicName}
+                onPicNameChange={setCorporatePicName}
+                picPhone={corporatePicPhone}
+                onPicPhoneChange={setCorporatePicPhone}
+                headcount={corporateHeadcount}
+                onHeadcountChange={setCorporateHeadcount}
+                billingType={corporateBillingType}
+                onBillingTypeChange={setCorporateBillingType}
+                meetingRooms={meetingRoomsList}
+                selectedMeetingRoomId={corporateMeetingRoomId}
+                onSelectedMeetingRoomChange={handleCorporateMeetingRoomChange}
               />
               <Separator />
               <div className="max-h-80 overflow-y-auto">
@@ -1752,8 +1845,15 @@ export default function POSPage() {
         discount={totalDiscount}
         grandTotal={grandTotal}
         tableNumber={selectedTable}
-        customerName={selectedMember?.name || customerName.trim() || "Walk-in Guest"}
+        customerName={
+          isCorporateOrder && corporateCompany
+            ? `${corporateCompany} (PIC: ${corporatePicName || "Tim"})`
+            : selectedMember?.name || customerName.trim() || "Walk-in Guest"
+        }
         orderType={orderType}
+        isCorporateOrder={isCorporateOrder}
+        corporateBillingType={corporateBillingType}
+        corporateCompany={corporateCompany}
         onPaymentSuccess={handlePaymentSuccess}
       />
 
