@@ -999,13 +999,18 @@ async function executeAuthorizedOrderWrite(params: {
   }
 
   let bomDeduction: { applied: boolean; deductedItems: number } | null = null;
+  const isCorporateInvoiceOrder =
+    savedOrder.paymentMethod === "INVOICE" ||
+    savedOrder.corporateInfo?.billingType === "INVOICE";
   if (
-    savedOrder.paymentStatus === "PAID" &&
+    (savedOrder.paymentStatus === "PAID" || isCorporateInvoiceOrder) &&
     savedOrder.status !== "CANCELLED" &&
     !savedOrder.bomDeducted
   ) {
     bomDeduction = await deductPersistentOrderBOM(savedOrder, {
-      reason: "POS Server Order Settlement",
+      reason: isCorporateInvoiceOrder
+        ? "POS Corporate Invoice Order Confirmation"
+        : "POS Server Order Settlement",
     });
   }
 
