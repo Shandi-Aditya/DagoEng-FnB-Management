@@ -36,6 +36,57 @@ export interface CheckInStats {
   totalOrders: number;
 }
 
+export interface BookingAttendance {
+  ticketCount: number;
+  checkedInQty: number;
+  remainingQty: number;
+  isCheckedIn: boolean;
+  isPartial: boolean;
+  isUnchecked: boolean;
+  attendanceLabel: string;
+}
+
+/**
+ * Calculates canonical attendance metrics for an event ticket booking.
+ */
+export function getBookingAttendance(
+  booking: Pick<EventTicketOrder, "ticketCount" | "checkedInQty" | "checkInStatus" | "checkedInSeats">
+): BookingAttendance {
+  const ticketCount =
+    typeof booking.ticketCount === "number" && booking.ticketCount > 0
+      ? booking.ticketCount
+      : 1;
+  const checkedInQty =
+    typeof booking.checkedInQty === "number"
+      ? booking.checkedInQty
+      : Array.isArray(booking.checkedInSeats)
+      ? booking.checkedInSeats.length
+      : booking.checkInStatus === "CHECKED_IN"
+      ? ticketCount
+      : 0;
+
+  const isCheckedIn = booking.checkInStatus === "CHECKED_IN" || checkedInQty >= ticketCount;
+  const isPartial = !isCheckedIn && checkedInQty > 0;
+  const isUnchecked = !isCheckedIn && !isPartial;
+  const remainingQty = Math.max(0, ticketCount - checkedInQty);
+
+  const attendanceLabel = isCheckedIn
+    ? "Hadir"
+    : isPartial
+    ? `Hadir ${checkedInQty}/${ticketCount}`
+    : "Belum hadir";
+
+  return {
+    ticketCount,
+    checkedInQty,
+    remainingQty,
+    isCheckedIn,
+    isPartial,
+    isUnchecked,
+    attendanceLabel,
+  };
+}
+
 /**
  * Parses raw scanner input (gun scanner, camera scanner, QR URL, JSON payload, or sub-ticket code).
  */
@@ -86,6 +137,12 @@ export function parseTicketScanCode(raw: string): ParsedTicketCode {
   return { cleanCode, baseCode, seatNumber };
 }
 
+const UNPAID_PAYMENT_MESSAGES: Record<string, string> = {
+  CANCELLED: "Tiket telah dibatalkan (CANCELLED) dan tidak dapat digunakan untuk check-in.",
+  EXPIRED: "Tiket telah kedaluwarsa (EXPIRED) dan tidak dapat digunakan untuk check-in.",
+  PENDING: "Tiket belum diverifikasi lunas (status pembayaran masih PENDING).",
+};
+
 /**
  * Validates a ticket against an event and checks payment status and duplicate presence.
  */
@@ -125,7 +182,9 @@ export function validateTicketCheckIn(
     return {
       valid: false,
       code: "UNPAID",
-      message: `Tiket belum lunas (Status: ${ticket.paymentStatus}).`,
+      message:
+        UNPAID_PAYMENT_MESSAGES[ticket.paymentStatus] ||
+        `Tiket belum lunas (Status: ${ticket.paymentStatus}).`,
     };
   }
 
@@ -145,10 +204,13 @@ export function validateTicketCheckIn(
     }
 
     if (currentCheckedSeats.includes(requestedSeat)) {
+      const priorTime = ticket.seatCheckInTimes?.[String(requestedSeat)] || ticket.checkInTime;
+      const timeFormatted = priorTime ? formatCheckInTime(priorTime) : "";
+      const timeSuffix = timeFormatted && timeFormatted !== "—" ? ` (check-in pukul ${timeFormatted})` : "";
       return {
         valid: false,
         code: "SEAT_ALREADY_USED",
-        message: `Tiket #${requestedSeat} sudah digunakan untuk check-in sebelumnya.`,
+        message: `Tiket #${requestedSeat} sudah digunakan untuk check-in sebelumnya${timeSuffix}.`,
       };
     }
 
@@ -163,10 +225,13 @@ export function validateTicketCheckIn(
 
   // General check-in
   if (currentCheckedSeats.length >= ticketCount) {
+    const priorTime = ticket.checkInTime;
+    const timeFormatted = priorTime ? formatCheckInTime(priorTime) : "";
+    const timeSuffix = timeFormatted && timeFormatted !== "—" ? ` (check-in pukul ${timeFormatted})` : "";
     return {
       valid: false,
       code: "ALREADY_USED",
-      message: `Seluruh tiket sudah digunakan untuk check-in sebelumnya.`,
+      message: `Tiket sudah digunakan untuk check-in sebelumnya${timeSuffix}.`,
     };
   }
 

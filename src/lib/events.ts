@@ -4715,6 +4715,23 @@ export interface CheckInOptions {
   ticketCode?: string;
   seatNumber?: number;
   currentTimestamp?: number | string;
+  checkedInBy?: string;
+}
+
+/**
+ * Formats check-in timestamp into WITA representation for error messages and UI displays.
+ */
+export function formatCheckInTimeWita(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return (
+    d.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Makassar",
+    }) + " WITA"
+  );
 }
 
 let checkInLockPromise: Promise<void> = Promise.resolve();
@@ -4995,6 +5012,8 @@ export async function updateBookingCheckIn(
             ? [...existing.checkedInSeats]
             : Array.from({ length: currentCheckedInQty }, (_, i) => i + 1);
           let newSeatTimes: Record<string, string> = { ...(existing.seatCheckInTimes || {}) };
+          let newSeatOfficers: Record<string, string> = { ...(existing.seatCheckInBy || {}) };
+          const officerName = (options?.checkedInBy || "").trim() || existing.checkedInBy || "Petugas Check-In";
 
           // Skenario A: Reset atau Batalkan Kehadiran
           if (status === "REGISTERED" || options?.reset) {
@@ -5002,6 +5021,7 @@ export async function updateBookingCheckIn(
             newStatus = "REGISTERED";
             newCheckedInSeats = [];
             newSeatTimes = {};
+            newSeatOfficers = {};
 
             if (tx) {
               try {
@@ -5015,8 +5035,9 @@ export async function updateBookingCheckIn(
           } else {
             // Skenario B: Check-In (Increment atau Target)
             if (currentCheckedInQty >= ticketCount) {
+              const timeFormatted = formatCheckInTimeWita(existing.checkInTime);
               throw new Error(
-                "Tiket sudah digunakan untuk check-in sebelumnya (semua tiket dalam pemesanan ini sudah selesai check-in)."
+                `Tiket sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pukul ${timeFormatted})` : " (semua tiket dalam pemesanan ini sudah selesai check-in)"}.`
               );
             }
 
@@ -5028,15 +5049,9 @@ export async function updateBookingCheckIn(
               }
               if (newCheckedInSeats.includes(requestedSeat)) {
                 const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
-                const timeFormatted = priorTime
-                  ? new Date(priorTime).toLocaleTimeString("id-ID", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: "Asia/Makassar",
-                  }) + " WITA"
-                  : "";
+                const timeFormatted = formatCheckInTimeWita(priorTime);
                 throw new Error(
-                  `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}.`
+                  `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pukul ${timeFormatted})` : ""}.`
                 );
               }
 
@@ -5053,13 +5068,7 @@ export async function updateBookingCheckIn(
                 } catch (dbErr: any) {
                   if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
                     const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
-                    const timeFormatted = priorTime
-                      ? new Date(priorTime).toLocaleTimeString("id-ID", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        timeZone: "Asia/Makassar",
-                      }) + " WITA"
-                      : "";
+                    const timeFormatted = formatCheckInTimeWita(priorTime);
                     throw new Error(
                       `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}.`
                     );
@@ -5071,6 +5080,7 @@ export async function updateBookingCheckIn(
               const nowIso = new Date().toISOString();
               newCheckedInSeats.push(requestedSeat);
               newSeatTimes[String(requestedSeat)] = nowIso;
+              newSeatOfficers[String(requestedSeat)] = officerName;
               newCheckedInQty = newCheckedInSeats.length;
               newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
             } else {
@@ -5115,6 +5125,7 @@ export async function updateBookingCheckIn(
                   }
                   newCheckedInSeats.push(s);
                   newSeatTimes[String(s)] = nowIso;
+                  newSeatOfficers[String(s)] = officerName;
                 }
               }
               newCheckedInQty = newCheckedInSeats.length;
@@ -5128,8 +5139,10 @@ export async function updateBookingCheckIn(
             checkedInQty: newCheckedInQty,
             checkedInSeats: newCheckedInSeats,
             seatCheckInTimes: newSeatTimes,
+            seatCheckInBy: newSeatOfficers,
             checkInStatus: newStatus,
             checkInTime: newCheckedInQty > 0 ? existing.checkInTime || new Date().toISOString() : null,
+            checkedInBy: newCheckedInQty > 0 ? existing.checkedInBy || officerName : null,
             updatedAt: new Date().toISOString(),
           };
 

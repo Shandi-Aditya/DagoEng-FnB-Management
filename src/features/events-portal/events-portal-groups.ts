@@ -125,7 +125,7 @@ export function eventBalances(
 /** Guests already through the door for one event, counted per ticket seat. */
 export function checkedInGuests(eventId: string, bookings: readonly EventTicketOrder[]): number {
   return bookings
-    .filter((b) => b.eventId === eventId && b.paymentStatus === "PAID")
+    .filter((b) => (eventId === "ALL" || b.eventId === eventId) && b.paymentStatus === "PAID")
     .reduce((sum, b) => {
       if (typeof b.checkedInQty === "number") return sum + b.checkedInQty;
       return sum + (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0);

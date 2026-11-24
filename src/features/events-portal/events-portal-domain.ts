@@ -12,6 +12,7 @@ import {
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { resolveOrganizerSharePercent } from "@/lib/event-validation";
 import { normalizeIndonesianPhone } from "@/lib/utils";
+import { getBookingAttendance } from "@/features/events-checkin/events-checkin-domain";
 
 // Reuse and re-export shared domain logic from events-admin for maximum efficiency
 export {
@@ -87,18 +88,10 @@ export function filterOrganizerAttendees(
     }
 
     if (checkInStatusFilter !== "ALL") {
-      const qty = b.ticketCount || 1;
-      const checkedQty =
-        typeof b.checkedInQty === "number"
-          ? b.checkedInQty
-          : b.checkInStatus === "CHECKED_IN"
-          ? qty
-          : 0;
-      const isChecked = b.checkInStatus === "CHECKED_IN" || checkedQty >= qty;
-      const isPartial = !isChecked && checkedQty > 0;
-      if (checkInStatusFilter === "CHECKED_IN" && !isChecked) return false;
+      const { isCheckedIn, isPartial } = getBookingAttendance(b);
+      if (checkInStatusFilter === "CHECKED_IN" && !isCheckedIn) return false;
       if (checkInStatusFilter === "PARTIALLY_CHECKED_IN" && !isPartial) return false;
-      if (checkInStatusFilter === "REGISTERED" && (isChecked || isPartial)) return false;
+      if (checkInStatusFilter === "REGISTERED" && (isCheckedIn || isPartial)) return false;
     }
 
     const matchSearch =
@@ -266,10 +259,7 @@ export function buildAttendeesExportRows(
   bookings: readonly EventTicketOrder[]
 ): string[][] {
   return bookings.map((b) => {
-    const isCheckedIn = b.checkInStatus === "CHECKED_IN";
-    const checkedQty = b.checkedInQty || 0;
-    const isPartiallyCheckedIn =
-      b.checkInStatus === "PARTIALLY_CHECKED_IN" || (!isCheckedIn && checkedQty > 0);
+    const { isCheckedIn, isPartial } = getBookingAttendance(b);
 
     const paymentLabel =
       b.refundStatus === "REQUESTED"
@@ -286,7 +276,7 @@ export function buildAttendeesExportRows(
 
     const checkInLabel = isCheckedIn
       ? "Hadir"
-      : isPartiallyCheckedIn
+      : isPartial
       ? "Sebagian hadir"
       : "Belum hadir";
 
@@ -307,6 +297,7 @@ export function buildAttendeesExportRows(
       paymentLabel,
       checkInLabel,
       formattedTime,
+      b.checkedInBy || (checkInLabel !== "Belum hadir" ? "Petugas Check-In" : "—"),
     ];
   });
 }

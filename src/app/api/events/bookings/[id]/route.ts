@@ -161,6 +161,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ticketCode: ticketCode || id,
         seatNumber,
         enforceDateWindow: !reset,
+        checkedInBy: checkInAuth.name || checkInAuth.email || "Petugas Check-In",
       });
     }
 

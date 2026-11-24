@@ -12,6 +12,7 @@ import {
   customerOrderStatusTone,
 } from "@/features/customer/customer-domain";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
+import { getBookingAttendance } from "@/features/events-checkin/events-checkin-domain";
 import type { CoworkingBooking } from "@/types/coworking";
 import type { EventTicketOrder } from "@/types/event";
 import type { OrderRecord } from "@/types/order";
@@ -140,22 +141,45 @@ export function ActivityView(props: ActivityViewProps) {
         <section className="flex flex-col gap-3" aria-labelledby="ticket-title">
           <h2 id="ticket-title" className="text-sm font-medium">Tiket event</h2>
           <ul className="flex flex-col divide-y rounded-xl border bg-card">
-            {props.tickets.map((ticket) => (
-              <li key={ticket.id}>
-                <button type="button" onClick={() => props.onOpenTicket(ticket)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/50">
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-unit-event/15 text-unit-event">
-                    <Ticket className="size-4" />
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">{ticket.eventTitle}</span>
-                    <span className="text-xs text-muted-foreground">
-                      <span className="font-mono tabular-nums">{ticket.ticketCount}</span> tiket, {ticket.ticketCode}
+            {props.tickets.map((ticket) => {
+              const { ticketCount: qty, checkedInQty, isCheckedIn, isPartial } = getBookingAttendance(ticket);
+              const unpaidLabel =
+                ticket.paymentStatus === "CANCELLED"
+                  ? "Dibatalkan"
+                  : ticket.paymentStatus === "EXPIRED"
+                  ? "Kedaluwarsa"
+                  : ticket.paymentStatus === "REFUNDED"
+                  ? "Dikembalikan"
+                  : "Menunggu bayar";
+              const unpaidTone =
+                ticket.paymentStatus === "PENDING" ? "warning" : "destructive";
+
+              return (
+                <li key={ticket.id}>
+                  <button type="button" onClick={() => props.onOpenTicket(ticket)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/50">
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-unit-event/15 text-unit-event">
+                      <Ticket className="size-4" />
                     </span>
-                  </span>
-                  <span className="text-xs font-medium">Lihat QR</span>
-                </button>
-              </li>
-            ))}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-medium">{ticket.eventTitle}</span>
+                      <span className="text-xs text-muted-foreground">
+                        <span className="font-mono tabular-nums">{ticket.ticketCount}</span> tiket, {ticket.ticketCode}
+                      </span>
+                    </span>
+                    {ticket.paymentStatus !== "PAID" ? (
+                      <StatusBadge status={unpaidTone}>{unpaidLabel}</StatusBadge>
+                    ) : isCheckedIn ? (
+                      <StatusBadge status="success">Hadir</StatusBadge>
+                    ) : isPartial ? (
+                      <StatusBadge status="info">Hadir {checkedInQty}/{qty}</StatusBadge>
+                    ) : (
+                      <StatusBadge status="neutral">Belum hadir</StatusBadge>
+                    )}
+                    <span className="text-xs font-medium text-muted-foreground">Lihat QR</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

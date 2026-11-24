@@ -357,6 +357,7 @@ export interface EventTicketOrder {
   checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
   checkedInSeats?: number[]; // Daftar nomor index tiket (1..ticketCount) yang sudah check-in
   seatCheckInTimes?: Record<string, string>; // Catatan timestamp waktu check-in per sub-tiket (key: seat number "1", "2")
+  seatCheckInBy?: Record<string, string>; // Catatan nama petugas check-in per sub-tiket (key: seat number "1", "2")
   unitPrice: number;
   subtotalPrice?: number;
   discountAmount?: number;
@@ -378,6 +379,7 @@ export interface EventTicketOrder {
   paymentRejectionReason?: string | null;
   checkInStatus: AttendeeCheckInStatus;
   checkInTime?: string | null;
+  checkedInBy?: string | null;
   dokuInvoiceNumber?: string | null;
   dokuPaymentUrl?: string | null;
   paymentUrl?: string | null;

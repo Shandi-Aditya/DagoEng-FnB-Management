@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -31,8 +32,10 @@ import {
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";
-import { isEventTodayWita } from "@/features/events-checkin/events-checkin-domain";
+import { isEventTodayWita, getBookingAttendance } from "@/features/events-checkin/events-checkin-domain";
 import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
+
+type AttendanceFilter = "ALL" | "CHECKED_IN" | "PARTIALLY_CHECKED_IN" | "REGISTERED";
 
 export interface EventAttendeesModalProps {
   open: boolean;
@@ -56,10 +59,12 @@ export function EventAttendeesModal({
   isUpdatingCheckInId,
 }: EventAttendeesModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>("ALL");
   const [isIssueInviteOpen, setIsIssueInviteOpen] = useState(false);
 
   useEffect(() => {
     setSearchQuery("");
+    setAttendanceFilter("ALL");
   }, [open, event?.id]);
 
   if (!event) return null;
@@ -74,32 +79,40 @@ export function EventAttendeesModal({
 
   const needle = searchQuery.trim().toLowerCase();
   const filteredBookings = eventBookings.filter((b) => {
-    if (!needle) return true;
-    return (
-      b.ticketCode.toLowerCase().includes(needle) ||
-      b.guestName.toLowerCase().includes(needle) ||
-      b.guestEmail.toLowerCase().includes(needle) ||
-      Boolean(b.guestPhone && b.guestPhone.toLowerCase().includes(needle))
-    );
+    if (needle) {
+      const match =
+        b.ticketCode.toLowerCase().includes(needle) ||
+        b.guestName.toLowerCase().includes(needle) ||
+        b.guestEmail.toLowerCase().includes(needle) ||
+        Boolean(b.guestPhone && b.guestPhone.toLowerCase().includes(needle));
+      if (!match) return false;
+    }
+
+    if (attendanceFilter !== "ALL") {
+      const { isCheckedIn, isPartial } = getBookingAttendance(b);
+      if (attendanceFilter === "CHECKED_IN" && !isCheckedIn) return false;
+      if (attendanceFilter === "PARTIALLY_CHECKED_IN" && !isPartial) return false;
+      if (attendanceFilter === "REGISTERED" && (isCheckedIn || isPartial)) return false;
+    }
+
+    return true;
   });
 
-  const totalPaidRevenue = eventBookings
-    .filter((b) => b.paymentStatus === "PAID")
-    .reduce((sum, b) => sum + b.totalPrice, 0);
+  const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
+  const totalPaidRevenue = paidBookings.reduce((sum, b) => sum + b.totalPrice, 0);
 
   const totalTickets = activeEventBookings.reduce(
     (sum, b) => sum + (b.ticketCount || 1),
     0
   );
 
-  const checkedInCount = activeEventBookings.reduce((sum, b) => {
-    if (typeof b.checkedInQty === "number") {
-      return sum + b.checkedInQty;
-    }
-    if (b.checkInStatus === "CHECKED_IN") {
-      return sum + (b.ticketCount || 1);
-    }
-    return sum;
+  const totalPaidTickets = paidBookings.reduce(
+    (sum, b) => sum + (b.ticketCount || 1),
+    0
+  );
+
+  const checkedInCount = paidBookings.reduce((sum, b) => {
+    return sum + getBookingAttendance(b).checkedInQty;
   }, 0);
 
   const handleExportCSV = () => {
@@ -113,21 +126,15 @@ export function EventAttendeesModal({
       "Status Bayar",
       "Status Kehadiran",
       "Waktu Check-in",
+      "Petugas Check-in",
     ];
     const rows = filteredBookings.map((b) => {
-      const qty = b.ticketCount || 1;
-      const checkedQty =
-        typeof b.checkedInQty === "number"
-          ? b.checkedInQty
-          : b.checkInStatus === "CHECKED_IN"
-          ? qty
-          : 0;
-      const attendanceLabel =
-        b.checkInStatus === "CHECKED_IN" || checkedQty >= qty
-          ? "Hadir"
-          : checkedQty > 0
-          ? `Hadir ${checkedQty}/${qty}`
-          : "Belum Hadir";
+      const { ticketCount: qty, isCheckedIn, isPartial, checkedInQty } = getBookingAttendance(b);
+      const attendanceLabel = isCheckedIn
+        ? "Hadir"
+        : isPartial
+        ? `Hadir ${checkedInQty}/${qty}`
+        : "Belum Hadir";
       return [
         b.ticketCode,
         b.guestName,
@@ -140,6 +147,7 @@ export function EventAttendeesModal({
         b.checkInTime
           ? new Date(b.checkInTime).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
           : "—",
+        b.checkedInBy || (attendanceLabel !== "Belum Hadir" ? "Petugas Check-In" : "—"),
       ];
     });
     downloadCSV(`Peserta_${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.csv`, headers, rows);
@@ -184,33 +192,47 @@ export function EventAttendeesModal({
             </p>
           </div>
           <div className="rounded-xl border bg-card p-3.5 shadow-2xs">
-            <span className="text-xs text-muted-foreground block">Peserta hadir</span>
+            <span className="text-xs text-muted-foreground block">Kehadiran peserta</span>
             <p className="mt-1 font-mono text-base font-semibold tabular-nums text-success">
-              {checkedInCount}
+              {checkedInCount} / {totalPaidTickets} hadir
             </p>
           </div>
           <div className="rounded-xl border bg-card p-3.5 shadow-2xs">
             <span className="text-xs text-muted-foreground block">Belum check-in</span>
             <p className="mt-1 font-mono text-base font-semibold tabular-nums text-muted-foreground">
-              {Math.max(0, totalTickets - checkedInCount)}
+              {Math.max(0, totalPaidTickets - checkedInCount)}
             </p>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="px-6 pb-3">
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              placeholder="Cari kode tiket, nama, email peserta…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Cari peserta"
-            />
-          </InputGroup>
+        {/* Search & Filter Kehadiran */}
+        <div className="flex flex-col sm:flex-row gap-2 px-6 pb-3">
+          <div className="flex-1">
+            <InputGroup>
+              <InputGroupAddon align="inline-start">
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                placeholder="Cari kode tiket, nama, email peserta…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Cari peserta"
+              />
+            </InputGroup>
+          </div>
+          <div className="w-full sm:w-48">
+            <NativeSelect
+              value={attendanceFilter}
+              onChange={(e) => setAttendanceFilter(e.target.value as AttendanceFilter)}
+              aria-label="Filter status kehadiran"
+            >
+              <NativeSelectOption value="ALL">Semua kehadiran</NativeSelectOption>
+              <NativeSelectOption value="CHECKED_IN">Hadir</NativeSelectOption>
+              <NativeSelectOption value="PARTIALLY_CHECKED_IN">Sebagian hadir</NativeSelectOption>
+              <NativeSelectOption value="REGISTERED">Belum hadir</NativeSelectOption>
+            </NativeSelect>
+          </div>
         </div>
 
         {/* Tabel Peserta */}
@@ -236,15 +258,7 @@ export function EventAttendeesModal({
                 </TableHeader>
                 <TableBody>
                   {filteredBookings.map((b) => {
-                    const ticketCount = b.ticketCount || 1;
-                    const checkedQty =
-                      typeof b.checkedInQty === "number"
-                        ? b.checkedInQty
-                        : b.checkInStatus === "CHECKED_IN"
-                        ? ticketCount
-                        : 0;
-                    const isCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
-                    const isPartial = !isCheckedIn && checkedQty > 0;
+                    const { ticketCount, checkedInQty, isCheckedIn, isPartial, attendanceLabel } = getBookingAttendance(b);
                     const isUpdating = isUpdatingCheckInId === b.id;
                     const isInvalidPayment =
                       b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED";
@@ -268,6 +282,7 @@ export function EventAttendeesModal({
                                   minute: "2-digit",
                                   timeZone: "Asia/Makassar",
                                 })}
+                                {b.checkedInBy ? ` · ${b.checkedInBy}` : ""}
                               </span>
                             ) : null}
                           </div>
@@ -320,11 +335,7 @@ export function EventAttendeesModal({
 
                         <TableCell>
                           <Badge variant={isCheckedIn ? "default" : isPartial ? "secondary" : "outline"}>
-                            {isCheckedIn
-                              ? "Hadir"
-                              : isPartial
-                              ? `Hadir ${checkedQty}/${ticketCount}`
-                              : "Belum hadir"}
+                            {attendanceLabel}
                           </Badge>
                         </TableCell>
 

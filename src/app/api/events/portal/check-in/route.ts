@@ -94,6 +94,7 @@ export async function PATCH(req: NextRequest) {
         enforceDateWindow,
         ticketCode: identifier,
         seatNumber: typeof body.seatNumber === "number" ? body.seatNumber : undefined,
+        checkedInBy: auth.name || auth.email || "Petugas Penyelenggara",
       }
     );
 
