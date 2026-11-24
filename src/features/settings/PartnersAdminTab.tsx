@@ -38,6 +38,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TenantOperationConfig } from "@/lib/operating-hours";
 import { DEFAULT_TENANT_REVENUE_SPLITS, type TenantRevenueSplitConfig } from "@/lib/settlement";
+import type { TenantStatus } from "@/lib/domain-sync-types";
 import {
   SETTLEMENT_BASIS_OPTIONS,
   type SettlementBasisMode,
@@ -64,12 +65,12 @@ export interface PartnersAdminTabProps {
   onPartnerSubTabChange: (tab: PartnerSubTabId) => void;
   partnerTypeFilter: "ALL" | "FNB" | "EVENT";
   onPartnerTypeFilterChange: (val: "ALL" | "FNB" | "EVENT") => void;
-  partnerStatusFilter: "ALL" | "ACTIVE" | "INACTIVE";
-  onPartnerStatusFilterChange: (val: "ALL" | "ACTIVE" | "INACTIVE") => void;
+  partnerStatusFilter: "ALL" | TenantStatus;
+  onPartnerStatusFilterChange: (val: "ALL" | TenantStatus) => void;
   partnerSearchQuery: string;
   onPartnerSearchQueryChange: (val: string) => void;
   localTenants: { id: string; name: string; code: string; badge: string }[];
-  allTenantStatuses: Record<string, "ACTIVE" | "INACTIVE">;
+  allTenantStatuses: Record<string, TenantStatus>;
   organizers: CommunityOrganizerProfile[];
   onOpenAddOrganizer: () => void;
   onOpenAddTenant: () => void;
@@ -172,20 +173,20 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
   const [pageSize, setPageSize] = useState(10);
 
   const fnbRows: UnifiedPartnerRow[] = localTenants.map((t) => {
-    const status = allTenantStatuses[t.id] || "ACTIVE";
+    const status = (allTenantStatuses[t.id] || "ACTIVE") as TenantStatus;
     const prof = getTenantProfile(t.id);
     return {
       id: t.id,
       name: t.name,
       type: "FNB",
       categoryOrBadge: t.badge,
-      contactPerson: "—",
+      contactPerson: prof.contactPerson || "—",
       phone: prof.contactPhone || "—",
-      email: "—",
-      status,
+      email: prof.contactEmail || "—",
+      status: prof.status || status,
       serviceModule: "FNB",
       scopeLevel: "TENANT",
-      roleName: "Pemilik mitra F&B",
+      roleName: prof.partnerType === "INTERNAL" ? "Unit Internal F&B" : "Pemilik mitra F&B",
       permissions: [
         "dashboard:view",
         "orders:view",
@@ -203,7 +204,17 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
               accountHolder: prof.bankAccountHolder || t.name,
             }
           : undefined,
-      notes: "Mitra gerai kuliner F&B terhubung dengan POS multi-mitra.",
+      notes:
+        prof.partnerType === "INTERNAL"
+          ? "Mitra operasional internal Dago Creative Hub (dilewati saat kalkulasi settlement)."
+          : "Mitra gerai kuliner eksternal terhubung dengan POS multi-mitra.",
+      npwp: prof.npwp,
+      partnerType: prof.partnerType || "EXTERNAL",
+      contractStartDate: prof.contractStartDate,
+      contractEndDate: prof.contractEndDate,
+      contractPksNumber: prof.contractPksNumber,
+      contractPksFile: prof.contractPksFile,
+      suspendedReason: prof.suspendedReason,
     };
   });
 
@@ -296,13 +307,14 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
               <NativeSelect
                 value={partnerStatusFilter}
                 onChange={(e) => {
-                  onPartnerStatusFilterChange(e.target.value as "ALL" | "ACTIVE" | "INACTIVE");
+                  onPartnerStatusFilterChange(e.target.value as "ALL" | TenantStatus);
                   setCurrentPage(1);
                 }}
                 aria-label="Status mitra"
               >
                 <NativeSelectOption value="ALL">Semua status</NativeSelectOption>
                 <NativeSelectOption value="ACTIVE">Aktif</NativeSelectOption>
+                <NativeSelectOption value="SUSPENDED">Ditangguhkan</NativeSelectOption>
                 <NativeSelectOption value="INACTIVE">Nonaktif</NativeSelectOption>
               </NativeSelect>
 
@@ -453,7 +465,12 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                                     <span>Terbitkan tautan aktivasi</span>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => onToggleOrganizerStatus(p.id, p.status)}
+                                    onClick={() =>
+                                      onToggleOrganizerStatus(
+                                        p.id,
+                                        p.status === "ACTIVE" ? "ACTIVE" : "INACTIVE"
+                                      )
+                                    }
                                   >
                                     <Power />
                                     <span>{p.status === "ACTIVE" ? "Nonaktifkan akun" : "Aktifkan akun"}</span>

@@ -35,6 +35,7 @@ import {
   productStatusTone,
   type UnifiedPartnerRow,
 } from "./settings-domain";
+import type { TenantStatus, TenantPartnerType } from "@/lib/domain-sync-types";
 
 export interface PartnerModalsProps {
   // Add Tenant
@@ -46,6 +47,24 @@ export interface PartnerModalsProps {
   onFormTenantCodeChange: (val: string) => void;
   formTenantBadge: string;
   onFormTenantBadgeChange: (val: string) => void;
+  formTenantPartnerType?: TenantPartnerType;
+  onFormTenantPartnerTypeChange?: (val: TenantPartnerType) => void;
+  formTenantPIC?: string;
+  onFormTenantPICChange?: (val: string) => void;
+  formTenantPhone?: string;
+  onFormTenantPhoneChange?: (val: string) => void;
+  formTenantEmail?: string;
+  onFormTenantEmailChange?: (val: string) => void;
+  formTenantNPWP?: string;
+  onFormTenantNPWPChange?: (val: string) => void;
+  formTenantBankName?: string;
+  onFormTenantBankNameChange?: (val: string) => void;
+  formTenantBankAccountNumber?: string;
+  onFormTenantBankAccountNumberChange?: (val: string) => void;
+  formTenantBankAccountHolder?: string;
+  onFormTenantBankAccountHolderChange?: (val: string) => void;
+  formTenantPksNumber?: string;
+  onFormTenantPksNumberChange?: (val: string) => void;
   onSaveNewTenant: (e: React.FormEvent) => void;
   // Add Organizer
   isAddOrgOpen: boolean;
@@ -83,6 +102,8 @@ export interface PartnerModalsProps {
   onToggleOrganizerStatus: (orgId: string, status: "ACTIVE" | "INACTIVE") => void;
   onGenerateActivationLink: (orgId: string) => void;
   isGeneratingInvite: boolean;
+  onToggleTenantStatus?: (tenantId: string, status: TenantStatus, reason?: string) => void;
+  onGenerateTenantActivationLink?: (tenantId: string) => void;
 }
 
 export function PartnerModals(props: PartnerModalsProps) {
@@ -95,6 +116,24 @@ export function PartnerModals(props: PartnerModalsProps) {
     onFormTenantCodeChange,
     formTenantBadge,
     onFormTenantBadgeChange,
+    formTenantPartnerType = "EXTERNAL",
+    onFormTenantPartnerTypeChange,
+    formTenantPIC = "",
+    onFormTenantPICChange,
+    formTenantPhone = "",
+    onFormTenantPhoneChange,
+    formTenantEmail = "",
+    onFormTenantEmailChange,
+    formTenantNPWP = "",
+    onFormTenantNPWPChange,
+    formTenantBankName = "BCA",
+    onFormTenantBankNameChange,
+    formTenantBankAccountNumber = "",
+    onFormTenantBankAccountNumberChange,
+    formTenantBankAccountHolder = "",
+    onFormTenantBankAccountHolderChange,
+    formTenantPksNumber = "",
+    onFormTenantPksNumberChange,
     onSaveNewTenant,
     isAddOrgOpen,
     onAddOrgOpenChange,
@@ -124,17 +163,19 @@ export function PartnerModals(props: PartnerModalsProps) {
     onToggleOrganizerStatus,
     onGenerateActivationLink,
     isGeneratingInvite,
+    onToggleTenantStatus,
+    onGenerateTenantActivationLink,
   } = props;
 
   return (
     <>
       {/* Tambah Mitra F&B */}
       <Dialog open={isAddTenantOpen} onOpenChange={onAddTenantOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Tambah mitra F&B</DialogTitle>
             <DialogDescription>
-              Mitra baru tersedia untuk pengelompokan menu dan bagi hasil POS.
+              Mitra baru tersedia untuk pengelompokan menu, transaksi POS, dan skema bagi hasil.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSaveNewTenant} className="flex flex-col gap-3">
@@ -163,7 +204,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tenantBadge">Kategori</Label>
+                <Label htmlFor="tenantBadge">Kategori / Badge</Label>
                 <Input
                   id="tenantBadge"
                   type="text"
@@ -172,6 +213,110 @@ export function PartnerModals(props: PartnerModalsProps) {
                   placeholder="Contoh: Dessert"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantPartnerType">Tipe mitra</Label>
+                <NativeSelect
+                  id="tenantPartnerType"
+                  value={formTenantPartnerType}
+                  onChange={(e) => onFormTenantPartnerTypeChange?.(e.target.value as TenantPartnerType)}
+                >
+                  <NativeSelectOption value="EXTERNAL">Eksternal (Bagi Hasil)</NativeSelectOption>
+                  <NativeSelectOption value="INTERNAL">Internal (In-House)</NativeSelectOption>
+                </NativeSelect>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantPIC">Penanggung jawab (PIC)</Label>
+                <Input
+                  id="tenantPIC"
+                  type="text"
+                  value={formTenantPIC}
+                  onChange={(e) => onFormTenantPICChange?.(e.target.value)}
+                  placeholder="Nama PIC"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantPhone">Nomor telepon / WhatsApp</Label>
+                <Input
+                  id="tenantPhone"
+                  type="tel"
+                  value={formTenantPhone}
+                  onChange={(e) => onFormTenantPhoneChange?.(e.target.value)}
+                  placeholder="+62 8..."
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantEmail">Email kontak</Label>
+                <Input
+                  id="tenantEmail"
+                  type="email"
+                  value={formTenantEmail}
+                  onChange={(e) => onFormTenantEmailChange?.(e.target.value)}
+                  placeholder="mitra@dagocreative.id"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantNPWP">NPWP</Label>
+                <Input
+                  id="tenantNPWP"
+                  type="text"
+                  value={formTenantNPWP}
+                  onChange={(e) => onFormTenantNPWPChange?.(e.target.value)}
+                  placeholder="00.000.000.0-000.000"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantPksNumber">Nomor PKS</Label>
+                <Input
+                  id="tenantPksNumber"
+                  type="text"
+                  value={formTenantPksNumber}
+                  onChange={(e) => onFormTenantPksNumberChange?.(e.target.value)}
+                  placeholder="PKS/DCH/2024/..."
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantBankName">Bank</Label>
+                <Input
+                  id="tenantBankName"
+                  type="text"
+                  value={formTenantBankName}
+                  onChange={(e) => onFormTenantBankNameChange?.(e.target.value)}
+                  placeholder="BCA / Mandiri / BRI"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label htmlFor="tenantBankAccountNumber">Nomor rekening</Label>
+                <Input
+                  id="tenantBankAccountNumber"
+                  type="text"
+                  value={formTenantBankAccountNumber}
+                  onChange={(e) => onFormTenantBankAccountNumberChange?.(e.target.value)}
+                  placeholder="Nomor rekening settlement"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tenantBankAccountHolder">Nama pemilik rekening</Label>
+              <Input
+                id="tenantBankAccountHolder"
+                type="text"
+                value={formTenantBankAccountHolder}
+                onChange={(e) => onFormTenantBankAccountHolderChange?.(e.target.value)}
+                placeholder="Atas nama di buku tabungan"
+              />
             </div>
 
             <DialogFooter className="gap-2 pt-2">
@@ -343,10 +488,15 @@ export function PartnerModals(props: PartnerModalsProps) {
           {selectedPartner ? (
             <>
               <SheetHeader>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">
                     {selectedPartner.type === "FNB" ? "Mitra F&B" : "Penyelenggara event"}
                   </Badge>
+                  {selectedPartner.partnerType ? (
+                    <Badge variant={selectedPartner.partnerType === "INTERNAL" ? "secondary" : "outline"}>
+                      {selectedPartner.partnerType === "INTERNAL" ? "Internal" : "Eksternal"}
+                    </Badge>
+                  ) : null}
                   {selectedPartner.type === "EVENT" ? (
                     <StatusBadge status={organizerActivationTone(selectedPartner.activationStatus)}>
                       {organizerActivationLabel(selectedPartner.activationStatus)}
@@ -363,26 +513,72 @@ export function PartnerModals(props: PartnerModalsProps) {
                 <SheetDescription>{selectedPartner.categoryOrBadge}</SheetDescription>
               </SheetHeader>
 
+              {selectedPartner.status === "SUSPENDED" ? (
+                <Alert variant="destructive" className="mt-3 border-warning/40 bg-warning/10 text-foreground">
+                  <AlertDescription>
+                    <strong>Mitra Ditangguhkan:</strong> {selectedPartner.suspendedReason || "Keterlambatan setoran settlement melebihi 2 minggu (14 hari). Kasir outlet saat ini terkunci."}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               <div className="flex flex-col gap-4 py-4 text-xs">
                 <div className="rounded-lg border p-3.5 space-y-2">
-                  <p className="font-medium text-foreground">Kontak & akun</p>
+                  <p className="font-medium text-foreground">Kontak & penanggung jawab</p>
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Penanggung jawab</span>
                     <span className="text-foreground">{selectedPartner.contactPerson}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Telepon</span>
+                    <span className="text-muted-foreground">Telepon / WhatsApp</span>
                     <span className="font-mono text-foreground">{selectedPartner.phone}</span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Email</span>
                     <span className="text-foreground">{selectedPartner.email}</span>
                   </div>
+                  {selectedPartner.npwp ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">NPWP</span>
+                      <span className="font-mono text-foreground">{selectedPartner.npwp}</span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border p-3.5 space-y-2">
+                  <p className="font-medium text-foreground">Informasi kontrak & kemitraan</p>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Tipe kemitraan</span>
+                    <span className="font-medium text-foreground">
+                      {selectedPartner.partnerType === "INTERNAL"
+                        ? "Internal (Tanpa Settlement Bagi Hasil)"
+                        : "Eksternal (Bagi Hasil POS)"}
+                    </span>
+                  </div>
+                  {selectedPartner.contractPksNumber ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Nomor PKS</span>
+                      <span className="font-mono text-foreground">{selectedPartner.contractPksNumber}</span>
+                    </div>
+                  ) : null}
+                  {selectedPartner.contractStartDate || selectedPartner.contractEndDate ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Masa berlaku PKS</span>
+                      <span className="text-foreground">
+                        {selectedPartner.contractStartDate || "—"} s/d {selectedPartner.contractEndDate || "—"}
+                      </span>
+                    </div>
+                  ) : null}
+                  {selectedPartner.contractPksFile ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Berkas dokumen</span>
+                      <span className="font-mono text-primary">{selectedPartner.contractPksFile}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {selectedPartner.bankInfo ? (
                   <div className="rounded-lg border p-3.5 space-y-1.5">
-                    <p className="font-medium text-foreground">Rekening pencairan</p>
+                    <p className="font-medium text-foreground">Rekening pencairan settlement</p>
                     <p className="text-foreground">
                       {selectedPartner.bankInfo.bankName} ·{" "}
                       <span className="font-mono">{selectedPartner.bankInfo.accountNumber}</span>
@@ -424,7 +620,10 @@ export function PartnerModals(props: PartnerModalsProps) {
                     type="button"
                     variant={selectedPartner.status === "ACTIVE" ? "outline" : "default"}
                     onClick={() => {
-                      onToggleOrganizerStatus(selectedPartner.id, selectedPartner.status);
+                      onToggleOrganizerStatus(
+                        selectedPartner.id,
+                        selectedPartner.status === "ACTIVE" ? "ACTIVE" : "INACTIVE"
+                      );
                       onClosePartnerDetail();
                     }}
                   >
@@ -434,7 +633,80 @@ export function PartnerModals(props: PartnerModalsProps) {
                     </span>
                   </Button>
                 </SheetFooter>
-              ) : null}
+              ) : (
+                <SheetFooter className="mt-auto border-t pt-4 gap-2 flex-wrap sm:flex-nowrap">
+                  {onGenerateTenantActivationLink ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onGenerateTenantActivationLink(selectedPartner.id)}
+                    >
+                      <Key className="size-3.5" />
+                      <span>Undang Owner</span>
+                    </Button>
+                  ) : null}
+                  {onToggleTenantStatus ? (
+                    <>
+                      {selectedPartner.status === "ACTIVE" ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-warning text-warning hover:bg-warning/10"
+                            onClick={() => {
+                              onToggleTenantStatus(selectedPartner.id, "SUSPENDED", "Ditangguhkan administratif oleh admin.");
+                              onClosePartnerDetail();
+                            }}
+                          >
+                            <Power className="size-3.5" />
+                            <span>Tangguhkan</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              onToggleTenantStatus(selectedPartner.id, "INACTIVE");
+                              onClosePartnerDetail();
+                            }}
+                          >
+                            <Power className="size-3.5" />
+                            <span>Nonaktifkan</span>
+                          </Button>
+                        </>
+                      ) : selectedPartner.status === "SUSPENDED" ? (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            onToggleTenantStatus(selectedPartner.id, "ACTIVE");
+                            onClosePartnerDetail();
+                          }}
+                        >
+                          <Power className="size-3.5" />
+                          <span>Buka Kunci (Aktifkan)</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            onToggleTenantStatus(selectedPartner.id, "ACTIVE");
+                            onClosePartnerDetail();
+                          }}
+                        >
+                          <Power className="size-3.5" />
+                          <span>Aktifkan</span>
+                        </Button>
+                      )}
+                    </>
+                  ) : null}
+                </SheetFooter>
+              )}
             </>
           ) : null}
         </SheetContent>

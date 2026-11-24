@@ -1,4 +1,5 @@
 import { AuthenticatedUser, BusinessModuleCode } from "@/types/auth";
+import type { TenantStatus, TenantPartnerType } from "@/lib/domain-sync-types";
 import {
   applyTenantsCommand,
   buildTenantProfileWithDefaults,
@@ -122,19 +123,31 @@ export interface FnbPartnerInfo {
 
 export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = SEED_FNB_TENANTS;
 
+export type { TenantStatus, TenantPartnerType } from "@/lib/domain-sync-types";
+
 export interface TenantProfileData {
   tenantId: string;
   brandName: string;
   tagline: string;
   description: string;
   contactPhone: string;
+  contactPerson?: string; // PIC
+  contactEmail?: string;
+  npwp?: string;
   receiptHeader: string;
   receiptFooter: string;
   lowStockThresholdPercent: number;
   bankName: string;
   bankAccountNumber: string;
   bankAccountHolder: string;
-  status: "ACTIVE" | "INACTIVE";
+  status: TenantStatus;
+  partnerType?: TenantPartnerType; // "INTERNAL" | "EXTERNAL"
+  contractStartDate?: string;
+  contractEndDate?: string;
+  contractPksNumber?: string;
+  contractPksFile?: string;
+  lastSettlementDepositDate?: string;
+  suspendedReason?: string;
 }
 
 export const DEFAULT_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> =
@@ -234,10 +247,12 @@ export function getAllStoredTenantSettings(): Record<string, TenantProfileData> 
   return copy;
 }
 
-export function getTenantStatus(tenantId: string): "ACTIVE" | "INACTIVE" {
+export function getTenantStatus(tenantId: string): TenantStatus {
   const tenantData = tenantsSyncClient.getSnapshot().profiles[tenantId];
   if (tenantData && tenantData.status) {
-    return tenantData.status === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+    if (tenantData.status === "SUSPENDED") return "SUSPENDED";
+    if (tenantData.status === "INACTIVE") return "INACTIVE";
+    return "ACTIVE";
   }
   return "ACTIVE";
 }
@@ -246,11 +261,16 @@ export function isTenantActive(tenantId: string): boolean {
   return getTenantStatus(tenantId) === "ACTIVE";
 }
 
-export function setTenantStatus(tenantId: string, status: "ACTIVE" | "INACTIVE"): void {
+export function isTenantSuspended(tenantId: string): boolean {
+  return getTenantStatus(tenantId) === "SUSPENDED";
+}
+
+export function setTenantStatus(tenantId: string, status: TenantStatus, reason?: string): void {
   const command = {
     op: "SET_TENANT_STATUS" as const,
     tenantId,
     status,
+    reason,
   };
   mutateConfigDomain(
     tenantsSyncClient,
@@ -261,4 +281,31 @@ export function setTenantStatus(tenantId: string, status: "ACTIVE" | "INACTIVE")
       command,
     }
   );
+}
+
+/**
+ * Checks whether a tenant must be automatically suspended due to overdue settlement deposit (> 14 days / 2 weeks).
+ */
+export function checkTenantAutoSuspension(
+  profile: TenantProfileData,
+  referenceDate: Date = new Date()
+): { shouldSuspend: boolean; reason?: string } {
+  if (profile.status === "INACTIVE" || profile.status === "SUSPENDED") {
+    return { shouldSuspend: false };
+  }
+
+  if (profile.lastSettlementDepositDate) {
+    const lastDate = new Date(profile.lastSettlementDepositDate);
+    if (!isNaN(lastDate.getTime())) {
+      const diffDays = (referenceDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays > 14) {
+        return {
+          shouldSuspend: true,
+          reason: `Otomatis ditangguhkan: Setoran telat lebih dari 2 minggu (${Math.floor(diffDays)} hari).`,
+        };
+      }
+    }
+  }
+
+  return { shouldSuspend: false };
 }

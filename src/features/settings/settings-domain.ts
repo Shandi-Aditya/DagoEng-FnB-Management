@@ -2,6 +2,7 @@ import type { MasterProduct } from "@/types/product";
 import type { WifiVoucherRecord, WifiVoucherStatus } from "@/lib/wifi";
 import type { PromoComputedStatus } from "@/lib/promo";
 import type { PrinterConnectionType, PrinterRole, PrintJobStatus } from "@/types/printer";
+import type { TenantStatus, TenantPartnerType } from "@/lib/domain-sync-types";
 
 export type SettingsBadgeTone = "success" | "warning" | "info" | "destructive" | "neutral";
 
@@ -28,7 +29,7 @@ export interface UnifiedPartnerRow {
   contactPerson: string;
   phone: string;
   email: string;
-  status: "ACTIVE" | "INACTIVE";
+  status: TenantStatus;
   activationStatus?: string;
   serviceModule: string;
   scopeLevel: string;
@@ -40,11 +41,18 @@ export interface UnifiedPartnerRow {
     accountHolder: string;
   };
   notes?: string;
+  npwp?: string;
+  partnerType?: TenantPartnerType;
+  contractStartDate?: string;
+  contractEndDate?: string;
+  contractPksNumber?: string;
+  contractPksFile?: string;
+  suspendedReason?: string;
 }
 
 export interface PartnerFilterOptions {
   type?: "ALL" | "FNB" | "EVENT";
-  status?: "ALL" | "ACTIVE" | "INACTIVE";
+  status?: "ALL" | TenantStatus;
   searchQuery?: string;
 }
 
@@ -132,6 +140,8 @@ export function filterPartners(
         item.phone || "",
         item.categoryOrBadge || "",
         item.serviceModule,
+        item.npwp || "",
+        item.contractPksNumber || "",
       ];
       if (!matchPhoneDigits && !haystacks.some((value) => value.toLowerCase().includes(needle))) {
         return false;
@@ -184,12 +194,15 @@ export function validateRevenueSplit(tenantPercent: number, platformPercent: num
 
 export function productStatusLabel(status: string): string {
   if (status === "ACTIVE") return "Aktif";
+  if (status === "SUSPENDED") return "Ditangguhkan";
   if (status === "INACTIVE") return "Nonaktif";
   return status || "—";
 }
 
 export function productStatusTone(status: string): SettingsBadgeTone {
-  return status === "ACTIVE" ? "success" : "neutral";
+  if (status === "ACTIVE") return "success";
+  if (status === "SUSPENDED") return "warning";
+  return "neutral";
 }
 
 export function tableStatusLabel(status?: string): string {

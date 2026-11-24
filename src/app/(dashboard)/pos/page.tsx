@@ -51,7 +51,14 @@ import { KitchenTicketData } from "@/types/printer";
 import { CashDrawerShiftModal, buildCashDrawerShiftSummary } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
-import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
+import {
+  isTenantActive,
+  isTenantSuspended,
+  getTenantProfile,
+  DEFAULT_FNB_TENANTS,
+  getAllFnbTenants,
+  getTenantName,
+} from "@/lib/tenant";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import {
   generateSequentialReceiptNumber,
@@ -258,6 +265,21 @@ export default function POSPage() {
     if (!isMounted) return scoped;
     return scoped.filter((t) => isTenantActive(t.id));
   }, [tenantSettingsVersion, isMounted, lockedTenantId]);
+
+  const isLockedTenantSuspended = useMemo(() => {
+    if (!lockedTenantId) return false;
+    return isTenantSuspended(lockedTenantId);
+  }, [lockedTenantId, tenantSettingsVersion]);
+
+  const lockedTenantSuspendedReason = useMemo(() => {
+    if (!lockedTenantId || !isLockedTenantSuspended) return "";
+    try {
+      const prof = getTenantProfile(lockedTenantId);
+      return prof.suspendedReason || "Keterlambatan setoran settlement lebih dari 2 minggu (14 hari).";
+    } catch {
+      return "Keterlambatan setoran settlement lebih dari 2 minggu (14 hari).";
+    }
+  }, [lockedTenantId, isLockedTenantSuspended, tenantSettingsVersion]);
 
   // Primary Filter: Selected Mitra/Tenant
   const [selectedTenantId, setSelectedTenantId] = useState<string>(lockedTenantId || "ALL");
@@ -781,6 +803,13 @@ export default function POSPage() {
   const handleAddToCart = (item: POSCartItem) => {
     const meta = resolveCartItemMetadata(item, posProducts);
     if (!meta.isCw) {
+      if (isTenantSuspended(meta.resolvedTenantId)) {
+        notify.error(
+          "Mitra ditangguhkan",
+          `Menu dari gerai ${getTenantName(meta.resolvedTenantId) || "Mitra F&B"} tidak dapat dipesan karena status mitra sedang ditangguhkan.`
+        );
+        return;
+      }
       const tenantOp = isTenantAcceptingOrders(meta.resolvedTenantId, settings?.tenantOperations);
       if (!tenantOp.isOpen) {
         notify.warning(
@@ -1839,7 +1868,10 @@ export default function POSPage() {
       ? `Belum mencapai minimum belanja Rp ${activePromo.minimumAmount.toLocaleString("id-ID")}.`
       : null;
   const cartCount = cartItemCount(cartItems);
-  const canPay = cartItems.length > 0 && !(orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0));
+  const canPay =
+    !isLockedTenantSuspended &&
+    cartItems.length > 0 &&
+    !(orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0));
 
   const handlePromoChange = (promoId: string) => {
     setSelectedPromoId(promoId);
@@ -1855,6 +1887,13 @@ export default function POSPage() {
   };
 
   const handleRequestPayment = () => {
+    if (isLockedTenantSuspended) {
+      notify.error(
+        "Kasir outlet terkunci",
+        `Mitra gerai sedang ditangguhkan: ${lockedTenantSuspendedReason}. Transaksi tidak dapat diproses.`
+      );
+      return;
+    }
     if (orderType === "DINE_IN" && !selectedTable) {
       notify.warning("Pilih meja dulu", "Pesanan dine in perlu nomor meja sebelum dibayar.");
       return;
@@ -1902,6 +1941,20 @@ export default function POSPage() {
     // Co-working mode switches the accent from F&B orange to co-working blue
     <div data-unit={posUnit} className="flex flex-col gap-4">
       <UnitScope unit={posUnit} />
+      {isLockedTenantSuspended ? (
+        <Alert variant="destructive" className="border-warning/40 bg-warning/10 text-foreground">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="space-y-1">
+            <p className="font-semibold text-sm">Kasir Outlet Terkunci (Mitra Ditangguhkan)</p>
+            <p className="text-xs">
+              Status kemitraan gerai saat ini sedang <strong>DITANGGUHKAN</strong>. {lockedTenantSuspendedReason}
+            </p>
+            <p className="text-xs opacity-90">
+              Kasir tidak dapat memproses pesanan atau transaksi baru. Hubungi manajemen Dago Creative Hub untuk penyelesaian setoran dan pembukaan kunci.
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {isTenantScoped ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">

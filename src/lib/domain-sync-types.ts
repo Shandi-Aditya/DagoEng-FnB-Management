@@ -208,9 +208,23 @@ export type PlatformSettingsCommand =
       customerId?: string;
     };
 
+export type TenantStatus = "ACTIVE" | "SUSPENDED" | "INACTIVE";
+export type TenantPartnerType = "EXTERNAL" | "INTERNAL";
+
 export interface TenantsDomainState {
   customTenants: FnbPartnerInfo[];
   profiles: Record<string, TenantProfileData>;
+  revenueSplits?: Record<
+    string,
+    {
+      tenantId: string;
+      tenantName: string;
+      tenantSharePercent: number;
+      dagoSharePercent: number;
+      status: "ACTIVE" | "INACTIVE";
+      updatedAt?: string;
+    }
+  >;
 }
 
 export type TenantsCommand =
@@ -219,7 +233,20 @@ export type TenantsCommand =
   | {
       op: "SET_TENANT_STATUS";
       tenantId: string;
-      status: "ACTIVE" | "INACTIVE";
+      status: TenantStatus;
+      reason?: string;
+    }
+  | {
+      op: "SET_REVENUE_SPLIT";
+      tenantId: string;
+      split: {
+        tenantId: string;
+        tenantName: string;
+        tenantSharePercent: number;
+        dagoSharePercent: number;
+        status: "ACTIVE" | "INACTIVE";
+        updatedAt?: string;
+      };
     };
 
 export interface WifiDomainState {

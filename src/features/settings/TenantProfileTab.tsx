@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
+import type { TenantStatus } from "@/lib/domain-sync-types";
+
 export interface TenantProfileTabProps {
   tenantBrandName: string;
   onTenantBrandNameChange: (val: string) => void;
@@ -25,8 +27,8 @@ export interface TenantProfileTabProps {
   onTenantReceiptFooterChange: (val: string) => void;
   tenantLowStock: number;
   onTenantLowStockChange: (val: number) => void;
-  tenantStatus: "ACTIVE" | "INACTIVE";
-  onTenantStatusChange: (val: "ACTIVE" | "INACTIVE") => void;
+  tenantStatus: TenantStatus;
+  onTenantStatusChange: (val: TenantStatus) => void;
   tenantOpenTime: string;
   onTenantOpenTimeChange: (val: string) => void;
   tenantCloseTime: string;
