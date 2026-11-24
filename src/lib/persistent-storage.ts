@@ -96,7 +96,7 @@ export function __setMockStorageWriteFailure(err: Error | null): void {
 }
 
 // Mutex queues per file to serialize read-modify-write operations atomically
-const fileLocks = new Map<string, Promise<any>>();
+const fileLocks = new Map<string, Promise<unknown>>();
 
 export function withFileLock<T>(filename: string, fn: () => Promise<T> | T): Promise<T> {
   const currentLock = fileLocks.get(filename) || Promise.resolve();
@@ -160,10 +160,11 @@ async function writeUnlocked<T>(filename: string, data: T): Promise<boolean> {
     }
 
     return true;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menyimpan data ke media penyimpanan.";
     console.error(`[persistent-storage] Write failed for ${filename}:`, err);
     throw new Error(
-      `STORAGE_WRITE_FAILED [${filename}]: ${err?.message || "Gagal menyimpan data ke media penyimpanan."}`
+      `STORAGE_WRITE_FAILED [${filename}]: ${message}`
     );
   }
 }
@@ -360,7 +361,10 @@ export async function saveCoworkingBooking(
           id: typeof booking.id === "string" ? booking.id : undefined,
           spaceId: String(booking.spaceId),
           spaceName: options?.spaceName || (typeof booking.spaceName === "string" ? booking.spaceName : undefined),
-          bookingType: typeof booking.bookingType === "string" ? (booking.bookingType as any) : "HOURLY",
+          bookingType:
+            booking.bookingType === "DAILY" || booking.bookingType === "MONTHLY"
+              ? booking.bookingType
+              : "HOURLY",
           date: String(booking.date),
           endDate: typeof booking.endDate === "string" ? booking.endDate : undefined,
           startTime: String(booking.startTime || "09:00"),
