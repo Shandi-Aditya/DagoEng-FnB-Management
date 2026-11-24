@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { CustomerCartItem, CustomerCartTotals } from "@/features/customer/customer-domain";
+import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
 export type CheckoutOrderType = "DINE_IN" | "TAKEAWAY";
@@ -38,6 +39,8 @@ interface CheckoutSheetProps {
   onRemove: (productId: string) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
+  /** When true (default), self-order QR only permits QRIS payment and hides cashier option. */
+  qrisOnly?: boolean;
 }
 
 function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: readonly { id: T; label: string }[]; onChange: (id: T) => void; label: string }) {
@@ -72,6 +75,7 @@ function TotalRow({ label, value, strong }: { label: string; value: number; stro
 /** Bottom sheet that turns the cart into an order: items, where to serve, who it is for, how to pay. */
 export function CheckoutSheet(props: CheckoutSheetProps) {
   const { form, totals } = props;
+  const isQrisOnly = props.qrisOnly ?? true;
   const canSubmit = form.name.trim() !== "" && form.phone.trim() !== "" && (form.orderType === "TAKEAWAY" || form.tableNumber !== "");
 
   return (
@@ -154,14 +158,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             </Field>
             <Field>
               <FieldLabel>Bayar</FieldLabel>
-              <Segmented
-                label="Metode bayar"
+              <SelfOrderPaymentField
                 value={form.payment}
                 onChange={(payment) => props.onFormChange({ payment })}
-                options={[
-                  { id: "QRIS", label: "QRIS" },
-                  { id: "CASHIER", label: "Di kasir" },
-                ]}
+                qrisOnly={isQrisOnly}
               />
             </Field>
           </FieldGroup>
@@ -178,7 +178,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         <SheetFooter>
           <Button size="lg" className="w-full" disabled={!canSubmit || props.isSubmitting} onClick={props.onSubmit}>
             {props.isSubmitting ? <Spinner /> : null}
-            {form.payment === "QRIS" ? "Bayar dengan QRIS" : "Pesan, bayar di kasir"}
+            {isQrisOnly || form.payment === "QRIS" ? "Bayar dengan QRIS" : "Pesan, bayar di kasir"}
           </Button>
         </SheetFooter>
       </SheetContent>

@@ -80,9 +80,9 @@ export function CartOrderSetup({
         </TabsList>
       </Tabs>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {orderType === "DINE_IN" ? (
-          <Field className="gap-1">
+          <Field className="min-w-0 gap-1">
             <FieldLabel htmlFor="pos-table" className="justify-between">
               Meja
               <span className="font-normal text-muted-foreground tabular-nums">{availableTableCount} kosong</span>
@@ -112,7 +112,7 @@ export function CartOrderSetup({
           </Field>
         ) : null}
 
-        <Field className={orderType === "DINE_IN" ? "gap-1" : "col-span-2 gap-1"}>
+        <Field className={orderType === "DINE_IN" ? "min-w-0 gap-1" : "min-w-0 gap-1 sm:col-span-2"}>
           <FieldLabel htmlFor="pos-member">Member</FieldLabel>
           <NativeSelect id="pos-member" className="w-full" value={selectedMember?.id ?? ""} onChange={(e) => onMemberChange(e.target.value)}>
             <NativeSelectOption value="">Tamu (bukan member)</NativeSelectOption>

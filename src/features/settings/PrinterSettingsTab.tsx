@@ -38,12 +38,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import {
   CONFIGURABLE_RECEIPT_ROLES,
   DEFAULT_RECEIPT_ROLE_POLICY,
   canManageSettlementAndReceiptPolicy,
 } from "@/lib/settlement-receipt-policy";
 import type { RoleSlug } from "@/types/auth";
+import type { OutletReceiptCombineMode } from "@/types/settings";
 import type {
   POSPrintingSettings,
   PrinterConnectionType,
@@ -58,10 +60,12 @@ import {
   printJobStatusLabel,
   printJobStatusTone,
 } from "./settings-domain";
+import { ReceiptCombineModeControl } from "./ReceiptCombineModeControl";
 
 export function PrinterSettingsTab() {
   const { user } = useAuth();
   const { outlets } = useOutlet();
+  const { settings: platformSettings, updateSettings: updatePlatformSettings } = useSettings();
   const {
     devices,
     settings,
@@ -83,13 +87,17 @@ export function PrinterSettingsTab() {
     user?.scopeLevel === "PLATFORM";
   const canManageReceiptRoles = canManageSettlementAndReceiptPolicy(user);
 
-  // Local Form state for operational settings
-  const [localSettings, setLocalSettings] = useState<POSPrintingSettings>(settings);
+  const [localSettings, setLocalSettings] = useState<POSPrintingSettings>(() => ({
+    ...settings,
+  }));
   const [savedSettingsSuccess, setSavedSettingsSuccess] = useState(false);
 
   useEffect(() => {
-    setLocalSettings(settings);
+    setLocalSettings({ ...settings });
   }, [settings]);
+
+  const effectiveCombineMode: OutletReceiptCombineMode =
+    platformSettings.receiptCombineMode ?? "COMBINED";
 
   const cashierReceiptRoles =
     localSettings.cashierReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles;
@@ -569,6 +577,31 @@ export function PrinterSettingsTab() {
                   className="mt-1 rounded border"
                 />
               </label>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-lg border p-3.5">
+              <div className="flex flex-col gap-0.5">
+                <Label className="text-xs font-medium text-foreground">
+                  Mode struk co-working dan F&B (gabung / pisah)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Menentukan apakah pesanan campuran co-working dan F&B dicetak sebagai satu struk gabungan atau dua struk terpisah.
+                </p>
+              </div>
+              <ReceiptCombineModeControl
+                value={effectiveCombineMode}
+                disabled={!canManageReceiptRoles}
+                onChange={(mode) => {
+                  if (canManageReceiptRoles) {
+                    updatePlatformSettings({ receiptCombineMode: mode });
+                  }
+                }}
+                helperText={
+                  !canManageReceiptRoles
+                    ? "Diatur oleh Owner / Super Admin pada Konfigurasi Platform."
+                    : undefined
+                }
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

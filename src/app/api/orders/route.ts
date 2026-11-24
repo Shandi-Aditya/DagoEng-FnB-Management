@@ -3,19 +3,25 @@ import { z } from "zod";
 import {
   getPersistentOrders,
   resetPersistentOrders,
-  savePersistentOrder,
+  mutatePersistentOrders,
+  upsertOrderInList,
   getPersistentLoyaltyPoints,
   updatePersistentLoyaltyPoints,
   claimQrisSessionForOrder,
   appendAuditLog,
+  isOrderBeforeCooking,
+  deductPersistentOrderBOM,
+  restorePersistentOrderBOMIfBeforeCooking,
 } from "@/lib/persistent-storage";
-import { getRequestAuthUser } from "@/lib/server-auth";
+import { getRequestAuthUser, type ServerAuthResult } from "@/lib/server-auth";
 import {
   authorizeSupervisorQrisOverride,
   SHARED_SUPERVISOR_PIN_LABEL,
 } from "@/lib/qris-verification";
 import {
   filterOrdersByTenant,
+  getOrderWorkflowTenants,
+  isKdsGatedStatus,
   normalizeTenantId,
   resolveNormalizedItemTenantId,
 } from "@/features/orders/orders-domain";
@@ -64,6 +70,8 @@ const WORKFLOW_FIELDS = new Set<string>([
   "servedAt",
   "completedAt",
   "loyaltyPointsCredited",
+  "bomDeducted",
+  "bomRestored",
 ]);
 
 const KITCHEN_STAGE_RANK: Record<OrderStatus, number> = {
@@ -82,9 +90,7 @@ function computeAggregateOrderStatus(
   tenantStatuses: Record<string, OrderStatus>,
   fallbackStatus: OrderStatus
 ): OrderStatus {
-  const tenants = Array.from(
-    new Set(items.map((it) => resolveNormalizedItemTenantId(it)))
-  );
+  const tenants = getOrderWorkflowTenants(items);
   if (tenants.length <= 1) {
     return (tenants[0] && tenantStatuses[tenants[0]]) || fallbackStatus;
   }
@@ -119,12 +125,31 @@ function mergeStatusHistory(
   return [...existing, ...appended];
 }
 
-// Client-side bookkeeping that must never be stored on the server.
-const CLIENT_ONLY_FIELDS = ["syncStatus", "syncError"] as const;
+const STRIPPED_CLIENT_ORDER_FIELDS = [
+  "syncStatus",
+  "syncError",
+  "supervisorPin",
+  "orderId",
+  "bomDeducted",
+  "bomRestored",
+] as const;
+
+function targetsKdsStage(
+  order: Pick<OrderRecord, "status" | "tenantStatuses">
+): boolean {
+  if (order.status === "CANCELLED") return false;
+  if (isKdsGatedStatus(order.status)) return true;
+  if (order.tenantStatuses) {
+    return Object.values(order.tenantStatuses).some((stage) =>
+      isKdsGatedStatus(stage)
+    );
+  }
+  return false;
+}
 
 function withoutClientFields(order: OrderRecord): OrderRecord {
   const copy: Record<string, unknown> = { ...order };
-  for (const field of CLIENT_ONLY_FIELDS) delete copy[field];
+  for (const field of STRIPPED_CLIENT_ORDER_FIELDS) delete copy[field];
   return copy as unknown as OrderRecord;
 }
 
@@ -162,12 +187,13 @@ type OrderWriteDecision =
 function mergeTenantWorkflowStageUpdate(
   existingOrder: OrderRecord,
   orderData: OrderRecord,
-  scopedTenantId: string
+  scopedTenantId: string,
+  explicitTenantStage?: OrderStatus
 ): OrderRecord {
-  const nextTenantStage = orderData.tenantStatuses?.[scopedTenantId] || orderData.status;
+  const nextTenantStage =
+    explicitTenantStage || orderData.tenantStatuses?.[scopedTenantId] || orderData.status;
   const mergedTenantStatuses: Record<string, OrderStatus> = {
     ...(existingOrder.tenantStatuses || {}),
-    ...(orderData.tenantStatuses || {}),
     [scopedTenantId]: nextTenantStage,
   };
   return {
@@ -198,6 +224,19 @@ function decideOrderWrite(
   const isPosRole = ORDER_WRITE_ROLES.includes(role);
   const isTenantOwner = role === "OWNER" && scopeLevel === "TENANT";
   const isHubSupervisor = SUPERVISOR_ROLES.includes(role) && !isTenantOwner;
+  const effectivePaymentStatus = next.paymentStatus ?? existing?.paymentStatus ?? "PENDING";
+  const isCancellingOrRefunding =
+    next.status === "CANCELLED" ||
+    next.paymentStatus === "REFUNDED" ||
+    Boolean(next.voidReason);
+
+  if (!isCancellingOrRefunding && targetsKdsStage(next) && effectivePaymentStatus !== "PAID") {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN: KDS_PAYMENT_REQUIRED: Pesanan belum lunas tidak dapat masuk dapur / KDS.",
+    };
+  }
 
   if (!existing) {
     if (isPosRole) return { allowed: true, auditPaidChange: false, requiresPinCheck: false };
@@ -208,6 +247,20 @@ function decideOrderWrite(
   }
 
   const isClosed = existing.status === "CANCELLED" || existing.paymentStatus === "REFUNDED";
+  if (
+    existing.status === "CANCELLED" &&
+    next.status === "CANCELLED" &&
+    effectivePaymentStatus === existing.paymentStatus &&
+    canonicalSale(existing) === canonicalSale(next)
+  ) {
+    if (isHubSupervisor) {
+      return { allowed: true, auditPaidChange: false, requiresPinCheck: false };
+    }
+    if ((role === "CASHIER" || isTenantOwner) && hasSupervisorPin) {
+      return { allowed: true, auditPaidChange: false, requiresPinCheck: true };
+    }
+  }
+
   const workflowOnly =
     !isClosed &&
     next.status !== "CANCELLED" &&
@@ -273,10 +326,25 @@ function decideOrderWrite(
       };
 }
 
+const CoworkingMetaSchema = z.object({
+  spaceId: z.string(),
+  spaceName: z.string(),
+  spaceType: z.string().optional(),
+  durationHours: z.number(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  bookingDate: z.string().optional(),
+  rateLabel: z.string().optional(),
+});
+
 const OrderItemSchema = z.object({
   id: z.string().optional(),
   productId: z.string().optional(),
   tenantId: z.string().optional(),
+  tenantName: z.string().optional(),
+  itemType: z.enum(["FNB", "COWORKING"]).optional(),
+  category: z.string().optional(),
+  coworkingMeta: CoworkingMetaSchema.optional(),
   productName: z.string().min(1),
   quantity: z.number().finite().positive(),
   unitPrice: z.number().finite().nonnegative(),
@@ -290,7 +358,11 @@ const OrderPayloadSchema = z.object({
   outletId: z.string().optional(),
   subtotal: z.number().finite().nonnegative(),
   discount: z.number().finite().nonnegative().optional(),
+  fnbDiscount: z.number().finite().nonnegative().optional(),
+  coworkingDiscount: z.number().finite().nonnegative().optional(),
   tax: z.number().finite().nonnegative().optional(),
+  fnbTax: z.number().finite().nonnegative().optional(),
+  coworkingTax: z.number().finite().nonnegative().optional(),
   serviceCharge: z.number().finite().nonnegative().optional(),
   total: z.number().finite().nonnegative(),
   items: z.array(OrderItemSchema).optional(),
@@ -355,134 +427,359 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const auth = await getRequestAuthUser(req);
-    if (!auth.isAuthenticated || !auth.role) {
-      return NextResponse.json(
-        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
-        { status: 401 }
-      );
-    }
+function validateOrderPayload(orderData: OrderRecord):
+  | { ok: true; total: number }
+  | { ok: false; response: NextResponse } {
+  const parsed = OrderPayloadSchema.safeParse({
+    id: orderData.id,
+    orderNumber: orderData.orderNumber,
+    outletId: orderData.outletId,
+    subtotal: Number(orderData.subtotal ?? 0),
+    discount: orderData.discount !== undefined ? Number(orderData.discount) : undefined,
+    fnbDiscount: orderData.fnbDiscount !== undefined ? Number(orderData.fnbDiscount) : undefined,
+    coworkingDiscount:
+      orderData.coworkingDiscount !== undefined ? Number(orderData.coworkingDiscount) : undefined,
+    tax: orderData.tax !== undefined ? Number(orderData.tax) : undefined,
+    fnbTax: orderData.fnbTax !== undefined ? Number(orderData.fnbTax) : undefined,
+    coworkingTax:
+      orderData.coworkingTax !== undefined ? Number(orderData.coworkingTax) : undefined,
+    serviceCharge:
+      orderData.serviceCharge !== undefined ? Number(orderData.serviceCharge) : undefined,
+    total: Number(orderData.total ?? 0),
+    items: Array.isArray(orderData.items) ? orderData.items : undefined,
+    paymentStatus: orderData.paymentStatus,
+    paymentMethod: orderData.paymentMethod as OrderRecord["paymentMethod"],
+    notes: orderData.notes,
+    status: orderData.status,
+  });
 
-    if (!ORDER_ACCESS_ROLES.includes(auth.role)) {
-      return NextResponse.json(
-        { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki wewenang menyimpan transaksi POS.` },
-        { status: 403 }
-      );
-    }
-
-    const body = await req.json();
-    const supervisorPin = typeof body.supervisorPin === "string" ? body.supervisorPin.trim() : "";
-    let orderData: OrderRecord = withoutClientFields(body.order || body);
-
-    if (!orderData || !orderData.id) {
-      return NextResponse.json(
-        { error: "Order payload with valid id is required." },
-        { status: 400 }
-      );
-    }
-
-    const parsed = OrderPayloadSchema.safeParse({
-      id: orderData.id,
-      orderNumber: orderData.orderNumber,
-      outletId: orderData.outletId,
-      subtotal: Number(orderData.subtotal ?? 0),
-      discount: orderData.discount !== undefined ? Number(orderData.discount) : undefined,
-      tax: orderData.tax !== undefined ? Number(orderData.tax) : undefined,
-      serviceCharge:
-        orderData.serviceCharge !== undefined ? Number(orderData.serviceCharge) : undefined,
-      total: Number(orderData.total ?? 0),
-      items: Array.isArray(orderData.items) ? orderData.items : undefined,
-      paymentStatus: orderData.paymentStatus,
-      paymentMethod: orderData.paymentMethod as any,
-      notes: orderData.notes,
-      status: orderData.status,
-    });
-
-    if (!parsed.success) {
-      return NextResponse.json(
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: NextResponse.json(
         {
           error: "INVALID_ORDER_PAYLOAD: Struktur data pesanan tidak valid.",
           details: parsed.error.issues,
         },
         { status: 400 }
-      );
-    }
+      ),
+    };
+  }
 
-    const v = parsed.data;
-    if (v.items && v.items.length > 0) {
-      const itemsSubtotal = v.items.reduce(
-        (sum, item) => sum + item.unitPrice * item.quantity,
-        0
-      );
-      if (Math.abs(itemsSubtotal - v.subtotal) > 2) {
-        return NextResponse.json(
+  const v = parsed.data;
+  if (v.items && v.items.length > 0) {
+    const itemsSubtotal = v.items.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0
+    );
+    if (Math.abs(itemsSubtotal - v.subtotal) > 2) {
+      return {
+        ok: false,
+        response: NextResponse.json(
           {
             error: `INVALID_ORDER_SUBTOTAL: Subtotal (${v.subtotal}) tidak cocok dengan total harga item (${itemsSubtotal}).`,
           },
           { status: 400 }
-        );
-      }
+        ),
+      };
     }
+  }
 
-    const expectedTotal =
-      Math.max(0, v.subtotal - (v.discount ?? 0)) + (v.tax ?? 0) + (v.serviceCharge ?? 0);
-    if (Math.abs(expectedTotal - v.total) > 2) {
-      return NextResponse.json(
+  const expectedTotal =
+    Math.max(0, v.subtotal - (v.discount ?? 0)) + (v.tax ?? 0) + (v.serviceCharge ?? 0);
+  if (Math.abs(expectedTotal - v.total) > 2) {
+    return {
+      ok: false,
+      response: NextResponse.json(
         {
           error: `INVALID_ORDER_TOTAL: Total (${v.total}) tidak konsisten dengan kalkulasi komponen (${expectedTotal}).`,
         },
         { status: 400 }
-      );
+      ),
+    };
+  }
+
+  return { ok: true, total: v.total };
+}
+
+async function authorizeOrderRouteWrite(req: NextRequest): Promise<
+  | { ok: true; auth: ServerAuthResult & { role: RoleSlug } }
+  | { ok: false; response: NextResponse }
+> {
+  const auth = await getRequestAuthUser(req);
+  if (!auth.isAuthenticated || !auth.role) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+        { status: 401 }
+      ),
+    };
+  }
+
+  if (!ORDER_ACCESS_ROLES.includes(auth.role)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki wewenang menyimpan transaksi POS.` },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { ok: true, auth: auth as ServerAuthResult & { role: RoleSlug } };
+}
+
+type OrderWriteAction =
+  | {
+      mode: "UPSERT";
+      initialOrderData: OrderRecord;
+    }
+  | {
+      mode: "PATCH";
+      targetId: string;
+      rawPatch: Partial<OrderRecord>;
+    }
+  | {
+      mode: "CANCEL_DELETE";
+      targetId: string;
+      voidReason: string;
+    };
+
+type OrderMutationOutcome =
+  | { ok: false; response: NextResponse }
+  | {
+      ok: true;
+      savedOrder: OrderRecord;
+      priorOrder: OrderRecord | undefined;
+      auditPaidChange: boolean;
+      validatedTotal: number;
+      isCancelOrRefund: boolean;
+      shouldAttemptRestore: boolean;
+      cancelReason: string;
+      creditsLoyalty: boolean;
+      customerKey: string;
+      serverEarnedPoints: number;
+    };
+
+function buildOrderCandidateForWrite(
+  action: OrderWriteAction,
+  existingOrder: OrderRecord | undefined,
+  auth: ServerAuthResult & { role: RoleSlug }
+): { ok: true; orderData: OrderRecord } | { ok: false; response: NextResponse } {
+  if (action.mode === "UPSERT") {
+    return { ok: true, orderData: action.initialOrderData };
+  }
+
+  if (!existingOrder) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: `NOT_FOUND: Pesanan [${action.targetId}] tidak ditemukan.` },
+        { status: 404 }
+      ),
+    };
+  }
+
+  if (action.mode === "CANCEL_DELETE") {
+    const nowIso = new Date().toISOString();
+    const nextPaymentStatus =
+      existingOrder.paymentStatus === "PAID"
+        ? ("REFUNDED" as const)
+        : existingOrder.paymentStatus;
+    return {
+      ok: true,
+      orderData: {
+        ...existingOrder,
+        status: "CANCELLED",
+        paymentStatus: nextPaymentStatus,
+        voidReason: action.voidReason,
+        voidedAt: existingOrder.voidedAt || nowIso,
+        ...(nextPaymentStatus === "REFUNDED"
+          ? {
+              refundReason: existingOrder.refundReason || action.voidReason,
+              refundedAt: existingOrder.refundedAt || nowIso,
+            }
+          : {}),
+        statusHistory:
+          existingOrder.status === "CANCELLED"
+            ? existingOrder.statusHistory
+            : [
+                ...(existingOrder.statusHistory ?? []),
+                {
+                  id: `h-del-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  orderId: existingOrder.id,
+                  fromStatus: existingOrder.status,
+                  toStatus: "CANCELLED",
+                  timestamp: nowIso,
+                  actorId: auth.userId ?? undefined,
+                  actorName: auth.name || auth.role,
+                  note: action.voidReason,
+                },
+              ],
+      },
+    };
+  }
+
+  const patchEntries = Object.entries(action.rawPatch as unknown as Record<string, unknown>).filter(
+    ([, value]) => value !== undefined
+  );
+  const mergedOrder: OrderRecord = {
+    ...existingOrder,
+    ...(Object.fromEntries(patchEntries) as Partial<OrderRecord>),
+    id: existingOrder.id,
+  };
+
+  const rawHasHistory =
+    Array.isArray(action.rawPatch.statusHistory) && action.rawPatch.statusHistory.length > 0;
+  if (!rawHasHistory && mergedOrder.status && mergedOrder.status !== existingOrder.status) {
+    const nowIso = new Date().toISOString();
+    mergedOrder.statusHistory = [
+      ...(existingOrder.statusHistory ?? []),
+      {
+        id: `h-patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        orderId: existingOrder.id,
+        fromStatus: existingOrder.status,
+        toStatus: mergedOrder.status,
+        timestamp: nowIso,
+        actorId: auth.userId ?? undefined,
+        actorName: auth.name || auth.role,
+        note:
+          mergedOrder.status === "CANCELLED"
+            ? mergedOrder.voidReason || mergedOrder.refundReason || "Pesanan dibatalkan"
+            : `Status diubah menjadi ${mergedOrder.status}`,
+      },
+    ];
+  }
+
+  return { ok: true, orderData: mergedOrder };
+}
+
+async function executeAuthorizedOrderWrite(params: {
+  auth: ServerAuthResult & { role: RoleSlug };
+  action: OrderWriteAction;
+  supervisorPin: string;
+}): Promise<NextResponse> {
+  const { auth, action, supervisorPin } = params;
+
+  if (action.mode === "UPSERT") {
+    const preValidation = validateOrderPayload(action.initialOrderData);
+    if (!preValidation.ok) return preValidation.response;
+  }
+
+  const scopedTenantId =
+    (auth.scopeLevel === "TENANT" || auth.role === "KITCHEN_STAFF") && auth.tenantId
+      ? normalizeTenantId(auth.tenantId)
+      : undefined;
+
+  const outcome = await mutatePersistentOrders<OrderMutationOutcome>(async (existingOrders) => {
+    const targetId =
+      action.mode === "UPSERT" ? action.initialOrderData.id : action.targetId;
+    const existingOrder = existingOrders.find((o) => o.id === targetId);
+
+    const candidate = buildOrderCandidateForWrite(action, existingOrder, auth);
+    if (!candidate.ok) {
+      return { nextOrders: existingOrders, result: candidate };
     }
 
-    const existingOrder = (await getPersistentOrders()).find((o) => o.id === orderData.id);
-    const scopedTenantId =
-      (auth.scopeLevel === "TENANT" || auth.role === "KITCHEN_STAFF") && auth.tenantId
-        ? normalizeTenantId(auth.tenantId)
-        : undefined;
+    let orderData = candidate.orderData;
+    const validation = validateOrderPayload(orderData);
+    if (!validation.ok) {
+      return { nextOrders: existingOrders, result: { ok: false, response: validation.response } };
+    }
+    const validatedTotal = validation.total;
 
     if (existingOrder && scopedTenantId) {
       const orderFallback = (existingOrder as { tenantId?: string }).tenantId;
-      const existingTenants = Array.from(
+      const allExistingTenants = Array.from(
         new Set(
           existingOrder.items.map((it) => resolveNormalizedItemTenantId(it, orderFallback))
         )
       );
-      if (!existingTenants.includes(scopedTenantId)) {
-        return NextResponse.json(
-          { error: "FORBIDDEN: Pesanan ini tidak memiliki item untuk tenant Anda." },
-          { status: 403 }
-        );
+      if (!allExistingTenants.includes(scopedTenantId)) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              { error: "FORBIDDEN: Pesanan ini tidak memiliki item untuk tenant Anda." },
+              { status: 403 }
+            ),
+          },
+        };
       }
 
+      const requestsReversal =
+        orderData.status === "CANCELLED" ||
+        orderData.paymentStatus === "REFUNDED" ||
+        Boolean(orderData.voidReason);
+      if (allExistingTenants.length > 1 && requestsReversal) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              {
+                error:
+                  "FORBIDDEN: Pembatalan atau refund pesanan multi-mitra harus diproses oleh kasir atau supervisor hub.",
+              },
+              { status: 403 }
+            ),
+          },
+        };
+      }
+
+      const existingTenants = getOrderWorkflowTenants(existingOrder.items, orderFallback);
+
+      const isClosed =
+        existingOrder.status === "CANCELLED" || existingOrder.paymentStatus === "REFUNDED";
+      const explicitTenantStage =
+        action.mode === "PATCH"
+          ? action.rawPatch.tenantStatuses?.[scopedTenantId] ?? action.rawPatch.status
+          : action.mode === "UPSERT"
+          ? action.initialOrderData.tenantStatuses?.[scopedTenantId] ??
+            action.initialOrderData.status
+          : orderData.status;
       if (existingTenants.length > 1) {
-        const requestsReversal =
-          orderData.status === "CANCELLED" ||
-          orderData.paymentStatus === "REFUNDED" ||
-          Boolean(orderData.voidReason);
-        if (requestsReversal) {
-          return NextResponse.json(
-            {
-              error:
-                "FORBIDDEN: Pembatalan atau refund pesanan multi-mitra harus diproses oleh kasir atau supervisor hub.",
-            },
-            { status: 403 }
+        if (!isClosed) {
+          orderData = mergeTenantWorkflowStageUpdate(
+            existingOrder,
+            orderData,
+            scopedTenantId,
+            explicitTenantStage
           );
         }
-
-        const clientItemsMatchTenant =
-          Array.isArray(orderData.items) &&
-          orderData.items.length > 0 &&
-          orderData.items.every(
-            (it) => resolveNormalizedItemTenantId(it, orderFallback) === scopedTenantId
-          );
-
-        if (clientItemsMatchTenant) {
-          orderData = mergeTenantWorkflowStageUpdate(existingOrder, orderData, scopedTenantId);
-        }
+      } else if (!isClosed && !requestsReversal && (orderData.tenantStatuses || existingOrder.tenantStatuses)) {
+        const scopedStage = explicitTenantStage || orderData.tenantStatuses?.[scopedTenantId];
+        orderData = {
+          ...orderData,
+          ...(scopedStage ? { status: scopedStage } : {}),
+          tenantStatuses: {
+            ...(existingOrder.tenantStatuses || {}),
+            ...(scopedStage ? { [scopedTenantId]: scopedStage } : {}),
+          },
+        };
       }
+    }
+
+    if (existingOrder) {
+      orderData = {
+        ...orderData,
+        confirmedAt: existingOrder.confirmedAt || orderData.confirmedAt,
+        kitchenReceivedAt: existingOrder.kitchenReceivedAt || orderData.kitchenReceivedAt,
+        cookingStartedAt: existingOrder.cookingStartedAt || orderData.cookingStartedAt,
+        cookingFinishedAt: existingOrder.cookingFinishedAt || orderData.cookingFinishedAt,
+        readyAt: existingOrder.readyAt || orderData.readyAt,
+        servedAt: existingOrder.servedAt || orderData.servedAt,
+        completedAt: existingOrder.completedAt || orderData.completedAt,
+      };
+    }
+
+    const hasCookingStage =
+      orderData.status === "COOKING" ||
+      Object.values(orderData.tenantStatuses ?? {}).some((stage) => stage === "COOKING");
+    if (hasCookingStage && !orderData.cookingStartedAt) {
+      orderData = { ...orderData, cookingStartedAt: new Date().toISOString() };
     }
 
     const decision = decideOrderWrite(
@@ -493,7 +790,16 @@ export async function POST(req: NextRequest) {
       Boolean(supervisorPin)
     );
     if (!decision.allowed) {
-      return NextResponse.json({ error: decision.error }, { status: decision.status || 403 });
+      return {
+        nextOrders: existingOrders,
+        result: {
+          ok: false,
+          response: NextResponse.json(
+            { error: decision.error },
+            { status: decision.status || 403 }
+          ),
+        },
+      };
     }
 
     if (decision.requiresPinCheck) {
@@ -507,10 +813,16 @@ export async function POST(req: NextRequest) {
           pinCheck.statusCode === 403
             ? "FORBIDDEN: PIN Supervisor tidak valid. Otorisasi pembatalan atau refund pesanan ditolak."
             : pinCheck.error;
-        return NextResponse.json(
-          { error: message },
-          { status: pinCheck.statusCode || 403 }
-        );
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              { error: message },
+              { status: pinCheck.statusCode || 403 }
+            ),
+          },
+        };
       }
       orderData = {
         ...orderData,
@@ -518,93 +830,53 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const reversesPaidOrder = decision.auditPaidChange;
-
     // A PAID QRIS order must consume exactly one verified QRIS session, identified by its gateway invoice number.
     const alreadySettledByThisPayment =
       existingOrder?.paymentStatus === "PAID" &&
       existingOrder.paymentMethod === "QRIS" &&
       existingOrder.total === orderData.total &&
       existingOrder.qrisVerification?.invoiceNumber === orderData.qrisVerification?.invoiceNumber;
-    if (orderData.paymentMethod === "QRIS" && orderData.paymentStatus === "PAID" && !alreadySettledByThisPayment) {
+    if (
+      orderData.paymentMethod === "QRIS" &&
+      orderData.paymentStatus === "PAID" &&
+      !alreadySettledByThisPayment
+    ) {
       const qrisInvoiceNumber = orderData.qrisVerification?.invoiceNumber?.trim();
       const claim = qrisInvoiceNumber
         ? await claimQrisSessionForOrder({
             invoiceNumber: qrisInvoiceNumber,
             orderId: orderData.id,
-            amount: v.total,
+            amount: validatedTotal,
           })
         : ({ ok: false, reason: "NOT_FOUND" } as const);
 
       if (!claim.ok) {
-        return NextResponse.json(
-          {
-            error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              {
+                error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
+              },
+              { status: 409 }
+            ),
           },
-          { status: 409 }
-        );
+        };
       }
     }
 
-    if (reversesPaidOrder) {
-      const isRefund = orderData.paymentStatus === "REFUNDED";
-      const isVoid = !isRefund && (orderData.status === "CANCELLED" || Boolean(orderData.voidReason));
-      const auditAction = isRefund
-        ? "REFUND_ORDER"
-        : isVoid
-        ? "VOID_ORDER"
-        : "PAID_ORDER_CHANGED_BY_SUPERVISOR";
-      const supervisorLabel = isRefund
-        ? orderData.refundApprovedBy || auth.name || SHARED_SUPERVISOR_PIN_LABEL
-        : isVoid
-        ? orderData.voidApprovedBy || auth.name || SHARED_SUPERVISOR_PIN_LABEL
-        : auth.name || auth.email || "Supervisor";
-      const auditReason = isRefund
-        ? orderData.refundReason || "Refund transaksi pelanggan"
-        : isVoid
-        ? orderData.voidReason || "Pembatalan (void) pesanan"
-        : "Perubahan transaksi lunas oleh supervisor";
-      const actorName = auth.name || auth.email || "Supervisor";
-
-      await appendAuditLog({
-        id: `audit-order-reversal-${orderData.id}-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        actorId: auth.userId || "unknown",
-        actorName,
-        actorRole: auth.role,
-        role: auth.role,
-        userId: auth.userId || "unknown",
-        userName: actorName,
-        userRole: auth.role,
-        action: auditAction,
-        module: "POS",
-        recordId: orderData.orderNumber || orderData.id,
-        referenceId: orderData.id,
-        outletId: orderData.outletId,
-        outletName: orderData.outletName,
-        previousValue: `Status: ${existingOrder?.status || "-"}, Payment: ${existingOrder?.paymentStatus || "-"}, Total: Rp ${(existingOrder?.total ?? 0).toLocaleString("id-ID")}`,
-        newValue: `Status: ${orderData.status}, Payment: ${orderData.paymentStatus}, Total: Rp ${v.total.toLocaleString("id-ID")}`,
-        description: isRefund
-          ? `Refund transaksi ${orderData.orderNumber || orderData.id} sebesar Rp ${v.total.toLocaleString("id-ID")}. Disetujui: ${supervisorLabel}`
-          : isVoid
-          ? `Pembatalan (void) pesanan ${orderData.orderNumber || orderData.id}. Disetujui: ${supervisorLabel}`
-          : `Transaksi lunas ${orderData.orderNumber || orderData.id} diubah supervisor: status ${orderData.paymentStatus}/${orderData.status}, total ${existingOrder?.total} -> ${v.total}.`,
-        reason: auditReason,
-        status: "SUCCESS",
-        severity: "HIGH",
-        category: "TRANSACTION",
-        metadata: {
-          previousStatus: existingOrder?.status,
-          previousPaymentStatus: existingOrder?.paymentStatus,
-          previousTotal: existingOrder?.total,
-          total: v.total,
-          paymentStatus: orderData.paymentStatus,
-          status: orderData.status,
-          supervisorApprovedBy: supervisorLabel,
-          supervisorPinVerified: Boolean(orderData.supervisorPinVerified),
-        },
-      });
-    }
+    const isCancelOrRefund =
+      orderData.status === "CANCELLED" || orderData.paymentStatus === "REFUNDED";
+    const shouldAttemptRestore = Boolean(
+      existingOrder && isCancelOrRefund && isOrderBeforeCooking(existingOrder)
+    );
+    const cancelReason =
+      orderData.refundReason ||
+      orderData.voidReason ||
+      (orderData.paymentStatus === "REFUNDED"
+        ? "Refund transaksi pelanggan"
+        : "Pembatalan (void) pesanan");
 
     // Loyalty is earned once, when an order first becomes PAID, by the customer named on that order.
     const becomesPaid =
@@ -613,24 +885,205 @@ export async function POST(req: NextRequest) {
       existingOrder?.paymentStatus !== "PAID" &&
       !existingOrder?.loyaltyPointsCredited;
     const customerKey = String(orderData.customerName || "").trim();
-    const serverEarnedPoints = becomesPaid ? Math.floor(v.total / 10000) : 0;
+    const serverEarnedPoints = becomesPaid ? Math.floor(validatedTotal / 10000) : 0;
     const creditsLoyalty = Boolean(customerKey) && serverEarnedPoints > 0;
 
-    const savedOrder = await savePersistentOrder(
-      creditsLoyalty ? { ...orderData, loyaltyPointsCredited: true } : orderData
-    );
+    const orderToPersist = creditsLoyalty
+      ? { ...orderData, loyaltyPointsCredited: true }
+      : orderData;
+    const { nextOrders, savedOrder } = upsertOrderInList(existingOrders, orderToPersist);
 
-    const loyaltyRecord = creditsLoyalty
-      ? await updatePersistentLoyaltyPoints(customerKey, serverEarnedPoints, orderData.customerName, orderData.id)
-      : null;
+    return {
+      nextOrders,
+      result: {
+        ok: true,
+        savedOrder,
+        priorOrder: existingOrder,
+        auditPaidChange: decision.auditPaidChange,
+        validatedTotal,
+        isCancelOrRefund,
+        shouldAttemptRestore,
+        cancelReason,
+        creditsLoyalty,
+        customerKey,
+        serverEarnedPoints,
+      },
+    };
+  });
 
-    return NextResponse.json({
-      success: true,
-      order: savedOrder,
-      loyaltyRecord,
+  if (!outcome.ok) return outcome.response;
+
+  const {
+    savedOrder,
+    priorOrder,
+    auditPaidChange,
+    validatedTotal,
+    isCancelOrRefund,
+    shouldAttemptRestore,
+    cancelReason,
+    creditsLoyalty,
+    customerKey,
+    serverEarnedPoints,
+  } = outcome;
+
+  let bomRestoration: { restored: boolean; reason: string; restoredItems: number } | null = null;
+  if (priorOrder && isCancelOrRefund) {
+    if (shouldAttemptRestore) {
+      bomRestoration = await restorePersistentOrderBOMIfBeforeCooking(priorOrder, {
+        reason: cancelReason,
+      });
+    } else {
+      bomRestoration = {
+        restored: false,
+        reason: "already-cooking-or-beyond",
+        restoredItems: 0,
+      };
+    }
+  }
+
+  let bomDeduction: { applied: boolean; deductedItems: number } | null = null;
+  if (
+    savedOrder.paymentStatus === "PAID" &&
+    savedOrder.status !== "CANCELLED" &&
+    !savedOrder.bomDeducted
+  ) {
+    bomDeduction = await deductPersistentOrderBOM(savedOrder, {
+      reason: "POS Server Order Settlement",
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+
+  const finalOrder: OrderRecord =
+    (await getPersistentOrders()).find((o) => o.id === savedOrder.id) ?? {
+      ...savedOrder,
+      ...(bomDeduction?.applied ? { bomDeducted: true } : {}),
+      ...(bomRestoration?.restored ? { bomRestored: true } : {}),
+    };
+
+  if (auditPaidChange) {
+    const isRefund = finalOrder.paymentStatus === "REFUNDED";
+    const isVoid = !isRefund && (finalOrder.status === "CANCELLED" || Boolean(finalOrder.voidReason));
+    const auditAction = isRefund
+      ? "REFUND_ORDER"
+      : isVoid
+      ? "VOID_ORDER"
+      : "PAID_ORDER_CHANGED_BY_SUPERVISOR";
+    const supervisorLabel = isRefund
+      ? finalOrder.refundApprovedBy || auth.name || SHARED_SUPERVISOR_PIN_LABEL
+      : isVoid
+      ? finalOrder.voidApprovedBy || auth.name || SHARED_SUPERVISOR_PIN_LABEL
+      : auth.name || auth.email || "Supervisor";
+    const auditReason = isRefund
+      ? finalOrder.refundReason || "Refund transaksi pelanggan"
+      : isVoid
+      ? finalOrder.voidReason || "Pembatalan (void) pesanan"
+      : "Perubahan transaksi lunas oleh supervisor";
+    const actorName = auth.name || auth.email || "Supervisor";
+
+    await appendAuditLog({
+      id: `audit-order-reversal-${finalOrder.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      actorId: auth.userId || "unknown",
+      actorName,
+      actorRole: auth.role,
+      role: auth.role,
+      userId: auth.userId || "unknown",
+      userName: actorName,
+      userRole: auth.role,
+      action: auditAction,
+      module: "POS",
+      recordId: finalOrder.orderNumber || finalOrder.id,
+      referenceId: finalOrder.id,
+      outletId: finalOrder.outletId,
+      outletName: finalOrder.outletName,
+      previousValue: `Status: ${priorOrder?.status || "-"}, Payment: ${priorOrder?.paymentStatus || "-"}, Total: Rp ${(priorOrder?.total ?? 0).toLocaleString("id-ID")}`,
+      newValue: `Status: ${finalOrder.status}, Payment: ${finalOrder.paymentStatus}, Total: Rp ${validatedTotal.toLocaleString("id-ID")}`,
+      description: isRefund
+        ? `Refund transaksi ${finalOrder.orderNumber || finalOrder.id} sebesar Rp ${validatedTotal.toLocaleString("id-ID")}. Disetujui: ${supervisorLabel}`
+        : isVoid
+        ? `Pembatalan (void) pesanan ${finalOrder.orderNumber || finalOrder.id}. Disetujui: ${supervisorLabel}`
+        : `Transaksi lunas ${finalOrder.orderNumber || finalOrder.id} diubah supervisor: status ${finalOrder.paymentStatus}/${finalOrder.status}, total ${priorOrder?.total} -> ${validatedTotal}.`,
+      reason: auditReason,
+      status: "SUCCESS",
+      severity: "HIGH",
+      category: "TRANSACTION",
+      metadata: {
+        previousStatus: priorOrder?.status,
+        previousPaymentStatus: priorOrder?.paymentStatus,
+        previousTotal: priorOrder?.total,
+        total: validatedTotal,
+        paymentStatus: finalOrder.paymentStatus,
+        status: finalOrder.status,
+        supervisorApprovedBy: supervisorLabel,
+        supervisorPinVerified: Boolean(finalOrder.supervisorPinVerified),
+      },
+    });
+  }
+
+  const loyaltyRecord = creditsLoyalty
+    ? await updatePersistentLoyaltyPoints(customerKey, serverEarnedPoints, finalOrder.customerName, finalOrder.id)
+    : null;
+
+  return NextResponse.json({
+    success: true,
+    order: finalOrder,
+    loyaltyRecord,
+    ...(bomDeduction ? { bomDeduction } : {}),
+    ...(bomRestoration ? { bomRestoration } : {}),
+  });
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const authCheck = await authorizeOrderRouteWrite(req);
+    if (!authCheck.ok) return authCheck.response;
+
+    const body = await req.json();
+    const supervisorPin = typeof body.supervisorPin === "string" ? body.supervisorPin.trim() : "";
+    const orderData: OrderRecord = withoutClientFields(body.order || body);
+
+    if (!orderData || !orderData.id) {
+      return NextResponse.json(
+        { error: "Order payload with valid id is required." },
+        { status: 400 }
+      );
+    }
+
+    return await executeAuthorizedOrderWrite({
+      auth: authCheck.auth,
+      action: { mode: "UPSERT", initialOrderData: orderData },
+      supervisorPin,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menyimpan transaksi POS.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const authCheck = await authorizeOrderRouteWrite(req);
+    if (!authCheck.ok) return authCheck.response;
+
+    const body = await req.json().catch(() => ({}));
+    const supervisorPin = typeof body?.supervisorPin === "string" ? body.supervisorPin.trim() : "";
+    const rawPatch = withoutClientFields((body?.order || body || {}) as OrderRecord);
+    const targetId = String(rawPatch?.id || body?.orderId || "").trim();
+
+    if (!targetId) {
+      return NextResponse.json(
+        { error: "Order payload with valid id is required." },
+        { status: 400 }
+      );
+    }
+
+    return await executeAuthorizedOrderWrite({
+      auth: authCheck.auth,
+      action: { mode: "PATCH", targetId, rawPatch },
+      supervisorPin,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal memperbarui transaksi POS.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -642,6 +1095,36 @@ export async function DELETE(req: NextRequest) {
         { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
         { status: 401 }
       );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const body = await req.json().catch(() => ({}));
+    const action = searchParams.get("action") || (typeof body?.action === "string" ? body.action : undefined);
+    const targetId =
+      searchParams.get("id") ||
+      searchParams.get("orderId") ||
+      (typeof body?.id === "string" ? body.id : undefined) ||
+      (typeof body?.orderId === "string" ? body.orderId : undefined);
+
+    if (targetId && action !== "RESET") {
+      if (!ORDER_ACCESS_ROLES.includes(auth.role)) {
+        return NextResponse.json(
+          { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki wewenang membatalkan transaksi POS.` },
+          { status: 403 }
+        );
+      }
+
+      const supervisorPin = typeof body?.supervisorPin === "string" ? body.supervisorPin.trim() : "";
+      const voidReason =
+        (typeof body?.voidReason === "string" && body.voidReason.trim()) ||
+        searchParams.get("reason") ||
+        "Dibatalkan via DELETE /api/orders";
+
+      return await executeAuthorizedOrderWrite({
+        auth: auth as ServerAuthResult & { role: RoleSlug },
+        action: { mode: "CANCEL_DELETE", targetId: targetId.trim(), voidReason },
+        supervisorPin,
+      });
     }
 
     const canResetOrders =

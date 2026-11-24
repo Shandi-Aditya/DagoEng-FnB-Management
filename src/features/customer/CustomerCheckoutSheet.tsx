@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { Check, Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useSettings } from "@/contexts/SettingsContext";
+import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { PromoConfig } from "@/lib/promo";
 import type { MasterProduct } from "@/types/product";
@@ -25,6 +27,7 @@ import {
   calculateCartTotals,
   type CustomerCartItem,
 } from "./customer-domain";
+import { SelfOrderPaymentField } from "./SelfOrderPaymentField";
 
 export interface CustomerCheckoutSheetProps {
   open: boolean;
@@ -82,6 +85,15 @@ export function CustomerCheckoutSheet({
   isSubmitting,
   onSubmitOrder,
 }: CustomerCheckoutSheetProps) {
+  const { settings } = useSettings();
+  const qrisOnly = isQrSelfOrderQrisOnly(settings);
+
+  useEffect(() => {
+    if (qrisOnly && paymentMethod !== "QRIS") {
+      onPaymentMethodChange("QRIS");
+    }
+  }, [qrisOnly, paymentMethod, onPaymentMethodChange]);
+
   const isDineIn = orderType === "DINE_IN";
   const totals = calculateCartTotals(cart, {
     activePromo,
@@ -241,24 +253,14 @@ export function CustomerCheckoutSheet({
             {/* 4. Pilihan Metode Bayar */}
             <div className="flex flex-col gap-2 rounded-lg border p-3">
               <Label className="text-xs">Metode pembayaran</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={paymentMethod === "QRIS" ? "default" : "outline"}
-                  onClick={() => onPaymentMethodChange("QRIS")}
-                >
-                  QRIS otomatis
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={paymentMethod === "CASHIER" ? "default" : "outline"}
-                  onClick={() => onPaymentMethodChange("CASHIER")}
-                >
-                  Bayar di kasir
-                </Button>
-              </div>
+              <SelfOrderPaymentField
+                compact
+                value={paymentMethod}
+                onChange={onPaymentMethodChange}
+                qrisOnly={qrisOnly}
+                qrisLabel="QRIS otomatis"
+                cashierLabel="Bayar di kasir"
+              />
             </div>
 
             {/* 5. Rincian Biaya */}

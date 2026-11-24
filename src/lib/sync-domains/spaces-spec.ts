@@ -644,6 +644,14 @@ export const tablesDomainSpec: ServerDomainSpec<"tables"> = {
     }
 
     if (!auth.isAuthenticated || !auth.role || auth.role === "CUSTOMER") {
+      if (command.op === "PATCH_TABLE_STATUS" && command.paymentStatus === "PAID") {
+        return {
+          allowed: false,
+          status: 403,
+          error:
+            "FORBIDDEN: Pelanggan tidak dapat menandai status pembayaran meja menjadi lunas.",
+        };
+      }
       if (
         command.op === "PATCH_TABLE_STATUS" &&
         (command.status === "OCCUPIED" || command.status === "AVAILABLE")
@@ -920,7 +928,18 @@ export const coworkingMasterDomainSpec: ServerDomainSpec<"coworking-master"> = {
     }
 
     if (auth.role === "CUSTOMER" && command.op === "PATCH_SPACE_SESSION") {
-      return { allowed: true };
+      if (
+        (command.status === "RESERVED" || command.status === "AVAILABLE") &&
+        !command.checkLog
+      ) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        status: 403,
+        error:
+          "FORBIDDEN: Pelanggan tidak dapat melakukan check-in atau mencatat log sesi ruang.",
+      };
     }
 
     return {

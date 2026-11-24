@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Clock,
   Laptop,
-  Mail,
   MapPin,
   MessageCircle,
   UtensilsCrossed,
@@ -15,7 +14,6 @@ import { Button } from "@/components/ui/button";
 
 import {
   ADDRESS,
-  EMAIL,
   EVENT_FEATURES,
   FOOD_FEATURES,
   HOURS,
@@ -267,18 +265,6 @@ function Visit() {
           className="font-medium text-foreground underline underline-offset-4"
         >
           {WHATSAPP_DISPLAY}
-        </a>
-      ),
-    },
-    {
-      icon: <Mail />,
-      title: "Email",
-      body: (
-        <a
-          href={`mailto:${EMAIL}`}
-          className="font-medium text-foreground underline underline-offset-4"
-        >
-          {EMAIL}
         </a>
       ),
     },

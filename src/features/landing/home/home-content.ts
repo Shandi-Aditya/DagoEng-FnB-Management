@@ -14,7 +14,6 @@ export const NAV_LINKS: readonly { href: string; label: string }[] = [
 export const HOURS = "Senin sampai Jumat, 09.00 sampai 18.00 WITA";
 export const ADDRESS_SHORT = "Jl. Teleng No. 1, Banyuasri";
 export const ADDRESS = CONTACT.address;
-export const EMAIL = CONTACT.email;
 export const INSTAGRAM = {
   handle: CONTACT.instagram.label,
   url: CONTACT.instagram.href,

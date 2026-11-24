@@ -21,10 +21,27 @@ export interface OrderStatusHistoryItem {
   note?: string;
 }
 
+export type OrderItemCategoryType = "FNB" | "COWORKING";
+
+export type CoworkingOrderItemMeta = {
+  spaceId: string;
+  spaceName: string;
+  spaceType?: string;
+  durationHours: number;
+  startTime?: string;
+  endTime?: string;
+  bookingDate?: string;
+  rateLabel?: string;
+};
+
 export interface OrderItemRecord {
   id: string;
   productId?: string;
   tenantId?: string;
+  tenantName?: string;
+  itemType?: OrderItemCategoryType;
+  category?: string;
+  coworkingMeta?: CoworkingOrderItemMeta;
   productName: string;
   quantity: number;
   unitPrice: number;
@@ -50,8 +67,12 @@ export interface OrderRecord {
   items: OrderItemRecord[];
   subtotal: number;
   discount?: number;
+  fnbDiscount?: number;
+  coworkingDiscount?: number;
   promoId?: string;
   tax: number;
+  fnbTax?: number;
+  coworkingTax?: number;
   serviceCharge?: number;
   taxRatePercent?: number;
   serviceChargePercent?: number;
@@ -75,6 +96,8 @@ export interface OrderRecord {
     note?: string;
   };
   loyaltyPointsCredited?: boolean;
+  bomDeducted?: boolean;
+  bomRestored?: boolean;
   syncStatus?: "SYNCED" | "PENDING" | "REJECTED";
   syncError?: string;
   targetServiceMinutes: number; // Target SLA in minutes (e.g. 10m or 15m)

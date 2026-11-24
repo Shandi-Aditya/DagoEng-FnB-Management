@@ -3,6 +3,7 @@ import type { ServerAuthResult } from "@/lib/server-auth";
 import {
   DEFAULT_CATEGORY_TAX_CONFIG,
   DEFAULT_PLATFORM_SETTINGS,
+  type OutletReceiptCombineMode,
   type PlatformSettings,
 } from "@/types/settings";
 import {
@@ -614,6 +615,13 @@ function normalizeActiveOrgModules(
   return Array.from(set);
 }
 
+function normalizeReceiptCombineMode(
+  mode: unknown,
+  fallback: OutletReceiptCombineMode = "COMBINED"
+): OutletReceiptCombineMode {
+  return mode === "SEPARATE" || mode === "COMBINED" ? mode : fallback;
+}
+
 export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
   return {
     ...DEFAULT_PLATFORM_SETTINGS,
@@ -653,6 +661,10 @@ export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
         },
     activeOrgModules: normalizeActiveOrgModules(
       DEFAULT_PLATFORM_SETTINGS.activeOrgModules
+    ),
+    qrSelfOrderQrisOnly: DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
+    receiptCombineMode: normalizeReceiptCombineMode(
+      DEFAULT_PLATFORM_SETTINGS.receiptCombineMode
     ),
     appliedPromoOpIds: [],
   };
@@ -737,6 +749,16 @@ export function mergePlatformSettingsState(
       patch.activeOrgModules !== undefined
         ? normalizeActiveOrgModules(patch.activeOrgModules)
         : normalizeActiveOrgModules(base.activeOrgModules),
+    qrSelfOrderQrisOnly:
+      typeof patch.qrSelfOrderQrisOnly === "boolean"
+        ? patch.qrSelfOrderQrisOnly
+        : typeof base.qrSelfOrderQrisOnly === "boolean"
+          ? base.qrSelfOrderQrisOnly
+          : DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
+    receiptCombineMode: normalizeReceiptCombineMode(
+      patch.receiptCombineMode,
+      normalizeReceiptCombineMode(base.receiptCombineMode)
+    ),
     appliedPromoOpIds: Array.isArray(patch.appliedPromoOpIds)
       ? patch.appliedPromoOpIds.slice(-MAX_APPLIED_OP_IDS)
       : base.appliedPromoOpIds ?? [],
@@ -1940,12 +1962,13 @@ export function applyPrinterConfigCommand(
     }
     case "PATCH_SETTINGS": {
       if (!isPlainRecord(command.updates)) return current;
+      const nextSettings: POSPrintingSettings = {
+        ...current.settings,
+        ...command.updates,
+      };
       return {
         ...current,
-        settings: {
-          ...current.settings,
-          ...command.updates,
-        },
+        settings: nextSettings,
       };
     }
     default: {

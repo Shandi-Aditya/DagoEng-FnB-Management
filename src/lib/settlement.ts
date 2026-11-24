@@ -1,5 +1,11 @@
 import { OrderRecord } from "@/types/order";
-import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import {
+  allocateCategoryDiscounts,
+  allocateCategoryTaxAndService,
+  getOrderTaxBreakdown,
+  isCoworkingOrderItem,
+  normalizeTenantId,
+} from "@/lib/tax-breakdown";
 import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 import {
   getStoredSettlementReceiptPolicy,
@@ -126,11 +132,24 @@ function getOrderFallbackTenantId(
 }
 
 export function resolveItemTenantId(
-  item: { tenantId?: string; productId?: string; productName?: string },
+  item: {
+    tenantId?: string;
+    productId?: string;
+    productName?: string;
+    itemType?: string;
+    category?: string;
+    coworkingMeta?: unknown;
+    id?: string;
+    name?: string;
+  },
   orderFallbackTenantId?: string
 ): string {
+  if (isCoworkingOrderItem(item)) {
+    return "DAGO_HUB";
+  }
+
   if (item.tenantId && item.tenantId.trim()) {
-    return item.tenantId.trim();
+    return normalizeTenantId(item.tenantId) ?? item.tenantId.trim();
   }
 
   if (item.productId) {
@@ -140,8 +159,9 @@ export function resolveItemTenantId(
     }
   }
 
-  if (item.productName) {
-    const cleanName = item.productName.trim().toLowerCase();
+  const rawName = item.productName || item.name;
+  if (rawName) {
+    const cleanName = rawName.trim().toLowerCase();
 
     const productByExactName = INITIAL_PRODUCTS.find(
       (p) => p.name.trim().toLowerCase() === cleanName
@@ -174,11 +194,7 @@ export function resolveItemTenantId(
   }
 
   if (orderFallbackTenantId && orderFallbackTenantId.trim()) {
-    return orderFallbackTenantId.trim();
-  }
-
-  if (item.tenantId && item.tenantId.trim()) {
-    return item.tenantId.trim();
+    return normalizeTenantId(orderFallbackTenantId) ?? orderFallbackTenantId.trim();
   }
 
   return "DAGO_HUB";
@@ -216,7 +232,16 @@ export function calculateSettlement(
   orders.forEach((order) => {
     if (order.paymentStatus === "PAID" && order.status !== "CANCELLED") {
       let orderValidGross = 0;
-      const tenantGrosses = new Map<string, { gross: number; qty: number }>();
+      const tenantGrosses = new Map<
+        string,
+        {
+          gross: number;
+          qty: number;
+          explicitCoworkingGross: number;
+          implicitDagoGross: number;
+          fnbGross: number;
+        }
+      >();
 
       order.items.forEach((item) => {
         const qty = typeof item.quantity === "number" ? item.quantity : Number(item.quantity);
@@ -231,22 +256,122 @@ export function calculateSettlement(
 
         orderValidGross += itemGross;
 
-        const current = tenantGrosses.get(ownerId) || { gross: 0, qty: 0 };
+        const current = tenantGrosses.get(ownerId) || {
+          gross: 0,
+          qty: 0,
+          explicitCoworkingGross: 0,
+          implicitDagoGross: 0,
+          fnbGross: 0,
+        };
+        const rawTenantLower = (item.tenantId || "").trim().toLowerCase();
+        const isCw = isCoworkingOrderItem(item);
+        const isExplicitCw =
+          item.itemType === "COWORKING" ||
+          Boolean(item.coworkingMeta) ||
+          /^co-?working$/i.test((item.category || "").trim()) ||
+          rawTenantLower === "tenant-cowork" ||
+          rawTenantLower === "dago-cowork" ||
+          (isCw && !rawTenantLower);
         tenantGrosses.set(ownerId, {
           gross: current.gross + itemGross,
           qty: current.qty + qty,
+          explicitCoworkingGross: current.explicitCoworkingGross + (isExplicitCw ? itemGross : 0),
+          implicitDagoGross:
+            current.implicitDagoGross + (!isExplicitCw && isCw ? itemGross : 0),
+          fnbGross: current.fnbGross + (!isCw ? itemGross : 0),
         });
       });
 
       const breakdown = getOrderTaxBreakdown(order);
       const computedDiscount = breakdown.discount;
 
-      tenantGrosses.forEach((data, tenantId) => {
-        const ratio = orderValidGross > 0 ? data.gross / orderValidGross : 0;
+      const totalExplicitFnbGross = Array.from(tenantGrosses.values()).reduce(
+        (sum, d) => sum + d.fnbGross,
+        0
+      );
+      const totalImplicitDagoGross = Array.from(tenantGrosses.values()).reduce(
+        (sum, d) => sum + d.implicitDagoGross,
+        0
+      );
 
-        const allocatedDiscount = computedDiscount * ratio;
-        const allocatedTax = breakdown.pb1 * ratio;
-        const allocatedServiceCharge = breakdown.serviceCharge * ratio;
+      let treatImplicitDagoAsTaxedFnb = false;
+      if (totalExplicitFnbGross > 0 && totalImplicitDagoGross > 0 && orderValidGross > 0) {
+        const otherDpp = Math.max(
+          0,
+          totalExplicitFnbGross - computedDiscount * (totalExplicitFnbGross / orderValidGross)
+        );
+        const taxRate = (order.taxRatePercent ?? 10) / 100;
+        const servRate =
+          order.orderType === "TAKEAWAY" ? 0 : (order.serviceChargePercent ?? 5) / 100;
+        treatImplicitDagoAsTaxedFnb =
+          breakdown.pb1 > Math.round(otherDpp * taxRate) + 1 ||
+          (servRate > 0 && breakdown.serviceCharge > Math.round(otherDpp * servRate) + 1);
+      }
+
+      const allocationBuckets: Array<{
+        tenantId: string;
+        isCoworking: boolean;
+        subtotal: number;
+      }> = [];
+
+      tenantGrosses.forEach((data, tenantId) => {
+        const cwSub =
+          data.explicitCoworkingGross +
+          (treatImplicitDagoAsTaxedFnb ? 0 : data.implicitDagoGross);
+        const fnbSub =
+          data.fnbGross + (treatImplicitDagoAsTaxedFnb ? data.implicitDagoGross : 0);
+        if (cwSub > 0) {
+          allocationBuckets.push({ tenantId, isCoworking: true, subtotal: cwSub });
+        }
+        if (fnbSub > 0) {
+          allocationBuckets.push({ tenantId, isCoworking: false, subtotal: fnbSub });
+        }
+      });
+
+      const explicitTaxSplit =
+        order.fnbTax !== undefined || order.coworkingTax !== undefined
+          ? { fnbTax: order.fnbTax, coworkingTax: order.coworkingTax }
+          : undefined;
+      const allocatedTaxes = allocateCategoryTaxAndService(
+        allocationBuckets,
+        breakdown.pb1,
+        breakdown.serviceCharge,
+        explicitTaxSplit
+      );
+      const taxByTenant = new Map<string, { tax: number; serviceCharge: number }>();
+      allocationBuckets.forEach((bucket, idx) => {
+        const prev = taxByTenant.get(bucket.tenantId) || { tax: 0, serviceCharge: 0 };
+        const alloc = allocatedTaxes[idx] || { tax: 0, serviceCharge: 0 };
+        taxByTenant.set(bucket.tenantId, {
+          tax: prev.tax + alloc.tax,
+          serviceCharge: prev.serviceCharge + alloc.serviceCharge,
+        });
+      });
+
+      const explicitDiscountSplit =
+        order.fnbDiscount !== undefined || order.coworkingDiscount !== undefined
+          ? { fnbDiscount: order.fnbDiscount, coworkingDiscount: order.coworkingDiscount }
+          : undefined;
+      const allocatedBucketDiscounts = allocateCategoryDiscounts(
+        allocationBuckets,
+        computedDiscount,
+        explicitDiscountSplit
+      );
+      const discountByTenant = new Map<string, number>();
+      allocationBuckets.forEach((bucket, idx) => {
+        discountByTenant.set(
+          bucket.tenantId,
+          (discountByTenant.get(bucket.tenantId) || 0) + (allocatedBucketDiscounts[idx] ?? 0)
+        );
+      });
+
+      const tenantEntries = Array.from(tenantGrosses.entries());
+
+      tenantEntries.forEach(([tenantId, data]) => {
+        const allocatedDiscount = discountByTenant.get(tenantId) ?? 0;
+        const allocated = taxByTenant.get(tenantId) || { tax: 0, serviceCharge: 0 };
+        const allocatedTax = allocated.tax;
+        const allocatedServiceCharge = allocated.serviceCharge;
         const tenantDpp = Math.max(0, data.gross - allocatedDiscount);
 
         const netRevenue =
@@ -340,6 +465,8 @@ export interface TenantProfitSharing {
   tenantId: string;
   tenantName: string;
   grossSales: number;
+  discount?: number;
+  dpp?: number;
   platformFee: number;
   qrisMdr: number;
   netPayout: number;
@@ -358,34 +485,83 @@ export function calculateTenantProfitSharing(
     (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
   );
 
-  const configuredSplit = getTenantRevenueSplit(tenantId);
-  const commissionPercent =
-    customCommissionPercent !== undefined ? customCommissionPercent : configuredSplit.dagoSharePercent;
-  const tenantSharePercent = 100 - commissionPercent;
+  const targetTenantId = normalizeTenantId(tenantId) ?? tenantId;
+  const isDagoHub = targetTenantId === "DAGO_HUB";
+  const configuredSplit = getTenantRevenueSplit(targetTenantId);
+  const commissionPercent = isDagoHub
+    ? 100
+    : customCommissionPercent !== undefined
+    ? customCommissionPercent
+    : configuredSplit.dagoSharePercent;
+  const tenantSharePercent = isDagoHub ? 0 : 100 - commissionPercent;
 
   let grossSales = 0;
+  let totalDiscount = 0;
+  let totalDpp = 0;
+  let qrisDpp = 0;
   let orderCount = 0;
 
   tenantOrders.forEach((order) => {
+    let tenantGross = 0;
     let hasTenantItem = false;
-    order.items.forEach((item) => {
-      const resolvedTenant = resolveItemTenantId(item, getOrderFallbackTenantId(order));
-      if (resolvedTenant === tenantId) {
+    const fallbackTenantId = getOrderFallbackTenantId(order);
+
+    const itemBuckets = order.items.map((item) => {
+      const itemGross = Math.max(0, (item.unitPrice || 0) * (item.quantity || 1));
+      const resolvedTenant =
+        normalizeTenantId(resolveItemTenantId(item, fallbackTenantId)) ??
+        resolveItemTenantId(item, fallbackTenantId);
+      const isMatch = resolvedTenant === targetTenantId;
+      if (isMatch) {
         hasTenantItem = true;
-        grossSales += (item.unitPrice || 0) * (item.quantity || 1);
+        tenantGross += itemGross;
       }
+      return {
+        isCoworking: isCoworkingOrderItem(item),
+        subtotal: itemGross,
+        isMatch,
+      };
     });
-    if (hasTenantItem) orderCount++;
+
+    if (hasTenantItem) {
+      orderCount++;
+      grossSales += tenantGross;
+      const breakdown = getOrderTaxBreakdown(order);
+      const explicitDiscountSplit =
+        order.fnbDiscount !== undefined || order.coworkingDiscount !== undefined
+          ? { fnbDiscount: order.fnbDiscount, coworkingDiscount: order.coworkingDiscount }
+          : undefined;
+      const itemDiscounts = allocateCategoryDiscounts(
+        itemBuckets,
+        breakdown.discount,
+        explicitDiscountSplit
+      );
+      const allocatedDiscount = itemBuckets.reduce(
+        (sum, bucket, idx) => sum + (bucket.isMatch ? itemDiscounts[idx] ?? 0 : 0),
+        0
+      );
+      const tenantDpp = Math.max(0, tenantGross - allocatedDiscount);
+      totalDiscount += allocatedDiscount;
+      totalDpp += tenantDpp;
+      if (order.paymentMethod === "QRIS") {
+        qrisDpp += tenantDpp;
+      }
+    }
   });
 
-  const platformFee = Math.round(grossSales * (commissionPercent / 100));
-  const qrisMdr = Math.round(grossSales * 0.007);
-  const netPayout = grossSales - platformFee - qrisMdr;
+  const roundedGross = Math.round(grossSales);
+  const roundedDiscount = Math.round(totalDiscount);
+  const roundedDpp = Math.round(totalDpp);
+  const platformFee = Math.round(roundedDpp * (commissionPercent / 100));
+  const qrisMdr = isDagoHub ? 0 : Math.round(qrisDpp * 0.007);
+  const netPayout = isDagoHub ? 0 : roundedDpp - platformFee - qrisMdr;
 
   return {
     tenantId,
     tenantName,
-    grossSales,
+    grossSales: roundedGross,
+    discount: roundedDiscount,
+    dpp: roundedDpp,
     platformFee,
     qrisMdr,
     netPayout,

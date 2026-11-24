@@ -259,6 +259,21 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
   }
+
+  /* Ensure NativeSelect never renders a duplicate OS arrow or wraps text */
+  select[data-slot="native-select"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  select[data-slot="native-select"]::picker-icon {
+    display: none;
+  }
 }
 
 /* Horizontal scroll rows (tenant/category tabs, sidebar) without a visible scrollbar */

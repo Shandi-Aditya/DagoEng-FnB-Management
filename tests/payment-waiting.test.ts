@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { OrderRecord } from "@/types/order";
 import {
@@ -126,6 +128,7 @@ describe("payment-waiting domain logic", () => {
         totalAmount: 60000,
         paymentMethod: "CASH",
         paymentStatus: "PENDING",
+        createdAt: "2026-11-15T08:30:00Z",
         date: "15 Nov 2026",
         startTime: "10:00",
       };
@@ -140,6 +143,7 @@ describe("payment-waiting domain logic", () => {
       expect(normalized?.total).toBe(60000);
       expect(normalized?.type).toBe("COWORKING");
       expect(normalized?.paymentMethod).toBe("CASH");
+      expect(normalized?.createdAt).toBe("2026-11-15T08:30:00Z");
       expect(normalized?.dateInfo).toBe("15 Nov 2026 • 10:00");
     });
 
@@ -186,6 +190,19 @@ describe("payment-waiting domain logic", () => {
     it("returns max duration if createdAt is invalid or omitted", () => {
       expect(calculateSecondsRemaining(undefined, Date.now(), 900)).toBe(900);
       expect(calculateSecondsRemaining("invalid-date", Date.now(), 900)).toBe(900);
+    });
+  });
+
+  describe("PaymentWaitingModal polling stability", () => {
+    it("keys initialization effect on activeItemId rather than activeItem object identity", () => {
+      const src = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/payment/PaymentWaitingModal.tsx"),
+        "utf-8"
+      );
+      expect(src).toContain("const activeItemId = activeItem?.id ?? null;");
+      expect(src).toContain("const activeItemCreatedAt = activeItem?.createdAt;");
+      expect(src).toContain("[isOpen, activeItemId]");
+      expect(src).not.toContain("[isOpen, activeItem]");
     });
   });
 });

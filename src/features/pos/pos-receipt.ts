@@ -1,4 +1,5 @@
 import type { POSReceiptData } from "@/features/pos/types";
+import { isCoworkingOrderItem, normalizeTenantId } from "@/lib/tax-breakdown";
 import { DEFAULT_FNB_TENANTS, getTenantName } from "@/lib/tenant";
 
 export type POSReceiptItem = POSReceiptData["items"][number];
@@ -6,40 +7,59 @@ export type POSReceiptItem = POSReceiptData["items"][number];
 export interface TenantReceiptGroup {
   tenantId: string;
   tenantName: string;
+  isCoworking: boolean;
   items: POSReceiptItem[];
   subtotal: number;
 }
 
 /**
- * Group receipt items by tenant for clear multi-mitra breakdown without mutating input.
+ * Group receipt items by tenant (and Co-Working hub) without mutating input.
  */
 export function calculateTenantReceiptGroups(
-  items: readonly POSReceiptItem[] = []
+  items: readonly POSReceiptItem[] = [],
+  options?: { defaultTenantId?: string; defaultTenantName?: string }
 ): TenantReceiptGroup[] {
   const map = new Map<string, TenantReceiptGroup>();
+  const fallbackId = options?.defaultTenantId ?? "tenant-ks";
+  const fallbackName = options?.defaultTenantName ?? "Kopi Senja";
 
   for (const item of items) {
-    let tId = item.tenantId;
-    if (!tId && item.tenantName) {
-      const match = DEFAULT_FNB_TENANTS.find(
-        (t) => t.name.toLowerCase() === item.tenantName?.toLowerCase()
-      );
-      tId = match?.id;
+    const isCoworking = isCoworkingOrderItem(item);
+    let tenantId: string;
+    let tenantName: string;
+
+    if (isCoworking) {
+      tenantId = "DAGO_HUB";
+      tenantName = item.tenantName || "Dago Creative Hub (Co-Working)";
+    } else {
+      const normalizedId = normalizeTenantId(item.tenantId);
+      const matchedByName =
+        !normalizedId && item.tenantName
+          ? DEFAULT_FNB_TENANTS.find(
+              (t) => t.name.toLowerCase() === item.tenantName?.toLowerCase()
+            )?.id
+          : undefined;
+      tenantId = normalizedId || matchedByName || fallbackId;
+      tenantName =
+        item.tenantName ||
+        (tenantId !== "default" ? getTenantName(tenantId) : undefined) ||
+        fallbackName;
     }
-    const tenantId = tId || "tenant-ks";
-    const tenantName =
-      item.tenantName || getTenantName(tenantId) || "Kopi Senja";
 
-    const existing = map.get(tenantId) || {
-      tenantId,
-      tenantName,
-      items: [],
-      subtotal: 0,
-    };
-
-    existing.items.push(item);
-    existing.subtotal += item.subtotal;
-    map.set(tenantId, existing);
+    const existing = map.get(tenantId);
+    if (existing) {
+      existing.items.push(item);
+      existing.subtotal += item.subtotal;
+      existing.isCoworking = existing.isCoworking && isCoworking;
+    } else {
+      map.set(tenantId, {
+        tenantId,
+        tenantName,
+        isCoworking,
+        items: [item],
+        subtotal: item.subtotal,
+      });
+    }
   }
 
   return Array.from(map.values());

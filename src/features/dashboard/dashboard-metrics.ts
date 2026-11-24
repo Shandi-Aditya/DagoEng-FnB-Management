@@ -7,6 +7,12 @@ import {
   toWitaDateKey,
 } from "@/contexts/DateFilterContext";
 import { calculateSettlement, resolveItemTenantId } from "@/lib/settlement";
+import {
+  allocateCategoryDiscounts,
+  allocateCategoryTaxAndService,
+  getOrderTaxBreakdown,
+  isCoworkingOrderItem,
+} from "@/lib/tax-breakdown";
 import type { OrderRecord } from "@/types/order";
 
 /** Minimal order shape the dashboard metrics need. */
@@ -219,6 +225,67 @@ export function scopeDashboardOrders(
   });
 }
 
+export function partitionOrderRevenueByUnit(paidOrders: readonly OrderRecord[]): {
+  fnbRevenue: number;
+  coworkingRevenue: number;
+} {
+  let fnbRevenue = 0;
+  let coworkingRevenue = 0;
+
+  for (const order of paidOrders) {
+    const orderTotal = order.total || 0;
+    const items = order.items || [];
+    if (items.length === 0) {
+      fnbRevenue += orderTotal;
+      continue;
+    }
+
+    let fnbGross = 0;
+    let cwGross = 0;
+    for (const item of items) {
+      const lineTotal = Math.round((Number(item.unitPrice) || 0) * (Number(item.quantity) || 0));
+      if (lineTotal <= 0) continue;
+      if (isCoworkingOrderItem(item)) cwGross += lineTotal;
+      else fnbGross += lineTotal;
+    }
+
+    if (cwGross <= 0) {
+      fnbRevenue += orderTotal;
+    } else if (fnbGross <= 0) {
+      coworkingRevenue += orderTotal;
+    } else {
+      const breakdown = getOrderTaxBreakdown(order);
+      const groups = [
+        { isCoworking: false, subtotal: fnbGross },
+        { isCoworking: true, subtotal: cwGross },
+      ];
+      const [, cwDiscount] = allocateCategoryDiscounts(
+        groups,
+        breakdown.discount,
+        order.fnbDiscount !== undefined || order.coworkingDiscount !== undefined
+          ? { fnbDiscount: order.fnbDiscount, coworkingDiscount: order.coworkingDiscount }
+          : undefined
+      );
+      const [, cwTaxAlloc] = allocateCategoryTaxAndService(
+        groups,
+        breakdown.pb1,
+        breakdown.serviceCharge,
+        order.fnbTax !== undefined || order.coworkingTax !== undefined
+          ? { fnbTax: order.fnbTax, coworkingTax: order.coworkingTax }
+          : undefined
+      );
+      const cwPortion = Math.min(
+        orderTotal,
+        Math.max(0, cwGross - cwDiscount) + cwTaxAlloc.tax + cwTaxAlloc.serviceCharge
+      );
+      coworkingRevenue += cwPortion;
+      fnbRevenue += Math.max(0, orderTotal - cwPortion);
+    }
+  }
+
+  return { fnbRevenue, coworkingRevenue };
+}
+
 export function computeDashboardFnbRevenue(
   paidOrders: readonly OrderRecord[],
   options: { isTenantOwner?: boolean; tenantId?: string }
@@ -227,7 +294,7 @@ export function computeDashboardFnbRevenue(
     const settlements = calculateSettlement(paidOrders as OrderRecord[]);
     return settlements.find((s) => s.tenantId === options.tenantId)?.tenantShareAmount ?? 0;
   }
-  return paidOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+  return partitionOrderRevenueByUnit(paidOrders).fnbRevenue;
 }
 
 export function projectDashboardOrdersForTenant(

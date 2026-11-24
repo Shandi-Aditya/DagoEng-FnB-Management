@@ -1,4 +1,7 @@
 import type { RoleSlug } from "./auth";
+import type { OrderItemCategoryType } from "./order";
+
+export type { ReceiptLineItem } from "@/features/pos/types";
 
 export type PrinterConnectionType =
   | "BROWSER_SYSTEM"
@@ -79,6 +82,7 @@ export interface KitchenTicketItem {
   isAdditional?: boolean;
   tenantId?: string;
   tenantName?: string;
+  itemType?: OrderItemCategoryType;
 }
 
 export interface KitchenTicketData {

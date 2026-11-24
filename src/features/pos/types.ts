@@ -1,4 +1,7 @@
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
+import type { CoworkingOrderItemMeta, OrderItemCategoryType } from "@/types/order";
+
+export type { CoworkingOrderItemMeta, OrderItemCategoryType };
 
 export interface POSVariantOption {
   name: string;
@@ -44,6 +47,10 @@ export interface POSCartItem {
   unitFinalPrice: number;
   itemTotal: number;
   tenantId?: string;
+  tenantName?: string;
+  itemType?: OrderItemCategoryType;
+  category?: string;
+  coworkingMeta?: CoworkingOrderItemMeta;
 }
 
 export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "SPLIT";
@@ -80,6 +87,8 @@ export interface POSReceiptData {
   cashierName: string;
   tenantId?: string;
   tenantName?: string;
+  brandName?: string;
+  tagline?: string;
   receiptHeader?: string;
   receiptFooter?: string;
   outletName: string;
@@ -96,15 +105,22 @@ export interface POSReceiptData {
     subtotal: number;
     tenantId?: string;
     tenantName?: string;
+    itemType?: OrderItemCategoryType;
+    category?: string;
+    coworkingMeta?: CoworkingOrderItemMeta;
     variantName?: string;
     modifiers?: string[];
     notes?: string;
   }[];
   subtotal: number;
   tax: number;
+  fnbTax?: number;
+  coworkingTax?: number;
   serviceCharge: number;
   promoName?: string;
   discount: number;
+  fnbDiscount?: number;
+  coworkingDiscount?: number;
   grandTotal: number;
   paymentMethod: POSPaymentMethod;
   amountPaid: number;
@@ -121,3 +137,4 @@ export interface POSReceiptData {
 }
 
 export type POSReceiptItem = POSReceiptData["items"][number];
+export type ReceiptLineItem = POSReceiptData["items"][number];
