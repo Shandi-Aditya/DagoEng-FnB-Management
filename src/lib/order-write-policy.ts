@@ -240,6 +240,42 @@ export function canonicalSale(order: OrderRecord): string {
   return JSON.stringify(sortKeys(sale));
 }
 
+export function canonicalCoreSale(order: OrderRecord): string {
+  const PAYMENT_OR_WORKFLOW_FIELDS = new Set([
+    ...WORKFLOW_FIELDS,
+    "paymentStatus",
+    "paymentMethod",
+    "paidAmount",
+    "changeDue",
+    "paymentReference",
+    "qrisVerification",
+    "cashierName",
+    "splitDetails",
+  ]);
+  const sortKeys = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (isPlainObject(value)) {
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((key) => [key, sortKeys(value[key])])
+      );
+    }
+    return value;
+  };
+  const normalized: OrderRecord = {
+    ...order,
+    tax: Math.round(order.tax ?? 0),
+    serviceCharge: Math.round(order.serviceCharge ?? 0),
+  };
+  const sale = Object.fromEntries(
+    Object.entries(normalized).filter(
+      ([key, value]) => !PAYMENT_OR_WORKFLOW_FIELDS.has(key) && value !== undefined
+    )
+  );
+  return JSON.stringify(sortKeys(sale));
+}
+
 export function validateOrderStateTransition(
   existingOrder: OrderRecord | undefined,
   orderData: OrderRecord
@@ -301,6 +337,19 @@ const OrderItemSchema = z.object({
   modifiers: z.array(z.string()).optional(),
 });
 
+const CorporateInfoSchema = z.object({
+  companyName: z.string(),
+  picName: z.string(),
+  picPhone: z.string(),
+  headcount: z.number().int().positive().optional(),
+  billingType: z.enum(["PREPAID", "INVOICE"]),
+  invoiceNumber: z.string().optional(),
+  invoiceDueDate: z.string().optional(),
+  notes: z.string().optional(),
+  linkedBookingCode: z.string().optional(),
+  linkedSpaceName: z.string().optional(),
+});
+
 const OrderPayloadSchema = z.object({
   id: z.string().min(1),
   orderNumber: z.string().optional(),
@@ -322,7 +371,7 @@ const OrderPayloadSchema = z.object({
   total: z.number().finite().nonnegative(),
   items: z.array(OrderItemSchema).optional(),
   paymentStatus: z.enum(["PENDING", "PAID", "REFUNDED"]).optional(),
-  paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT"]).optional(),
+  paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT", "INVOICE"]).optional(),
   refundMethod: z.enum(["CASH", "QRIS"]).optional(),
   refundReason: z.string().optional(),
   refundApprovedBy: z.string().optional(),
@@ -331,6 +380,7 @@ const OrderPayloadSchema = z.object({
   voidApprovedBy: z.string().optional(),
   voidedAt: z.string().optional(),
   notes: z.string().optional(),
+  corporateInfo: CorporateInfoSchema.optional(),
   status: z
     .enum([
       "NEW",
@@ -381,6 +431,7 @@ export function validateOrderPayload(
     voidApprovedBy: orderData.voidApprovedBy,
     voidedAt: orderData.voidedAt,
     notes: orderData.notes,
+    corporateInfo: orderData.corporateInfo,
     status: orderData.status,
   });
 
@@ -437,8 +488,31 @@ export function decideOrderWrite(
     next.status === "CANCELLED" ||
     next.paymentStatus === "REFUNDED" ||
     Boolean(next.voidReason);
+  const isCorporateInvoice =
+    next.paymentMethod === "INVOICE" ||
+    next.corporateInfo?.billingType === "INVOICE" ||
+    existing?.paymentMethod === "INVOICE" ||
+    existing?.corporateInfo?.billingType === "INVOICE";
+  const createsOrSwitchesToInvoice =
+    (next.paymentMethod === "INVOICE" || next.corporateInfo?.billingType === "INVOICE") &&
+    (!existing ||
+      (existing.paymentMethod !== "INVOICE" && existing.corporateInfo?.billingType !== "INVOICE"));
 
-  if (!isCancellingOrRefunding && targetsKdsStage(next) && effectivePaymentStatus !== "PAID") {
+  if (createsOrSwitchesToInvoice && !isPosRole) {
+    return {
+      allowed: false,
+      status: 403,
+      error:
+        "FORBIDDEN: Hanya peran kasir atau manajemen yang dapat menerbitkan pesanan tagihan perusahaan (INVOICE).",
+    };
+  }
+
+  if (
+    !isCancellingOrRefunding &&
+    !isCorporateInvoice &&
+    targetsKdsStage(next) &&
+    effectivePaymentStatus !== "PAID"
+  ) {
     return {
       allowed: false,
       status: 403,
@@ -520,6 +594,32 @@ export function decideOrderWrite(
   }
 
   if (existing.paymentStatus !== "PAID" && !isClosed) {
+    if (next.paymentStatus === "PAID") {
+      if (canonicalCoreSale(existing) !== canonicalCoreSale(next)) {
+        return {
+          allowed: false,
+          error: "FORBIDDEN: Item dan nilai transaksi tidak boleh diubah saat pelunasan.",
+        };
+      }
+      if (Array.isArray(next.splitDetails) && next.splitDetails.length > 0) {
+        const hasInvalidSplitAmount = next.splitDetails.some((g) => {
+          const amt = Number(g.amount);
+          return !Number.isFinite(amt) || amt < 0;
+        });
+        const splitSum = next.splitDetails.reduce(
+          (sum, g) => sum + Math.round(Number(g.amount || 0)),
+          0
+        );
+        if (hasInvalidSplitAmount || Math.abs(splitSum - Math.round(existing.total)) > 1) {
+          return {
+            allowed: false,
+            status: 400,
+            error:
+              "INVALID_SPLIT_TOTAL: Total rincian split payment tidak sesuai dengan total pesanan.",
+          };
+        }
+      }
+    }
     return isPosRole
       ? { allowed: true, auditPaidChange: false, requiresPinCheck: false }
       : { allowed: false, error: `FORBIDDEN: Role [${role}] hanya boleh mengubah status pesanan.` };

@@ -20,6 +20,7 @@ import {
 } from "@/lib/persistent-storage";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
+import type { CoworkingBooking } from "@/types/coworking";
 
 const POS_ALLOWED_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
 const SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
@@ -130,7 +131,7 @@ async function settleMatchingPendingTarget(params: {
 
   const bookings = await getCoworkingBookings();
   const matchedBooking = bookings.find(
-    (b: Record<string, unknown>) =>
+    (b: CoworkingBooking) =>
       b.paymentStatus === "PENDING" &&
       b.checkInStatus !== "CANCELLED" &&
       (b.id === session.orderId || b.bookingCode === invoiceNumber) &&

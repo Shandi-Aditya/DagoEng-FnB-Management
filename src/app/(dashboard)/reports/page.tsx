@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Building2 } from "lucide-react";
 
 import { notify } from "@/components/app/notify";
+import { Button } from "@/components/ui/button";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
@@ -19,6 +22,7 @@ import { ReportsToolbar } from "@/features/reports/ReportsToolbar";
 import {
   buildReportData,
   countVoidRefundDiscountEntries,
+  extractAvailableReportCompanies,
   filterReportRows,
   getReportCategories,
   isSettledPaidOrder,
@@ -50,6 +54,7 @@ export default function ReportsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<string>("ALL");
 
   const isTenantScope = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
   const tenantId = isTenantScope ? user?.tenant?.id : undefined;
@@ -174,19 +179,27 @@ export default function ReportsPage() {
 
   const paidOrdersCount = filteredOrders.filter(isSettledPaidOrder).length;
   const paidCoworkingCount = filteredCoworkingBookings.filter(
-    (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
+    (b) =>
+      b.paymentStatus === "PAID" &&
+      b.checkInStatus !== "CANCELLED" &&
+      !b.linkedOrderId &&
+      !b.billedViaPosOrder
   ).length;
   const pendingCoworkingQrisCount = filteredCoworkingBookings.filter(
     (b) =>
       b.paymentMethod === "QRIS" &&
       b.paymentStatus === "PENDING" &&
-      b.checkInStatus !== "CANCELLED"
+      b.checkInStatus !== "CANCELLED" &&
+      !b.linkedOrderId &&
+      !b.billedViaPosOrder
   ).length;
   const discountedCoworkingCount = filteredCoworkingBookings.filter(
     (b) =>
       b.paymentStatus === "PAID" &&
       b.checkInStatus !== "CANCELLED" &&
-      (b.discount || 0) > 0
+      (b.discount || 0) > 0 &&
+      !b.linkedOrderId &&
+      !b.billedViaPosOrder
   ).length;
   const settlementRowsCount = useMemo(() => {
     const rows = calculateSettlement(filteredOrders);
@@ -231,6 +244,11 @@ export default function ReportsPage() {
     ? selectedReportType
     : "SALES";
 
+  const availableCompanies = useMemo(
+    () => extractAvailableReportCompanies(orders, coworkingBookings),
+    [orders, coworkingBookings]
+  );
+
   const currentReport = buildReportData({
     type: effectiveReportType,
     scopeName,
@@ -248,6 +266,7 @@ export default function ReportsPage() {
     tenantId,
     operatorName: user?.name,
     isTimestampInRange: isDateInRange,
+    companyName: selectedCompany,
   });
 
   const exportableReportRows = useMemo(
@@ -288,6 +307,12 @@ export default function ReportsPage() {
       const needle = searchQuery.trim().toLowerCase();
       const paidOrders = filteredOrders.filter((o) => {
         if (!isSettledPaidOrder(o)) return false;
+        if (
+          selectedCompany !== "ALL" &&
+          o.corporateInfo?.companyName?.trim().toLowerCase() !== selectedCompany.trim().toLowerCase()
+        ) {
+          return false;
+        }
         if (!needle) return true;
         const fields = [
           o.orderNumber,
@@ -299,6 +324,15 @@ export default function ReportsPage() {
         ];
         return fields.some((val) => val?.toLowerCase().includes(needle));
       });
+      const effectiveCoworking = filteredCoworkingBookings.filter((b) => {
+        if (
+          selectedCompany !== "ALL" &&
+          b.company?.trim().toLowerCase() !== selectedCompany.trim().toLowerCase()
+        ) {
+          return false;
+        }
+        return true;
+      });
       await exportTransactionReportExcel({
         orders: paidOrders,
         products: filteredProducts,
@@ -306,6 +340,7 @@ export default function ReportsPage() {
         endDate,
         outletName: scopeName,
         tenantId,
+        coworkingBookings: effectiveCoworking,
       });
       notify.success("Laporan transaksi diekspor ke Excel (.xlsx)", "3 sheet: transaction, detail, tenant shares");
     } catch (err) {
@@ -362,6 +397,19 @@ export default function ReportsPage() {
           setPageSize(newSize);
           setCurrentPage(1);
         }}
+        companyFilter={
+          effectiveReportType === "SALES" ||
+          effectiveReportType === "PRODUCTS"
+            ? {
+                selectedCompany,
+                availableCompanies,
+                onCompanyChange: (company) => {
+                  setSelectedCompany(company);
+                  setCurrentPage(1);
+                },
+              }
+            : undefined
+        }
       />
 
       {isPDFModalOpen && (

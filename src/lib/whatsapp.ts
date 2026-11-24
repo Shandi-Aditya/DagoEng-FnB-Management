@@ -16,6 +16,13 @@ export interface WhatsAppDispatchResult {
  * Checks whether the Fonnte WhatsApp API token is configured in environment variables.
  */
 export function isWhatsAppServiceConfigured(): boolean {
+  if (
+    process.env.NODE_ENV !== "test" &&
+    (process.env.ENABLE_WHATSAPP_CHATBOT === "false" ||
+      process.env.DISABLE_WHATSAPP_CHATBOT === "true")
+  ) {
+    return false;
+  }
   const token = process.env.FONNTE_API_TOKEN;
   return Boolean(token && token.trim().length > 0);
 }
@@ -44,15 +51,21 @@ export async function sendWhatsAppMessage(
   const timestamp = new Date().toISOString();
 
   if (!isWhatsAppServiceConfigured()) {
+    const isExplicitlyDisabled =
+      process.env.ENABLE_WHATSAPP_CHATBOT === "false" ||
+      process.env.DISABLE_WHATSAPP_CHATBOT === "true";
     console.info(
-      `[WhatsApp Gateway] FONNTE_API_TOKEN belum dikonfigurasi. Pengiriman WhatsApp otomatis dilewati untuk target: ${targetPhone}`
+      isExplicitlyDisabled
+        ? `[WhatsApp Gateway] Layanan WhatsApp dinonaktifkan sementara (ENABLE_WHATSAPP_CHATBOT=false). Pengiriman dilewati untuk target: ${targetPhone}`
+        : `[WhatsApp Gateway] FONNTE_API_TOKEN belum dikonfigurasi. Pengiriman WhatsApp otomatis dilewati untuk target: ${targetPhone}`
     );
     return {
       sent: false,
       configured: false,
       reason: "GATEWAY_NOT_CONFIGURED",
-      message:
-        "Layanan pengiriman WhatsApp otomatis belum dikonfigurasi pada server ini. Silakan hubungi admin acara melalui kontak Customer Service resmi.",
+      message: isExplicitlyDisabled
+        ? "Layanan pengiriman WhatsApp otomatis dinonaktifkan sementara hingga sistem siap rilis produksi."
+        : "Layanan pengiriman WhatsApp otomatis belum dikonfigurasi pada server ini. Silakan hubungi admin acara melalui kontak Customer Service resmi.",
       timestamp,
     };
   }

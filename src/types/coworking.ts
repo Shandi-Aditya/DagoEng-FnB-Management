@@ -79,6 +79,10 @@ export interface CoworkingBooking {
   fnbVoucherApplied?: string;
   notes?: string;
   qrisVerification?: QRISVerificationDetail;
+  userId?: string;
+  maxCapacity?: number;
+  linkedOrderId?: string;
+  billedViaPosOrder?: boolean;
 }
 
 export interface CoworkingMembershipPlan {

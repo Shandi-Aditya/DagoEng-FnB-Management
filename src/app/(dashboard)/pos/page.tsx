@@ -29,6 +29,11 @@ import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
 import { CoworkingSpaceItem, SpaceType } from "@/types/coworking";
 import {
+  DEFAULT_CORPORATE_DRAFT,
+  type CorporateBillingType,
+  type CorporateOrderDraft,
+} from "@/types/order";
+import {
   POSProductItem,
   POSCartItem,
   POSPaymentMethod,
@@ -122,6 +127,7 @@ import {
   parseHour,
   getCurrentTimeFormatted,
   getValidOperationalTime,
+  isSlotPast,
   calculateEndTime,
   checkSlotAvailability as checkSlotAvailabilityHelper,
   coworkingEmptyStateMessage,
@@ -171,7 +177,7 @@ export default function POSPage() {
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
   const { settings, redeemPromo } = useSettings();
-  const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace } = useCoworking();
+  const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace, cancelBooking: cwCancelBooking } = useCoworking();
   const { shifts, activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
   const isTenantScoped = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
@@ -229,7 +235,7 @@ export default function POSPage() {
   useEffect(() => {
     setIsMounted(true);
     if (!isManualTimeSet) {
-      setCwStartTime(getValidOperationalTime());
+      setCwStartTime(getValidOperationalTime(cwDate));
     }
   }, []);
 
@@ -285,6 +291,81 @@ export default function POSPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [appliedVoucher, setAppliedVoucher] = useState<LoyaltyVoucher | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState<boolean>(false);
+
+  // Corporate Order States (Task S-36 - Unified Draft)
+  const [corporateDraft, setCorporateDraft] = useState<CorporateOrderDraft>(DEFAULT_CORPORATE_DRAFT);
+
+  const meetingRoomsList = useMemo(() => {
+    return (cwSpaces || [])
+      .filter((s) => s.type === "MEETING_ROOM")
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        hourlyRate: s.hourlyRate,
+        capacity: s.capacity,
+      }));
+  }, [cwSpaces]);
+
+  const handleCorporateDraftChange = (newDraft: CorporateOrderDraft) => {
+    setCorporateDraft(newDraft);
+    if (!newDraft.enabled || !newDraft.meetingRoomId) {
+      setCartItems((prev) => prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-")));
+      return;
+    }
+    const room = cwSpaces.find((s) => s.id === newDraft.meetingRoomId);
+    if (!room) return;
+    if (room.status === "MAINTENANCE") {
+      notify.error(
+        "Ruangan dalam perbaikan",
+        `Ruang pertemuan ${room.name} sedang dalam perbaikan dan tidak dapat dibundel.`
+      );
+      setCorporateDraft((prev) => ({ ...prev, meetingRoomId: undefined }));
+      setCartItems((prev) => prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-")));
+      return;
+    }
+
+    const duration = Math.max(1, newDraft.meetingDurationHours || 1);
+    const bookingDate = newDraft.meetingBookingDate || getTodayWitaDateString();
+    const startTime = newDraft.meetingStartTime || getValidOperationalTime(bookingDate);
+    const startHour = parseHour(startTime);
+    const endHour = startHour + duration;
+    const endTime = startTime ? `${String(endHour).padStart(2, "0")}:00` : "";
+
+    const roomCartItem: POSCartItem = {
+      cartItemId: `bundle-meeting-${room.id}`,
+      productId: `space-${room.id}`,
+      productName: `Sewa Ruang Meeting: ${room.name}`,
+      quantity: duration,
+      basePrice: room.hourlyRate,
+      selectedModifiers: [],
+      unitFinalPrice: room.hourlyRate,
+      itemTotal: room.hourlyRate * duration,
+      tenantId: "DAGO_HUB",
+      itemType: "COWORKING",
+      notes: `Paket Ruang Meeting Perusahaan (${room.capacity} Pax) - ${duration} Jam`,
+      coworkingMeta: {
+        spaceId: room.id,
+        spaceName: room.name,
+        spaceType: room.type,
+        durationHours: duration,
+        startTime,
+        endTime,
+        bookingDate,
+      },
+    };
+
+    setCartItems((prev) => {
+      const withoutRoom = prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-"));
+      return [...withoutRoom, roomCartItem];
+    });
+  };
+
+  const handleCorporateMeetingRoomChange = (roomId: string) => {
+    handleCorporateDraftChange({
+      ...corporateDraft,
+      meetingRoomId: roomId || undefined,
+    });
+  };
 
   // Tax Settings State
   const [isTaxEnabled, setIsTaxEnabled] = useState<boolean>(true);
@@ -763,6 +844,9 @@ export default function POSPage() {
 
   const handleRemoveItem = (cartItemId: string) => {
     setCartItems((prev) => prev.filter((i) => i.cartItemId !== cartItemId));
+    if (cartItemId.startsWith("bundle-meeting-")) {
+      setCorporateDraft((prev) => ({ ...prev, meetingRoomId: undefined }));
+    }
   };
 
   const handleSelectMember = (memberId: string) => {
@@ -849,6 +933,7 @@ export default function POSPage() {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    paymentReference?: string;
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => {
@@ -888,9 +973,151 @@ export default function POSPage() {
         existingNumbers: orders.map((o) => o.orderNumber),
       });
 
-      const effectiveCustomerName =
-        customerName.trim() ||
-        (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
+      const isCorporate = corporateDraft.enabled && corporateDraft.companyName.trim().length > 0;
+      const isInvoicePayment = paymentData.method === "INVOICE";
+      const resolvedBillingType: CorporateBillingType = isInvoicePayment ? "INVOICE" : "PREPAID";
+
+      let linkedBookingCode: string | undefined = undefined;
+      let linkedBookingId: string | undefined = undefined;
+      let resolveOrderSynced: ((ok: boolean) => void) | undefined;
+      const linkedRoom = corporateDraft.meetingRoomId
+        ? cwSpaces.find((s) => s.id === corporateDraft.meetingRoomId)
+        : undefined;
+
+      if (isCorporate && linkedRoom) {
+        const meetingDate = corporateDraft.meetingBookingDate || getTodayWitaDateString();
+        const meetingTime = corporateDraft.meetingStartTime || getValidOperationalTime(meetingDate);
+        const meetingDuration = Math.max(1, corporateDraft.meetingDurationHours || 1);
+        if (!meetingTime || isSlotPast(meetingDate, meetingTime)) {
+          notify.error(
+            "Jadwal ruang pertemuan sudah lewat",
+            "Pilih tanggal atau jam mulai ruang pertemuan yang masih tersedia."
+          );
+          isSubmittingOrderRef.current = false;
+          return;
+        }
+        if (!isWithinCoworkingHours(meetingTime, meetingDuration)) {
+          notify.error(
+            "Jadwal ruang pertemuan di luar jam operasional",
+            "Jam operasional ruang pertemuan adalah 09.00 sampai 18.00 WITA."
+          );
+          isSubmittingOrderRef.current = false;
+          return;
+        }
+        const hourlyRate = linkedRoom.hourlyRate;
+        const totalRoomPrice = hourlyRate * meetingDuration;
+        const maxCapacity =
+          linkedRoom.type === "HOT_DESK" ? Math.max(1, linkedRoom.capacity || 8) : 1;
+        const calculatedEndTime = calculateEndTime(meetingTime, meetingDuration).replace(
+          /\s*WITA$/i,
+          ""
+        );
+
+        try {
+          if (typeof window !== "undefined" && typeof fetch === "function") {
+            const liveRes = await fetch("/api/coworking/bookings", { cache: "no-store" });
+            if (liveRes.ok) {
+              const liveJson = await liveRes.json().catch(() => null);
+              if (liveJson && Array.isArray(liveJson.bookings)) {
+                const liveConflict = checkCoworkingBookingConflict(liveJson.bookings, {
+                  spaceId: linkedRoom.id,
+                  spaceName: linkedRoom.name,
+                  bookingType: "HOURLY",
+                  date: meetingDate,
+                  startTime: meetingTime,
+                  endTime: calculatedEndTime,
+                  maxCapacity,
+                });
+                if (liveConflict.hasConflict) {
+                  notify.error(
+                    "Ruang pertemuan sudah terisi",
+                    liveConflict.message ||
+                      "Slot ruang pertemuan sudah dipesan pihak lain. Pilih jam atau ruangan lain."
+                  );
+                  isSubmittingOrderRef.current = false;
+                  return;
+                }
+              }
+            }
+          }
+        } catch {
+          // Offline or mocked environment: fall back to local bookingsRef check in cwBookSpace
+        }
+
+        const orderSyncedPromise = new Promise<boolean>((resolve) => {
+          resolveOrderSynced = resolve;
+        });
+
+        try {
+          const booked = cwBookSpace(
+            {
+              guestName: corporateDraft.picName.trim() || "PIC Corporate",
+              guestPhone: corporateDraft.picPhone.trim() || "-",
+              guestEmail: "",
+              company: corporateDraft.companyName.trim(),
+              spaceId: linkedRoom.id,
+              spaceName: linkedRoom.name,
+              spaceType: linkedRoom.type,
+              bookingType: "HOURLY",
+              date: meetingDate,
+              startTime: meetingTime,
+              endTime: calculatedEndTime,
+              duration: meetingDuration,
+              price: hourlyRate,
+              discount: 0,
+              totalAmount: totalRoomPrice,
+              paidAmount: isInvoicePayment ? 0 : totalRoomPrice,
+              remainingAmount: isInvoicePayment ? totalRoomPrice : 0,
+              outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+              paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
+              paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
+              linkedOrderId: receiptNo,
+              billedViaPosOrder: true,
+            },
+            {
+              waitBeforeSync: orderSyncedPromise,
+              onSyncRejected: (err) => {
+                notify.error(
+                  "Sinkronisasi ruang pertemuan ditolak server",
+                  `${err} Periksa atau batalkan pesanan ${receiptNo} bila ruangan perlu dijadwalkan ulang.`
+                );
+              },
+            }
+          );
+          linkedBookingCode = booked?.bookingCode;
+          linkedBookingId = booked?.id;
+        } catch (e: any) {
+          resolveOrderSynced?.(false);
+          const errMsg = e?.message || "Ruang pertemuan tidak tersedia pada jadwal yang dipilih.";
+          notify.error("Gagal memesan ruangan", errMsg);
+          isSubmittingOrderRef.current = false;
+          return;
+        }
+      }
+
+      const invoiceNumber = receiptNo.startsWith("INV-") ? receiptNo : `INV-${receiptNo}`;
+
+      const corporateInfo = isCorporate
+        ? {
+            companyName: corporateDraft.companyName.trim(),
+            picName: corporateDraft.picName.trim() || "PIC Tim",
+            picPhone: corporateDraft.picPhone.trim() || "-",
+            headcount: corporateDraft.headcount || 1,
+            billingType: resolvedBillingType,
+            invoiceNumber,
+            invoiceDueDate: isInvoicePayment
+              ? getTodayWitaDateString(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000))
+              : undefined,
+            notes: orderNotes.trim() || undefined,
+            linkedBookingCode,
+            linkedSpaceName: linkedRoom?.name,
+          }
+        : undefined;
+
+      const effectiveCustomerName = corporateInfo
+        ? `${corporateInfo.companyName} (PIC: ${corporateInfo.picName})`
+        : customerName.trim() ||
+          (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
 
       const { order: optimisticOrder, serverSync } = createPosOrderWithSync({
         orderNumber: receiptNo,
@@ -899,6 +1126,8 @@ export default function POSPage() {
         customerName: effectiveCustomerName,
         customerPhone: selectedMember?.phone,
         loyaltyMemberId: selectedMember?.id,
+        corporateInfo,
+        paymentStatus: paymentData.method === "INVOICE" ? "PENDING" : "PAID",
         orderType,
         subtotal,
         discount: cartTaxBreakdown.discount,
@@ -924,7 +1153,7 @@ export default function POSPage() {
         total: grandTotal,
         notes: orderNotes.trim() || undefined,
         paymentMethod: paymentData.method,
-        paymentReference: paymentData.qrisVerification?.referenceNumber,
+        paymentReference: paymentData.paymentReference || paymentData.qrisVerification?.referenceNumber,
         qrisVerification: paymentData.qrisVerification,
         splitDetails: paymentData.splitDetails?.map((g, idx) => ({
           guestNumber: idx + 1,
@@ -956,12 +1185,18 @@ export default function POSPage() {
 
       const syncResult = await serverSync;
       if (syncResult.rejected) {
+        if (resolveOrderSynced) {
+          resolveOrderSynced(false);
+        } else if (linkedBookingId || linkedBookingCode) {
+          cwCancelBooking(linkedBookingId || linkedBookingCode!);
+        }
         notify.error(
           "Transaksi ditolak server",
           syncResult.error || "Pembayaran tidak dapat diselesaikan."
         );
         return;
       }
+      resolveOrderSynced?.(true);
 
       const createdOrder = syncResult.order ?? optimisticOrder;
 
@@ -1035,14 +1270,17 @@ export default function POSPage() {
             createdOrder.id
           );
         }
-        const earnedPoints = Math.floor(grandTotal / 1000);
-        addPoints(
-          selectedMember.id,
-          earnedPoints,
-          `Transaksi POS #${createdOrder.orderNumber}`,
-          createdOrder.id,
-          grandTotal
-        );
+        const earnedPoints =
+          createdOrder.paymentStatus === "PAID" ? Math.floor(grandTotal / 1000) : 0;
+        if (earnedPoints > 0 && createdOrder.paymentStatus === "PAID") {
+          addPoints(
+            selectedMember.id,
+            earnedPoints,
+            `Transaksi POS #${createdOrder.orderNumber}`,
+            createdOrder.id,
+            grandTotal
+          );
+        }
 
         loyaltyReceiptInfo = {
           name: selectedMember.name,
@@ -1058,15 +1296,17 @@ export default function POSPage() {
         redeemPromo(selectedPromoId, selectedMember?.id || selectedMember?.phone || user?.id || "walk-in-customer");
       }
 
-      const cashPortion =
-        paymentData.method === "SPLIT"
-          ? (paymentData.splitDetails || [])
-              .filter((guest) => guest.paymentMethod === "CASH")
-              .reduce((sum, guest) => sum + guest.assignedAmount, 0)
-          : paymentData.method === "CASH"
-            ? grandTotal
-            : 0;
-      recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
+      if (paymentData.method !== "INVOICE") {
+        const cashPortion =
+          paymentData.method === "SPLIT"
+            ? (paymentData.splitDetails || [])
+                .filter((guest) => guest.paymentMethod === "CASH")
+                .reduce((sum, guest) => sum + guest.assignedAmount, 0)
+            : paymentData.method === "CASH"
+              ? grandTotal
+              : 0;
+        recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
+      }
 
       logActivity({
         module: "POS",
@@ -1120,11 +1360,13 @@ export default function POSPage() {
         coworkingDiscount: cartTaxBreakdown.coworkingDiscount,
         grandTotal,
         paymentMethod: paymentData.method,
+        paymentStatus: createdOrder.paymentStatus,
         amountPaid: paymentData.amountPaid,
         changeDue: paymentData.changeDue,
         splitDetails: paymentData.splitDetails,
         qrisVerification: paymentData.qrisVerification,
         loyaltyMember: loyaltyReceiptInfo,
+        corporateInfo,
       };
 
       if (totalDiscount > 0) {
@@ -1165,6 +1407,7 @@ export default function POSPage() {
     setSelectedCategory("Semua Kategori");
     setSelectedTable("");
     setOrderType("DINE_IN");
+    setCorporateDraft(DEFAULT_CORPORATE_DRAFT);
     notify.success("Transaksi baru siap", "Keranjang dan formulir kasir sudah dikosongkan.");
   };
 
@@ -1213,6 +1456,7 @@ export default function POSPage() {
         targetDate: cwDate,
         startHour: startH,
         durationHours: cwDuration,
+        checkPast: true,
       }).isAvailable
     ).length;
   }, [filteredCwSpaces, cwSpaces, cwBookings, cwDate, cwStartTime, cwDuration]);
@@ -1230,6 +1474,7 @@ export default function POSPage() {
       targetDate,
       startHour,
       durationHours,
+      checkPast: true,
     });
   };
 
@@ -1421,7 +1666,13 @@ export default function POSPage() {
       if (cwCustomerType === "MEMBER" && cwSelectedMember) {
         const earnedPoints = Math.floor(cwPricing.total / 1000);
         if (earnedPoints > 0) {
-          addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${createdBooking.bookingCode}`);
+          addPoints(
+            cwSelectedMember.id,
+            earnedPoints,
+            `Booking Coworking #${createdBooking.bookingCode}`,
+            createdBooking.id,
+            cwPricing.total
+          );
         }
       }
 
@@ -1503,7 +1754,13 @@ export default function POSPage() {
     if (cwCustomerType === "MEMBER" && cwSelectedMember) {
       const earnedPoints = Math.floor(verifiedBooking.totalAmount / 1000);
       if (earnedPoints > 0) {
-        addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${verifiedBooking.bookingCode}`);
+        addPoints(
+          cwSelectedMember.id,
+          earnedPoints,
+          `Booking Coworking #${verifiedBooking.bookingCode}`,
+          verifiedBooking.id,
+          verifiedBooking.totalAmount
+        );
       }
     }
 
@@ -1606,6 +1863,35 @@ export default function POSPage() {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
       handleOpenShiftModal();
       return;
+    }
+    if (corporateDraft.enabled) {
+      if (
+        !corporateDraft.companyName.trim() ||
+        !corporateDraft.picName.trim() ||
+        !corporateDraft.picPhone.trim()
+      ) {
+        notify.error("Data perusahaan belum lengkap", "Isi nama perusahaan dan kontak PIC.");
+        return;
+      }
+      if (corporateDraft.meetingRoomId) {
+        const meetingDate = corporateDraft.meetingBookingDate || getTodayWitaDateString();
+        const meetingTime = corporateDraft.meetingStartTime || getValidOperationalTime(meetingDate);
+        const meetingDuration = Math.max(1, corporateDraft.meetingDurationHours || 1);
+        if (!meetingTime || isSlotPast(meetingDate, meetingTime)) {
+          notify.error(
+            "Jadwal ruang pertemuan sudah lewat",
+            "Pilih tanggal atau jam mulai ruang pertemuan yang masih tersedia."
+          );
+          return;
+        }
+        if (!isWithinCoworkingHours(meetingTime, meetingDuration)) {
+          notify.error(
+            "Jadwal ruang pertemuan di luar jam operasional",
+            "Jam operasional ruang pertemuan adalah 09.00 sampai 18.00 WITA."
+          );
+          return;
+        }
+      }
     }
     setIsPaymentModalOpen(true);
   };
@@ -1730,6 +2016,12 @@ export default function POSPage() {
                 onRemoveVoucher={() => setAppliedVoucher(null)}
                 orderNotes={orderNotes}
                 onOrderNotesChange={setOrderNotes}
+                corporateDraft={corporateDraft}
+                onCorporateDraftChange={handleCorporateDraftChange}
+                meetingRooms={meetingRoomsList}
+                onSelectedMeetingRoomChange={handleCorporateMeetingRoomChange}
+                coworkingBookings={cwBookings}
+                coworkingSpaces={cwSpaces}
               />
               <Separator />
               <div className="max-h-80 overflow-y-auto">
@@ -1794,6 +2086,7 @@ export default function POSPage() {
                                 size="icon-sm"
                                 onClick={() => handleUpdateQuantity(item.cartItemId, -1)}
                                 aria-label="Kurangi jumlah"
+                                disabled={item.cartItemId.startsWith("bundle-meeting-")}
                               >
                                 <Minus />
                               </Button>
@@ -1805,6 +2098,7 @@ export default function POSPage() {
                                 size="icon-sm"
                                 onClick={() => handleUpdateQuantity(item.cartItemId, 1)}
                                 aria-label="Tambah jumlah"
+                                disabled={item.cartItemId.startsWith("bundle-meeting-")}
                               >
                                 <Plus />
                               </Button>
@@ -2052,6 +2346,10 @@ export default function POSPage() {
                     const startH = parseHour(slot);
                     return checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration).isAvailable;
                   }}
+                  getSlotInfo={(slot) => {
+                    const startH = parseHour(slot);
+                    return checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
+                  }}
                   cwUsageType={cwUsageType}
                   onUsageTypeChange={setCwUsageType}
                   cwCompanyName={cwCompanyName}
@@ -2156,8 +2454,15 @@ export default function POSPage() {
         discount={cartTaxBreakdown.discount}
         grandTotal={grandTotal}
         tableNumber={selectedTable}
-        customerName={selectedMember?.name || customerName.trim() || "Walk-in Guest"}
+        customerName={
+          corporateDraft.enabled && corporateDraft.companyName
+            ? `${corporateDraft.companyName} (PIC: ${corporateDraft.picName || "Tim"})`
+            : selectedMember?.name || customerName.trim() || "Walk-in Guest"
+        }
         orderType={orderType}
+        isCorporateOrder={corporateDraft.enabled}
+        corporateBillingType={corporateDraft.billingType}
+        corporateCompany={corporateDraft.companyName}
         onPaymentSuccess={handlePaymentSuccess}
       />
 

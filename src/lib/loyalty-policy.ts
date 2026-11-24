@@ -9,11 +9,19 @@ export interface LoyaltyTierThresholds {
 
 /**
  * Determines whether a given user role is permitted to view full (unmasked) customer contact info (PII).
- * Only SUPER_ADMIN, OWNER, and MANAGER are granted full access.
+ * Only SUPER_ADMIN, Hub OWNER (not TENANT scope), and MANAGER are granted full access.
  */
-export function canUserViewFullCustomerContacts(roleSlug?: string | null): boolean {
+export function canUserViewFullCustomerContacts(
+  roleSlug?: string | null,
+  scopeLevel?: string | null
+): boolean {
   if (!roleSlug) return false;
-  return roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
+  if (roleSlug === "SUPER_ADMIN" || roleSlug === "MANAGER") return true;
+  if (roleSlug === "OWNER") {
+    // Tenant Owner is restricted from viewing full hub customer contacts
+    return scopeLevel !== "TENANT";
+  }
+  return false;
 }
 
 /**
@@ -96,10 +104,15 @@ export function resolveAuthoritativeMemberTier(
  */
 export function sanitizeMemberForRole(
   member: LoyaltyMember,
-  role?: string | null
+  role?: string | null,
+  scopeLevel?: string | null,
+  options?: { isSelf?: boolean }
 ): LoyaltyMember {
-  if (canUserViewFullCustomerContacts(role)) {
-    return member;
+  if (canUserViewFullCustomerContacts(role, scopeLevel) || options?.isSelf) {
+    return {
+      ...member,
+      identityNo: role === "CUSTOMER" ? "" : member.identityNo,
+    };
   }
   return {
     ...member,

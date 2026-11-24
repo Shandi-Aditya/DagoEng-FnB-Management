@@ -1,34 +1,68 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthUser } from "@/lib/server-auth";
+import { RoleSlug } from "@/types/auth";
+
+export const dynamic = "force-dynamic";
+
+const ALLOWED_CLOSING_PDF_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const outlet = searchParams.get("outlet") || "Dago Creative Hub (Singaraja)";
-  const cashier = searchParams.get("cashier") || "Kasir Bertugas";
-  const date = searchParams.get("date") || new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-  const time = searchParams.get("time") || new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-  const docNo = searchParams.get("docNo") || `EOD-${Date.now()}`;
-  
-  const transactions = searchParams.get("transactions") || "0";
-  const gross = Number(searchParams.get("gross")) || 0;
-  const tax = Number(searchParams.get("tax")) || 0;
-  const service = Number(searchParams.get("service")) || 0;
-  const net = Number(searchParams.get("net")) || (gross - tax - service);
-  const qris = Number(searchParams.get("qris")) || 0;
-  const cash = Number(searchParams.get("cash")) || 0;
-  const edc = Number(searchParams.get("edc")) || 0;
-  const mitraShare = Number(searchParams.get("mitra")) || Math.round(net * 0.85);
-  const dagoShare = Number(searchParams.get("dago")) || (net - mitraShare);
+  try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak: Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
 
-  const initialCash = Number(searchParams.get("initialCash")) || 0;
-  const refundAmount =
-    Number(searchParams.get("refundAmount") ?? searchParams.get("refund")) || 0;
-  const expectedCash =
-    searchParams.get("expectedCash") !== null
-      ? Number(searchParams.get("expectedCash"))
-      : initialCash + cash - refundAmount;
-  const actualCash = searchParams.get("actualCash") !== null ? Number(searchParams.get("actualCash")) : expectedCash;
-  const variance = searchParams.get("variance") !== null ? Number(searchParams.get("variance")) : (actualCash - expectedCash);
-  const notes = searchParams.get("notes") || "";
+    if (!ALLOWED_CLOSING_PDF_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki wewenang untuk mencetak laporan closing shift.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const outlet = escapeHtml(searchParams.get("outlet") || "Dago Creative Hub (Singaraja)");
+    const cashier = escapeHtml(searchParams.get("cashier") || "Kasir Bertugas");
+    const date = escapeHtml(searchParams.get("date") || new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }));
+    const time = escapeHtml(searchParams.get("time") || new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
+    const docNo = escapeHtml(searchParams.get("docNo") || `EOD-${Date.now()}`);
+    
+    const transactions = escapeHtml(searchParams.get("transactions") || "0");
+    const gross = Number(searchParams.get("gross")) || 0;
+    const tax = Number(searchParams.get("tax")) || 0;
+    const service = Number(searchParams.get("service")) || 0;
+    const net = Number(searchParams.get("net")) || (gross - tax - service);
+    const qris = Number(searchParams.get("qris")) || 0;
+    const cash = Number(searchParams.get("cash")) || 0;
+    const edc = Number(searchParams.get("edc")) || 0;
+    const mitraShare = Number(searchParams.get("mitra")) || Math.round(net * 0.85);
+    const dagoShare = Number(searchParams.get("dago")) || (net - mitraShare);
+
+    const initialCash = Number(searchParams.get("initialCash")) || 0;
+    const refundAmount =
+      Number(searchParams.get("refundAmount") ?? searchParams.get("refund")) || 0;
+    const expectedCash =
+      searchParams.get("expectedCash") !== null
+        ? Number(searchParams.get("expectedCash"))
+        : initialCash + cash - refundAmount;
+    const actualCash = searchParams.get("actualCash") !== null ? Number(searchParams.get("actualCash")) : expectedCash;
+    const variance = searchParams.get("variance") !== null ? Number(searchParams.get("variance")) : (actualCash - expectedCash);
+    const notes = escapeHtml(searchParams.get("notes") || "");
 
   const formatIDR = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 
@@ -245,4 +279,8 @@ export async function GET(req: NextRequest) {
       "Content-Type": "text/html; charset=utf-8",
     },
   });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
 }

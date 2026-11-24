@@ -619,7 +619,27 @@ export const tablesDomainSpec: ServerDomainSpec<"tables"> = {
   domain: "tables",
   filename: "tables_state.json",
   defaultState: defaultTablesState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role || auth.role === "CUSTOMER") {
+      return {
+        allowed: true,
+        transform: (state) => ({
+          ...state,
+          areas: state.areas.map((area) => ({
+            ...area,
+            tables: area.tables.map((table) => {
+              const sanitized = { ...table };
+              delete sanitized.customer;
+              delete sanitized.total;
+              delete sanitized.currentBillTotal;
+              delete sanitized.activeOrderId;
+              return sanitized;
+            }),
+          })),
+          reservations: [],
+        }),
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -903,6 +923,11 @@ export const coworkingMasterDomainSpec: ServerDomainSpec<"coworking-master"> = {
       allowed: true,
       transform: (state) => ({
         ...state,
+        spaces: state.spaces.map((space) => {
+          const sanitized = { ...space };
+          delete sanitized.currentSession;
+          return sanitized;
+        }),
         members: [],
         checkLogs: [],
       }),

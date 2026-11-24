@@ -42,7 +42,10 @@ describe("Task V-03: Simpan Jam Operasional & Status Buka/Tutup Mitra ke Server"
 
       const postReq = new NextRequest("http://localhost:3000/api/tenant/operations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=SUPER_ADMIN",
+        },
         body: JSON.stringify({ tenantOperations: updatedOps }),
       });
 
@@ -77,7 +80,10 @@ describe("Task V-03: Simpan Jam Operasional & Status Buka/Tutup Mitra ke Server"
 
       const saveReq = new NextRequest("http://localhost:3000/api/tenant/operations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=SUPER_ADMIN",
+        },
         body: JSON.stringify({ tenantOperations: customOps }),
       });
       await postTenantOperations(saveReq);

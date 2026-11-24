@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { getRequestAuthUser, isCheckInStaffEmail } from "@/lib/server-auth";
+import type { RoleSlug } from "@/types/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +26,29 @@ const EXTENSION_MAP: Record<string, string> = {
 // Max 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+const ALLOWED_UPLOAD_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CUSTOMER"];
+
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: auth.error || "UNAUTHORIZED: Autentikasi sesi diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    const isCheckInStaff = auth.role === "CHECKIN_STAFF" || isCheckInStaffEmail(auth.email || "");
+    if (isCheckInStaff || !ALLOWED_UPLOAD_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `FORBIDDEN: Role [${auth.role}] tidak memiliki izin untuk mengunggah gambar event.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 

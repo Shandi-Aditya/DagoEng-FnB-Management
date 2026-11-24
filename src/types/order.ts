@@ -10,6 +10,50 @@ export type OrderStatus =
 
 export type SLAStatus = "ON_TIME" | "AT_RISK" | "DELAYED";
 
+export type CorporateBillingType = "PREPAID" | "INVOICE";
+
+export interface CorporateOrderDraft {
+  enabled: boolean;
+  companyName: string;
+  picName: string;
+  picPhone: string;
+  headcount: number;
+  billingType: CorporateBillingType;
+  meetingRoomId?: string;
+  meetingBookingDate?: string;
+  meetingStartTime?: string;
+  meetingDurationHours?: number;
+  notes?: string;
+}
+
+export const DEFAULT_CORPORATE_DRAFT: CorporateOrderDraft = {
+  enabled: false,
+  companyName: "",
+  picName: "",
+  picPhone: "",
+  headcount: 1,
+  billingType: "PREPAID",
+  meetingRoomId: undefined,
+  meetingBookingDate: "",
+  meetingStartTime: "",
+  meetingDurationHours: 1,
+  notes: "",
+};
+
+export interface CorporateOrderInfo {
+  companyName: string;
+  picName: string;
+  picPhone: string;
+  picEmail?: string;
+  headcount?: number;
+  billingType: CorporateBillingType;
+  invoiceNumber?: string;
+  invoiceDueDate?: string;
+  notes?: string;
+  linkedBookingCode?: string;
+  linkedSpaceName?: string;
+}
+
 export interface OrderStatusHistoryItem {
   id: string;
   orderId: string;
@@ -62,6 +106,7 @@ export interface OrderRecord {
   customerName: string;
   /** Phone left by the guest at self-order checkout; the customer app finds "my orders" by this, never by name. */
   customerPhone?: string;
+  corporateInfo?: CorporateOrderInfo;
   cashierName?: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   status: OrderStatus;
@@ -84,7 +129,7 @@ export interface OrderRecord {
   serviceChargePercent?: number;
   total: number;
   paymentStatus: "PENDING" | "PAID" | "REFUNDED";
-  paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+  paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT" | "INVOICE";
   paymentReference?: string;
   splitDetails?: Array<{
     guestNumber: number;

@@ -685,7 +685,9 @@ describe("Task V-34: POS Refund with Mandatory Reason + Supervisor PIN, Cash Ret
     expect(Number(parsedUrl.searchParams.get("refundAmount"))).toBe(total);
 
     parsedUrl.searchParams.delete("expectedCash");
-    const pdfRes = await getClosingPdf(new NextRequest(parsedUrl.toString()));
+    const pdfRes = await getClosingPdf(
+      new NextRequest(parsedUrl.toString(), { headers: { cookie: CASHIER_COOKIE } })
+    );
     expect(pdfRes.status).toBe(200);
     const pdfHtml = await pdfRes.text();
     expect(pdfHtml).toContain("Refund tunai");

@@ -16,7 +16,7 @@ import { useOutlet } from "@/contexts/OutletContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
-import type { CoworkingBooking } from "@/types/coworking";
+import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 
 import { CoworkingBookingsTab } from "@/features/coworking/CoworkingBookingsTab";
 import {
@@ -190,7 +190,7 @@ export default function CoworkingPage() {
     guestPhone: string;
     guestEmail: string;
     company?: string;
-    space: any;
+    space: CoworkingSpaceItem;
     bookingType: "HOURLY" | "DAILY" | "MONTHLY";
     date: string;
     endDate?: string;
@@ -212,36 +212,47 @@ export default function CoworkingPage() {
     const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
     const finalTotal = basePrice + taxAmount;
 
-    const createdBooking = bookSpace({
-      guestName: bookingData.guestName,
-      guestPhone: bookingData.guestPhone,
-      guestEmail: bookingData.guestEmail || "-",
-      company: bookingData.company,
-      spaceId: bookingData.space.id,
-      spaceName: bookingData.space.name,
-      spaceType: bookingData.space.type,
-      bookingType: bookingData.bookingType,
-      date: bookingData.date,
-      endDate: bookingData.endDate,
-      startTime: bookingData.startTime,
-      endTime: bookingData.endTime,
-      duration: bookingData.duration,
-      price: basePrice,
-      discount: 0,
-      tax: taxAmount,
-      taxType: cwTaxType,
-      taxRatePercent: cwTaxRatePercent,
-      outletId: targetOutletId,
-      createdAt: nowIso,
-      totalAmount: finalTotal,
-      paidAmount: isQris ? 0 : finalTotal,
-      remainingAmount: isQris ? finalTotal : 0,
-      paymentStatus: isQris ? "PENDING" : "PAID",
-      paymentMethod: bookingData.paymentMethod,
-      paymentRef: isQris ? undefined : `PAY-CWK-${Date.now().toString().slice(-6)}`,
-      paymentTimestamp: isQris ? undefined : nowIso,
-      checkInStatus: !isQris && bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
-    });
+    let createdBooking: ReturnType<typeof bookSpace>;
+    try {
+      createdBooking = bookSpace({
+        guestName: bookingData.guestName,
+        guestPhone: bookingData.guestPhone,
+        guestEmail: bookingData.guestEmail || "-",
+        company: bookingData.company,
+        spaceId: bookingData.space.id,
+        spaceName: bookingData.space.name,
+        spaceType: bookingData.space.type,
+        bookingType: bookingData.bookingType,
+        date: bookingData.date,
+        endDate: bookingData.endDate,
+        startTime: bookingData.startTime,
+        endTime: bookingData.endTime,
+        duration: bookingData.duration,
+        price: basePrice,
+        discount: 0,
+        tax: taxAmount,
+        taxType: cwTaxType,
+        taxRatePercent: cwTaxRatePercent,
+        outletId: targetOutletId,
+        createdAt: nowIso,
+        totalAmount: finalTotal,
+        paidAmount: isQris ? 0 : finalTotal,
+        remainingAmount: isQris ? finalTotal : 0,
+        paymentStatus: isQris ? "PENDING" : "PAID",
+        paymentMethod: bookingData.paymentMethod,
+        paymentRef: isQris ? undefined : `PAY-CWK-${Date.now().toString().slice(-6)}`,
+        paymentTimestamp: isQris ? undefined : nowIso,
+        checkInStatus: !isQris && bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
+      });
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Booking gagal disimpan.";
+      notify.error(
+        "Booking ditolak",
+        msg.replace(/^(COWORKING_SCHEDULE_CLOSED|DOUBLE_BOOKING_CONFLICT):\s*/, "")
+      );
+      return;
+    }
 
     if (isQris) {
       setSelectedQrisBooking(createdBooking);

@@ -700,13 +700,18 @@ async function executeAuthorizedOrderWrite(params: {
   }
 
   let bomDeduction: { applied: boolean; deductedItems: number } | null = null;
+  const isCorporateInvoiceOrder =
+    savedOrder.paymentMethod === "INVOICE" ||
+    savedOrder.corporateInfo?.billingType === "INVOICE";
   if (
-    savedOrder.paymentStatus === "PAID" &&
+    (savedOrder.paymentStatus === "PAID" || isCorporateInvoiceOrder) &&
     savedOrder.status !== "CANCELLED" &&
     !savedOrder.bomDeducted
   ) {
     bomDeduction = await deductPersistentOrderBOM(savedOrder, {
-      reason: "POS Server Order Settlement",
+      reason: isCorporateInvoiceOrder
+        ? "POS Corporate Invoice Order Confirmation"
+        : "POS Server Order Settlement",
     });
   }
 
@@ -794,6 +799,10 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Gagal menyimpan transaksi POS.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+export async function PUT(req: NextRequest) {
+  return POST(req);
 }
 
 export async function PATCH(req: NextRequest) {

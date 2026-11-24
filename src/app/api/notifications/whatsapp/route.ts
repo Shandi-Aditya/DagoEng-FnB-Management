@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthUser } from "@/lib/server-auth";
 
 interface WhatsAppSendPayload {
   message: string;
@@ -7,8 +8,28 @@ interface WhatsAppSendPayload {
   filename?: string;
 }
 
+const ALLOWED_WHATSAPP_ROLES = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: auth.error || "UNAUTHORIZED: Autentikasi sesi staf diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    if (!ALLOWED_WHATSAPP_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `FORBIDDEN: Role [${auth.role}] tidak berhak mengirim notifikasi WhatsApp.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = (await req.json()) as WhatsAppSendPayload;
     const { message, targetPhone, url, filename } = body;
 
@@ -27,16 +48,23 @@ export async function POST(req: NextRequest) {
       resolvedTarget = "62" + resolvedTarget.slice(1);
     }
 
-    // Check if token is configured
-    if (!fonnteToken || fonnteToken.trim() === "") {
+    const isExplicitlyDisabled =
+      process.env.ENABLE_WHATSAPP_CHATBOT === "false" ||
+      process.env.DISABLE_WHATSAPP_CHATBOT === "true";
+
+    // Check if disabled or token is not configured
+    if (isExplicitlyDisabled || !fonnteToken || fonnteToken.trim() === "") {
       console.warn(
-        "[WhatsApp Gateway - Fonnte] FONNTE_API_TOKEN belum dikonfigurasi di environment variable (.env)."
+        isExplicitlyDisabled
+          ? "[WhatsApp Gateway] Pengiriman WhatsApp dinonaktifkan sementara (ENABLE_WHATSAPP_CHATBOT=false)."
+          : "[WhatsApp Gateway - Fonnte] FONNTE_API_TOKEN belum dikonfigurasi di environment variable (.env)."
       );
       return NextResponse.json({
         success: false,
         configured: false,
-        message:
-          "FONNTE_API_TOKEN belum diset di server environment. Laporan closing tetap diproses di sistem.",
+        message: isExplicitlyDisabled
+          ? "Layanan pengiriman WhatsApp otomatis dinonaktifkan sementara hingga sistem siap rilis produksi."
+          : "FONNTE_API_TOKEN belum diset di server environment. Laporan closing tetap diproses di sistem.",
       });
     }
 

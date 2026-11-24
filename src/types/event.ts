@@ -380,12 +380,14 @@ export interface EventTicketOrder {
   checkInTime?: string | null;
   dokuInvoiceNumber?: string | null;
   dokuPaymentUrl?: string | null;
+  paymentUrl?: string | null;
   paidAt?: string | null;
   expiresAt?: string | null;
   paymentProofUrl?: string | null;
   paymentProofUploadedAt?: string | null;
   paymentProofNote?: string | null;
   guestToken?: string; // High-entropy random token for secure guest access
+  clientReferenceId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -403,7 +405,10 @@ export interface EventBookingPayload {
   destinationBankId?: string;
   honeypot?: string;
   enforceOfficialBank?: boolean;
+  clientReferenceId?: string;
 }
+
+export type CreateEventBookingInput = EventBookingPayload;
 
 export interface CreateInvitationPayload {
   eventId: string;

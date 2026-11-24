@@ -13,6 +13,7 @@ import {
 import {
   MAX_APPLIED_OP_IDS,
   MAX_INVENTORY_LOGS,
+  type DomainReadAuthDecision,
   type DomainWriteAuthDecision,
   type InventoryCommand,
   type InventoryDomainState,
@@ -251,7 +252,21 @@ export const inventoryDomainSpec: ServerDomainSpec<"inventory"> = {
   domain: "inventory",
   filename: "inventory_state.json",
   defaultState: createDefaultInventoryState,
-  authorizeRead() {
+  authorizeRead(auth): DomainReadAuthDecision<InventoryDomainState> {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses data inventaris.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses data inventaris internal.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command): DomainWriteAuthDecision {

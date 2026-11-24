@@ -284,8 +284,12 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       const auditRes = await getAuditLogsRoute(new NextRequest("http://localhost:3000/api/audit-logs"));
       expect(auditRes.status).toBe(401);
 
-      const cwRes = await getCoworkingBookingsRoute(
-        new NextRequest("http://localhost:3000/api/coworking/bookings")
+      const cwRes = await postCoworkingBookingsRoute(
+        new NextRequest("http://localhost:3000/api/coworking/bookings", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        })
       );
       expect(cwRes.status).toBe(401);
     });

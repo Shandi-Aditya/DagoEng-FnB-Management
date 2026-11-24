@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -42,7 +42,6 @@ import type { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 
 import { EventDetailSidebar } from "@/features/event-detail/EventDetailSidebar";
 import { EventBookingDialog, type BookingFormData } from "@/features/event-detail/EventBookingDialog";
-import { EventPaymentGuideDialog } from "@/features/event-detail/EventPaymentGuideDialog";
 import { EventTicketPassDialog } from "@/features/event-detail/EventTicketPassDialog";
 import { EventShareDialog } from "@/features/event-detail/EventShareDialog";
 import {
@@ -102,6 +101,7 @@ function MyTicketsNavAction({ user }: { user: AuthenticatedUser | null }) {
 }
 
 export default function EventDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const { user } = useAuth();
@@ -113,7 +113,6 @@ export default function EventDetailPage() {
   // Modals
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
 
   // Booking Form State
@@ -126,6 +125,15 @@ export default function EventDetailPage() {
   });
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const bookingAttemptRef = useRef<string>("");
+
+  useEffect(() => {
+    if (isBookingModalOpen) {
+      bookingAttemptRef.current = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `attempt-${Date.now()}`;
+    } else {
+      bookingAttemptRef.current = "";
+    }
+  }, [isBookingModalOpen, bookingForm.ticketTierId, bookingForm.ticketCount, bookingForm.guestEmail]);
 
   // Tickets
   const [pendingTicket, setPendingTicket] = useState<EventTicketOrder | null>(null);
@@ -176,7 +184,7 @@ export default function EventDetailPage() {
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!event) return;
+    if (!event || isSubmittingBooking) return;
 
     const maxTickets = event.maxTicketsPerBooking || 5;
     const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
@@ -191,6 +199,13 @@ export default function EventDetailPage() {
       return;
     }
 
+    if (!bookingAttemptRef.current) {
+      bookingAttemptRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `attempt-${Date.now()}`;
+    }
+
     try {
       setIsSubmittingBooking(true);
       setBookingError(null);
@@ -198,7 +213,10 @@ export default function EventDetailPage() {
       const res = await fetch(`/api/events/${event.id}/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookingForm),
+        body: JSON.stringify({
+          ...bookingForm,
+          clientReferenceId: bookingAttemptRef.current,
+        }),
       });
 
       const json = await res.json();
@@ -222,11 +240,17 @@ export default function EventDetailPage() {
       }
 
       setIsBookingModalOpen(false);
+      bookingAttemptRef.current = "";
       void fetchEventDetail(event.id);
 
       if (isEventPaidEffective(event) && orderData.totalPrice > 0) {
         setPendingTicket(orderData);
-        setIsPaymentModalOpen(true);
+        const targetUrl = orderData.paymentUrl || `/events/tickets/${orderData.guestToken}`;
+        if (/^https?:\/\//i.test(targetUrl)) {
+          window.location.assign(targetUrl);
+        } else {
+          router.push(targetUrl);
+        }
       } else {
         setIssuedTicket(orderData);
         setIsTicketModalOpen(true);
@@ -236,13 +260,6 @@ export default function EventDetailPage() {
     } finally {
       setIsSubmittingBooking(false);
     }
-  };
-
-  const handleProceedToTicketView = () => {
-    if (!pendingTicket) return;
-    setIsPaymentModalOpen(false);
-    setIssuedTicket(pendingTicket);
-    setIsTicketModalOpen(true);
   };
 
   if (isLoading) {
@@ -548,14 +565,6 @@ export default function EventDetailPage() {
         onSubmit={handleBookingSubmit}
         isSubmitting={isSubmittingBooking}
         error={bookingError}
-      />
-
-      <EventPaymentGuideDialog
-        open={isPaymentModalOpen}
-        onOpenChange={setIsPaymentModalOpen}
-        ticket={pendingTicket}
-        event={event}
-        onViewTicket={handleProceedToTicketView}
       />
 
       <EventTicketPassDialog
