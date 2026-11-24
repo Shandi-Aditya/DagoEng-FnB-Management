@@ -34,6 +34,7 @@ import { PaymentTabSplit } from "./payment/PaymentTabSplit";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
+import { OFFICIAL_BANK_ACCOUNTS } from "@/lib/contact-config";
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
 import type { CorporateBillingType } from "@/types/order";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
@@ -60,12 +61,14 @@ interface PaymentModalProps {
   customerName: string;
   orderType: "DINE_IN" | "TAKEAWAY";
   isCorporateOrder?: boolean;
+  isSettlement?: boolean;
   corporateBillingType?: CorporateBillingType;
   corporateCompany?: string;
   onPaymentSuccess: (paymentData: {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    paymentReference?: string;
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => void;
@@ -86,11 +89,15 @@ export function PaymentModal({
   customerName,
   orderType,
   isCorporateOrder = false,
+  isSettlement = false,
   corporateBillingType = "PREPAID",
   corporateCompany = "",
   onPaymentSuccess,
 }: PaymentModalProps) {
   const { logActivity } = useActivityLog();
+  const lockPrepaidTabs = isCorporateOrder && !isSettlement && corporateBillingType === "INVOICE";
+  const lockInvoiceTab = isCorporateOrder && !isSettlement && corporateBillingType === "PREPAID";
+  const showInvoiceTab = isCorporateOrder && !isSettlement;
   const [activeTab, setActiveTab] = useState<POSPaymentMethod>("QRIS");
 
   // Cash tab state (POS-29: initialized empty to prevent auto-fill)
@@ -117,7 +124,6 @@ export function PaymentModal({
   const [approvalCode, setApprovalCode] = useState<string>("");
 
   // Transfer tab state
-  const [transferBank, setTransferBank] = useState<string>("BCA");
   const [transferReference, setTransferReference] = useState<string>("");
 
   // Split bill tab state
@@ -128,7 +134,7 @@ export function PaymentModal({
 
   useEffect(() => {
     if (isOpen) {
-      if (isCorporateOrder && corporateBillingType === "INVOICE") {
+      if (lockPrepaidTabs) {
         setActiveTab("INVOICE");
       } else {
         setActiveTab("QRIS");
@@ -171,7 +177,7 @@ export function PaymentModal({
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
-  }, [isOpen, grandTotal, isCorporateOrder, corporateBillingType]);
+  }, [isOpen, grandTotal, lockPrepaidTabs]);
 
   // QRIS countdown timer
   const hasSplitQris = useMemo(
@@ -384,19 +390,22 @@ export function PaymentModal({
         changeDue: 0,
       });
     } else if (activeTab === "TRANSFER") {
+      const cleanReference = transferReference.trim();
+      if (!cleanReference) return;
       isSubmittingRef.current = true;
       setIsSubmitting(true);
       logActivity({
         module: "POS",
         action: "TRANSFER_PAYMENT",
-        description: `Pembayaran transfer bank ${transferBank} ref ${transferReference || "-"}: ${formatCurrencyIDR(grandTotal)}`,
-        recordId: transferReference || corporateCompany || customerName,
+        description: `Pembayaran transfer bank ref ${cleanReference}: ${formatCurrencyIDR(grandTotal)}`,
+        recordId: cleanReference || corporateCompany || customerName,
         newValue: `Lunas transfer: ${formatCurrencyIDR(grandTotal)}`,
       });
       onPaymentSuccess({
         method: "TRANSFER",
         amountPaid: grandTotal,
         changeDue: 0,
+        paymentReference: cleanReference,
       });
     } else if (activeTab === "INVOICE") {
       isSubmittingRef.current = true;
@@ -659,32 +668,40 @@ export function PaymentModal({
         <div className="border-b border-border bg-muted/20 px-4 py-2">
           <Tabs
             value={activeTab}
-            onValueChange={(val) => setActiveTab(val as POSPaymentMethod)}
+            onValueChange={(val) => {
+              const next = val as POSPaymentMethod;
+              if (lockPrepaidTabs && next !== "INVOICE") return;
+              if (lockInvoiceTab && next === "INVOICE") return;
+              setActiveTab(next);
+            }}
             className="w-full"
           >
-            <TabsList aria-label="Metode pembayaran" className={`w-full grid ${isCorporateOrder ? "grid-cols-6" : "grid-cols-5"} h-10`}>
-              <TabsTrigger value="QRIS" className="gap-1.5 text-xs">
+            <TabsList
+              aria-label="Metode pembayaran"
+              className={`w-full grid grid-cols-3 ${showInvoiceTab ? "sm:grid-cols-6" : "sm:grid-cols-5"} group-data-horizontal/tabs:h-auto h-auto p-1`}
+            >
+              <TabsTrigger value="QRIS" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <QrCode />
                 <span>QRIS</span>
               </TabsTrigger>
-              <TabsTrigger value="CASH" className="gap-1.5 text-xs">
+              <TabsTrigger value="CASH" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <Banknote />
                 <span>Tunai</span>
               </TabsTrigger>
-              <TabsTrigger value="EDC" className="gap-1.5 text-xs">
+              <TabsTrigger value="EDC" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <CreditCard />
                 <span>Debit / EDC</span>
               </TabsTrigger>
-              <TabsTrigger value="TRANSFER" className="gap-1.5 text-xs">
+              <TabsTrigger value="TRANSFER" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <Landmark />
                 <span>Transfer</span>
               </TabsTrigger>
-              <TabsTrigger value="SPLIT" className="gap-1.5 text-xs">
+              <TabsTrigger value="SPLIT" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <Users />
                 <span>Bagi tagihan</span>
               </TabsTrigger>
-              {isCorporateOrder ? (
-                <TabsTrigger value="INVOICE" className="gap-1.5 text-xs">
+              {showInvoiceTab ? (
+                <TabsTrigger value="INVOICE" disabled={lockInvoiceTab} className="gap-1.5 py-1.5 text-xs">
                   <Building2 />
                   <span>Invoice</span>
                 </TabsTrigger>
@@ -828,33 +845,31 @@ export function PaymentModal({
                   Rekening resmi tujuan transfer
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="rounded border bg-background p-2.5 space-y-0.5">
-                    <span className="font-semibold text-foreground block">BCA (Dago Creative Hub)</span>
-                    <span className="font-mono text-sm block">782-019-2819</span>
-                    <span className="text-muted-foreground text-xs block">a.n. PT Dago Eng Solusindo</span>
-                  </div>
-                  <div className="rounded border bg-background p-2.5 space-y-0.5">
-                    <span className="font-semibold text-foreground block">Mandiri (Operasional POS)</span>
-                    <span className="font-mono text-sm block">137-00-1928-112</span>
-                    <span className="text-muted-foreground text-xs block">a.n. PT Dago Eng Solusindo</span>
-                  </div>
+                  {OFFICIAL_BANK_ACCOUNTS.map((bank) => (
+                    <div key={bank.accountNumber} className="rounded border bg-background p-2.5 space-y-0.5">
+                      <span className="font-semibold text-foreground block">{bank.bankName}</span>
+                      <span className="font-mono text-sm block">{bank.accountNumber}</span>
+                      <span className="text-muted-foreground text-xs block">a.n. {bank.accountHolder}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="transfer-ref" className="text-xs font-medium text-foreground">
-                  Nomor referensi atau bukti transfer
+                  Nomor referensi atau bukti transfer <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="transfer-ref"
                   type="text"
+                  required
                   value={transferReference}
                   onChange={(e) => setTransferReference(e.target.value)}
                   placeholder="Contoh: TRF-20261124-001"
                   className="font-mono text-xs font-medium"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Pastikan dana sudah masuk ke rekening bank resmi sebelum menyelesaikan pembayaran.
+                  Isi nomor referensi transfer dan pastikan dana sudah masuk ke rekening resmi.
                 </p>
               </div>
             </div>
@@ -905,6 +920,7 @@ export function PaymentModal({
             size="lg"
             disabled={
               (activeTab === "CASH" && !isCashSufficient) ||
+              (activeTab === "TRANSFER" && !transferReference.trim()) ||
               (activeTab === "SPLIT" && (!splitBalance.isValid || (hasSplitQris && !isQrisVerified))) ||
               (activeTab === "QRIS" && !isQrisVerified) ||
               isQrisProcessing ||

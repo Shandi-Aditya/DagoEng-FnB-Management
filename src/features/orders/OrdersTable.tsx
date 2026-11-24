@@ -50,7 +50,10 @@ function isPayable(order: OrderRecord, canProcessPayment: boolean): boolean {
   if (!canProcessPayment || order.paymentStatus === "PAID" || order.status === "CANCELLED") {
     return false;
   }
-  return order.status !== "COMPLETED" || order.paymentMethod === "INVOICE";
+  const isCorporateInvoice =
+    (order.paymentMethod === "INVOICE" || order.corporateInfo?.billingType === "INVOICE") &&
+    order.paymentStatus !== "REFUNDED";
+  return (order.status !== "COMPLETED" && order.paymentStatus !== "REFUNDED") || isCorporateInvoice;
 }
 
 export function OrdersTable({

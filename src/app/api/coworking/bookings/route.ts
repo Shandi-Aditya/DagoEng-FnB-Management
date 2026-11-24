@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  checkCoworkingBookingConflict,
   DEFAULT_COWORKING_HOLIDAY_CONFIG,
   normalizeDateToYMD,
   validateCoworkingBookingSchedule,
@@ -7,6 +8,7 @@ import {
 import {
   claimQrisSessionForOrder,
   getCoworkingBookings,
+  getPersistentOrders,
   getPersistentQrisSession,
   getPersistentQrisSessions,
   isVerifiedQrisStatus,
@@ -194,6 +196,54 @@ async function resolveBookingIdentityDefaults(params: {
   return { id, bookingCode: candidateCode, createdAt };
 }
 
+type AnonymizedBookingView = Pick<
+  CoworkingBooking,
+  | "id"
+  | "spaceId"
+  | "spaceName"
+  | "spaceType"
+  | "bookingType"
+  | "date"
+  | "endDate"
+  | "startTime"
+  | "endTime"
+  | "duration"
+  | "checkInStatus"
+  | "paymentStatus"
+  | "guestName"
+  | "guestPhone"
+  | "guestEmail"
+>;
+
+function isBookingActiveForSlotView(b: CoworkingBooking): boolean {
+  const paymentStatus: string = b.paymentStatus;
+  return (
+    b.checkInStatus !== "CANCELLED" &&
+    b.checkInStatus !== "COMPLETED" &&
+    paymentStatus !== "CANCELLED"
+  );
+}
+
+function toAnonymizedBookingView(b: CoworkingBooking): AnonymizedBookingView {
+  return {
+    id: b.id,
+    spaceId: b.spaceId,
+    spaceName: b.spaceName,
+    spaceType: b.spaceType,
+    bookingType: b.bookingType,
+    date: b.date,
+    endDate: b.endDate,
+    startTime: b.startTime,
+    endTime: b.endTime,
+    duration: b.duration,
+    checkInStatus: b.checkInStatus,
+    paymentStatus: b.paymentStatus,
+    guestName: "Terisi",
+    guestPhone: "",
+    guestEmail: "",
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
@@ -235,57 +285,23 @@ export async function GET(req: NextRequest) {
 
     if (isAnonymous) {
       const sanitized = bookings
-        .filter(
-          (b: CoworkingBooking) =>
-            b.checkInStatus !== "CANCELLED" &&
-            b.checkInStatus !== "COMPLETED"
-        )
-        .map((b: CoworkingBooking) => ({
-          id: b.id,
-          spaceId: b.spaceId,
-          spaceName: b.spaceName,
-          spaceType: b.spaceType,
-          bookingType: b.bookingType,
-          date: b.date,
-          endDate: b.endDate,
-          startTime: b.startTime,
-          endTime: b.endTime,
-          duration: b.duration,
-          checkInStatus: b.checkInStatus,
-          paymentStatus: b.paymentStatus,
-          guestName: "Terisi",
-          guestPhone: "",
-          guestEmail: "",
-        }));
+        .filter(isBookingActiveForSlotView)
+        .map(toAnonymizedBookingView);
       return NextResponse.json({ bookings: sanitized });
     }
 
     if (auth.role === "CUSTOMER") {
-      const customerVisible = bookings.flatMap((b: CoworkingBooking): CoworkingBooking[] => {
-        if (isCallerOwnedBooking(b, auth)) {
-          return [b];
+      const customerVisible = bookings.flatMap(
+        (b: CoworkingBooking): Array<CoworkingBooking | AnonymizedBookingView> => {
+          if (isCallerOwnedBooking(b, auth)) {
+            return [b];
+          }
+          if (!isBookingActiveForSlotView(b)) {
+            return [];
+          }
+          return [toAnonymizedBookingView(b)];
         }
-        if (
-          b.checkInStatus === "CANCELLED" ||
-          b.checkInStatus === "COMPLETED"
-        ) {
-          return [];
-        }
-        return [
-          {
-            ...b,
-            guestName: "Terisi",
-            guestPhone: "",
-            guestEmail: "",
-            company: undefined,
-            notes: undefined,
-            userId: undefined,
-            paymentRef: undefined,
-            qrisVerification: undefined,
-            fnbVoucherApplied: undefined,
-          },
-        ];
-      });
+      );
       return NextResponse.json({ bookings: customerVisible });
     }
 
@@ -353,7 +369,11 @@ export async function POST(req: NextRequest) {
       space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
     booking.maxCapacity = maxCapacity;
 
-    if (!booking.endTime && typeof booking.startTime === "string") {
+    if (
+      !booking.endTime &&
+      typeof booking.startTime === "string" &&
+      booking.startTime.trim()
+    ) {
       booking.endTime = calculateEndTime(
         booking.startTime,
         typeof booking.duration === "number" ? booking.duration : 1
@@ -609,6 +629,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, booking: customerBooking });
     }
 
+    const staffBookingType =
+      typeof booking.bookingType === "string" && booking.bookingType.trim()
+        ? booking.bookingType.trim().toUpperCase()
+        : "HOURLY";
+
+    if (!matchedExisting) {
+      const staffDate = typeof booking.date === "string" ? booking.date.trim() : "";
+      if (!staffDate) {
+        return NextResponse.json(
+          { error: "INVALID_DATE: Tanggal booking coworking wajib diisi." },
+          { status: 400 }
+        );
+      }
+      const staffStartTime =
+        typeof booking.startTime === "string" ? booking.startTime.trim() : "";
+      if (staffBookingType === "HOURLY" && !staffStartTime) {
+        return NextResponse.json(
+          { error: "INVALID_TIME: Jam mulai booking coworking per jam wajib diisi." },
+          { status: 400 }
+        );
+      }
+    }
+
     if (
       booking.date &&
       booking.checkInStatus !== "CANCELLED" &&
@@ -630,31 +673,89 @@ export async function POST(req: NextRequest) {
     booking.bookingCode = staffIdentity.bookingCode;
     booking.createdAt = staffIdentity.createdAt;
 
+    const isNonActiveStatus =
+      booking.checkInStatus === "CANCELLED" ||
+      booking.checkInStatus === "COMPLETED" ||
+      booking.paymentStatus === "CANCELLED";
+    if (!isNonActiveStatus && booking.date && booking.spaceId) {
+      const preConflict = checkCoworkingBookingConflict(existingBookings, {
+        id: typeof booking.id === "string" ? booking.id : undefined,
+        spaceId: String(booking.spaceId),
+        spaceName: space.name,
+        bookingType:
+          staffBookingType === "DAILY" || staffBookingType === "MONTHLY"
+            ? staffBookingType
+            : "HOURLY",
+        date: String(booking.date),
+        endDate: typeof booking.endDate === "string" ? booking.endDate : undefined,
+        startTime: String(booking.startTime || "09:00"),
+        endTime: typeof booking.endTime === "string" ? booking.endTime : undefined,
+        maxCapacity,
+      });
+      if (preConflict.hasConflict) {
+        return NextResponse.json(
+          {
+            error:
+              preConflict.message ||
+              "Kapasitas slot tidak mencukupi atau sudah penuh. Pemesanan ditolak untuk mencegah overbooking.",
+            code: "OVERBOOKING_CONFLICT",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     if (
       booking.paymentMethod === "QRIS" &&
       booking.paymentStatus === "PAID" &&
       (!matchedExisting || matchedExisting.paymentStatus !== "PAID")
     ) {
-      const invoiceNumber = String(
-        (booking.qrisVerification as Record<string, unknown> | undefined)?.invoiceNumber ||
-          booking.bookingCode
-      ).trim();
-      const claim = invoiceNumber
-        ? await claimQrisSessionForOrder({
-            invoiceNumber,
-            orderId: String(booking.id),
-            amount: Math.round(Number(booking.totalAmount || 0)),
-          })
-        : ({ ok: false, reason: "NOT_FOUND" } as const);
+      const isBundledPosPaidBooking =
+        booking.billedViaPosOrder === true &&
+        typeof booking.linkedOrderId === "string" &&
+        booking.linkedOrderId.trim().length > 0;
 
-      if (!claim.ok) {
-        return NextResponse.json(
-          {
-            error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
-            code: "QRIS_PAYMENT_UNVERIFIED",
-          },
-          { status: 409 }
+      if (isBundledPosPaidBooking) {
+        const linkedOrderId = String(booking.linkedOrderId).trim();
+        const persistentOrders = await getPersistentOrders();
+        const linkedOrder = persistentOrders.find(
+          (o) =>
+            (o.id === linkedOrderId || o.orderNumber === linkedOrderId) &&
+            o.paymentStatus === "PAID" &&
+            o.status !== "CANCELLED"
         );
+        if (!linkedOrder) {
+          return NextResponse.json(
+            {
+              error:
+                "QRIS_PAYMENT_UNVERIFIED [NOT_FOUND]: Order POS tertaut tidak ditemukan atau belum berstatus lunas.",
+              code: "QRIS_PAYMENT_UNVERIFIED",
+            },
+            { status: 409 }
+          );
+        }
+      } else {
+        const invoiceNumber = String(
+          (booking.qrisVerification as Record<string, unknown> | undefined)?.invoiceNumber ||
+            booking.bookingCode
+        ).trim();
+        const claim = invoiceNumber
+          ? await claimQrisSessionForOrder({
+              invoiceNumber,
+              orderId: String(booking.id),
+              amount: Math.round(Number(booking.totalAmount || 0)),
+            })
+          : ({ ok: false, reason: "NOT_FOUND" } as const);
+
+        if (!claim.ok) {
+          return NextResponse.json(
+            {
+              error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
+              code: "QRIS_PAYMENT_UNVERIFIED",
+            },
+            { status: 409 }
+          );
+        }
       }
     }
 

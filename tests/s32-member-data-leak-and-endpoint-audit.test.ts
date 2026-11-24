@@ -1,24 +1,52 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import * as serverAuth from "@/lib/server-auth";
-import { GET as getLoyaltyMembers, PUT as putLoyaltyMembers } from "@/app/api/loyalty/members/route";
+import {
+  GET as getLoyaltyMembers,
+  POST as postLoyaltyMembers,
+  PUT as putLoyaltyMembers,
+} from "@/app/api/loyalty/members/route";
 import { GET as getEmployees } from "@/app/api/employees/route";
 import { GET as getClosingPdf } from "@/app/api/reports/closing/pdf/route";
 import { POST as postTenantOperations } from "@/app/api/tenant/operations/route";
 import { GET as getProducts } from "@/app/api/products/route";
 import { GET as getSettlementReceipt } from "@/app/api/settings/settlement-receipt/route";
 import { POST as postWhatsApp } from "@/app/api/notifications/whatsapp/route";
-import { GET as getSyncDomain } from "@/app/api/sync/[domain]/route";
+import { GET as getSyncDomain, POST as postSyncDomain } from "@/app/api/sync/[domain]/route";
 import { GET as getQrisVerify } from "@/app/api/pos/qris/verify/route";
+import { POST as postEventsUpload } from "@/app/api/events/upload/route";
+import { PATCH as patchTenantProductToggle } from "@/app/api/tenant/products/[id]/toggle/route";
 import { writePersistentData } from "@/lib/persistent-storage";
 import { INITIAL_MEMBERS, INITIAL_EMPLOYEES, INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 import type { RoleSlug } from "@/types/auth";
 
 describe("S-32: Tutup kebocoran data member dan audit endpoint publik", () => {
+  let tempDir = "";
+  let prevDataDirOverride: string | undefined;
+
   beforeEach(async () => {
+    prevDataDirOverride = process.env.DATA_DIR_OVERRIDE;
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "s32-audit-"));
+    process.env.DATA_DIR_OVERRIDE = tempDir;
+
     await writePersistentData("loyalty_members.json", INITIAL_MEMBERS);
     await writePersistentData("employees.json", INITIAL_EMPLOYEES);
     vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (prevDataDirOverride === undefined) {
+      delete process.env.DATA_DIR_OVERRIDE;
+    } else {
+      process.env.DATA_DIR_OVERRIDE = prevDataDirOverride;
+    }
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   describe("1. /api/loyalty/members Authentication and Role Security", () => {
@@ -519,6 +547,768 @@ describe("S-32: Tutup kebocoran data member dan audit endpoint publik", () => {
       const json = await res.json();
       expect(json.success).toBe(false);
       expect(json.error).toContain("Akses ditolak");
+    });
+
+    it("menolak injeksi poin ADJUSTMENT oleh CASHIER dan mengizinkan hanya rev- order CANCELLED/REFUNDED yang sah (HTTP 403)", async () => {
+      await writePersistentData("pos_orders.json", [
+        {
+          id: "ord-paid-active",
+          orderNumber: "ORD-ACTIVE-01",
+          total: 50000,
+          paymentStatus: "PAID",
+          status: "COMPLETED",
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: "ord-refunded-01",
+          orderNumber: "ORD-REFUND-01",
+          total: 30000,
+          paymentStatus: "REFUNDED",
+          status: "CANCELLED",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+
+      const seededMembers = INITIAL_MEMBERS.map((m) =>
+        m.id === "mem-001"
+          ? {
+              ...m,
+              points: 85,
+              pointHistory: [
+                {
+                  id: "ptx-earn-ref-1",
+                  memberId: "mem-001",
+                  type: "EARN" as const,
+                  points: 30,
+                  balanceAfter: 85,
+                  reason: "Order Refundable",
+                  relatedTransactionId: "ord-refunded-01",
+                  timestamp: "2026-11-20T09:00:00.000Z",
+                  actorName: "Kasir Test",
+                  outletId: "outlet-sgr",
+                },
+                ...m.pointHistory,
+              ],
+            }
+          : m
+      );
+      await writePersistentData("loyalty_members.json", seededMembers);
+      const baseHistory = seededMembers.find((m) => m.id === "mem-001")!.pointHistory;
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        name: "Kasir Test",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      // 1. Forged ADJUSTMENT without rev- prefix -> 403
+      const forgedAdjRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 585,
+              pointHistory: [
+                {
+                  id: "ptx-adj-forge",
+                  memberId: "mem-001",
+                  type: "ADJUSTMENT",
+                  points: 500,
+                  relatedTransactionId: "ord-paid-active",
+                  timestamp: new Date().toISOString(),
+                },
+                ...baseHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(forgedAdjRes.status).toBe(403);
+
+      // 2. rev- ADJUSTMENT pointing to non-cancelled/non-refunded order -> 403
+      const activeRevRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 35,
+              pointHistory: [
+                {
+                  id: "ptx-adj-active",
+                  memberId: "mem-001",
+                  type: "ADJUSTMENT",
+                  points: -50,
+                  relatedTransactionId: "rev-ord-paid-active",
+                  timestamp: new Date().toISOString(),
+                },
+                ...baseHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(activeRevRes.status).toBe(403);
+
+      // 3. Positive or mismatched ADJUSTMENT on refunded order -> 403
+      const wrongDeltaRevRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 115,
+              pointHistory: [
+                {
+                  id: "ptx-adj-wrong",
+                  memberId: "mem-001",
+                  type: "ADJUSTMENT",
+                  points: 30,
+                  relatedTransactionId: "rev-ord-refunded-01",
+                  timestamp: new Date().toISOString(),
+                },
+                ...baseHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(wrongDeltaRevRes.status).toBe(403);
+
+      // 4. Legitimate rev- ADJUSTMENT matching CANCELLED/REFUNDED order & -priorEarn.points -> 200
+      const validRevEntry = {
+        id: "ptx-adj-valid",
+        memberId: "mem-001",
+        type: "ADJUSTMENT" as const,
+        points: -30,
+        relatedTransactionId: "rev-ord-refunded-01",
+        timestamp: "2026-11-20T10:00:00.000Z",
+      };
+      const validRevRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 55,
+              pointHistory: [validRevEntry, ...baseHistory],
+            },
+          }),
+        })
+      );
+      expect(validRevRes.status).toBe(200);
+      const validRevJson = await validRevRes.json();
+      expect(validRevJson.member.points).toBe(55);
+
+      // 5. Replaying the same rev- ADJUSTMENT a second time -> 403
+      const replayRevRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 25,
+              pointHistory: [
+                { ...validRevEntry, id: "ptx-adj-replay" },
+                validRevEntry,
+                ...baseHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(replayRevRes.status).toBe(403);
+    });
+
+    it("menolak replay relatedTransactionId serta manipulasi suffix pointHistory oleh CASHIER dengan HTTP 403", async () => {
+      await writePersistentData("pos_orders.json", [
+        {
+          id: "ord-replay-01",
+          orderNumber: "ORD-REPLAY-01",
+          total: 100000,
+          paymentStatus: "PAID",
+          status: "COMPLETED",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      await writePersistentData("coworking_bookings.json", [
+        {
+          id: "cwb-paid-01",
+          bookingCode: "CW-SGR-9001",
+          guestName: "Ketut Dian",
+          guestPhone: "+62 819-1122-3344",
+          guestEmail: "ketut.dian@gmail.com",
+          spaceId: "sp-hot-1",
+          spaceName: "Hot Desk",
+          spaceType: "HOT_DESK",
+          bookingType: "HOURLY",
+          date: "2026-11-24",
+          startTime: "10:00",
+          duration: 2,
+          totalAmount: 60000,
+          paymentStatus: "PAID",
+          checkInStatus: "CHECKED_IN",
+        },
+      ]);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        name: "Kasir Test",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const baseHistory = INITIAL_MEMBERS.find((m) => m.id === "mem-001")!.pointHistory;
+      const firstEarnEntry = {
+        id: "ptx-earn-ord-1",
+        memberId: "mem-001",
+        type: "EARN" as const,
+        points: 100,
+        relatedTransactionId: "ord-replay-01",
+        timestamp: "2026-11-24T10:00:00.000Z",
+      };
+
+      // First EARN from PAID order -> 200
+      const firstRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 155,
+              pointHistory: [firstEarnEntry, ...baseHistory],
+            },
+          }),
+        })
+      );
+      expect(firstRes.status).toBe(200);
+
+      // Replay same (EARN, ord-replay-01) -> 403
+      const replayRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 255,
+              pointHistory: [
+                { ...firstEarnEntry, id: "ptx-earn-ord-2" },
+                firstEarnEntry,
+                ...baseHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(replayRes.status).toBe(403);
+
+      // Coworking PAID booking EARN -> 200, then replay -> 403
+      const cwEarnEntry = {
+        id: "ptx-earn-cwb-1",
+        memberId: "mem-001",
+        type: "EARN" as const,
+        points: 60,
+        relatedTransactionId: "cwb-paid-01",
+        timestamp: "2026-11-24T10:05:00.000Z",
+      };
+      const cwRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 215,
+              pointHistory: [cwEarnEntry, firstEarnEntry, ...baseHistory],
+            },
+          }),
+        })
+      );
+      expect(cwRes.status).toBe(200);
+
+      // Tampering existing suffix entry -> 403
+      const tamperedSuffixRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "mem-001",
+            updates: {
+              points: 215,
+              pointHistory: [
+                cwEarnEntry,
+                { ...firstEarnEntry, relatedTransactionId: "ord-tampered" },
+                ...baseHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(tamperedSuffixRes.status).toBe(403);
+    });
+
+    it("menyaring reservations dan field sensitif meja pada GET /api/sync/tables untuk anonim dan CUSTOMER", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "mgr-1",
+        role: "MANAGER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      await postSyncDomain(
+        new NextRequest("http://localhost:3000/api/sync/tables", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: {
+              op: "PATCH_TABLE_STATUS",
+              tableId: "T-01",
+              status: "OCCUPIED",
+              customer: "Pelanggan Rahasia",
+              total: "Rp 225.000",
+              currentBillTotal: 225000,
+              activeOrderId: "ord-secret-tbl-1",
+            },
+          }),
+        }),
+        { params: Promise.resolve({ domain: "tables" }) }
+      );
+
+      await postSyncDomain(
+        new NextRequest("http://localhost:3000/api/sync/tables", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: {
+              op: "UPSERT_RESERVATION",
+              reservation: {
+                id: "res-secret-1",
+                customerName: "Tamu Reservasi VIP",
+                phone: "+62 812-0000-1111",
+                tableId: "T-02",
+                areaName: "Indoor AC Main Hall",
+                outletId: "outlet-sgr",
+                outletName: "Singaraja",
+                dateTime: "2026-12-01T19:00:00.000Z",
+                pax: 4,
+                downPayment: 100000,
+                status: "CONFIRMED",
+              },
+            },
+          }),
+        }),
+        { params: Promise.resolve({ domain: "tables" }) }
+      );
+
+      // Anonymous GET
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        scopeLevel: null,
+        permissions: [],
+      });
+      const anonRes = await getSyncDomain(
+        new NextRequest("http://localhost:3000/api/sync/tables"),
+        { params: Promise.resolve({ domain: "tables" }) }
+      );
+      expect(anonRes.status).toBe(200);
+      const anonJson = await anonRes.json();
+      expect(anonJson.state.reservations).toEqual([]);
+      const anonTable = anonJson.state.areas
+        .flatMap((a: { tables: Array<Record<string, unknown>> }) => a.tables)
+        .find((t: Record<string, unknown>) => t.id === "T-01");
+      expect(anonTable?.status).toBe("OCCUPIED");
+      expect(anonTable?.customer).toBeUndefined();
+      expect(anonTable?.total).toBeUndefined();
+      expect(anonTable?.currentBillTotal).toBeUndefined();
+      expect(anonTable?.activeOrderId).toBeUndefined();
+
+      // CUSTOMER GET
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cust-1",
+        role: "CUSTOMER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+      const custRes = await getSyncDomain(
+        new NextRequest("http://localhost:3000/api/sync/tables"),
+        { params: Promise.resolve({ domain: "tables" }) }
+      );
+      expect(custRes.status).toBe(200);
+      const custJson = await custRes.json();
+      expect(custJson.state.reservations).toEqual([]);
+      const custTable = custJson.state.areas
+        .flatMap((a: { tables: Array<Record<string, unknown>> }) => a.tables)
+        .find((t: Record<string, unknown>) => t.id === "T-01");
+      expect(custTable?.customer).toBeUndefined();
+      expect(custTable?.total).toBeUndefined();
+      expect(custTable?.currentBillTotal).toBeUndefined();
+      expect(custTable?.activeOrderId).toBeUndefined();
+    });
+
+    it("menyaring currentSession pada GET /api/sync/coworking-master untuk anonim dan CUSTOMER", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "mgr-1",
+        role: "MANAGER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      await postSyncDomain(
+        new NextRequest("http://localhost:3000/api/sync/coworking-master", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: {
+              op: "PATCH_SPACE_SESSION",
+              spaceId: "sp-ded-1",
+              status: "OCCUPIED",
+              currentSession: {
+                guestName: "Pengguna Rahasia",
+                company: "PT Rahasia Nusantara",
+                checkInTime: "09:00",
+                endTime: "17:00",
+                bookingCode: "CW-SECRET-01",
+              },
+            },
+          }),
+        }),
+        { params: Promise.resolve({ domain: "coworking-master" }) }
+      );
+
+      for (const caller of [
+        {
+          isAuthenticated: false,
+          role: null,
+          userId: null,
+          scopeLevel: null,
+          permissions: [],
+        },
+        {
+          isAuthenticated: true,
+          userId: "cust-1",
+          role: "CUSTOMER" as RoleSlug,
+          scopeLevel: "OUTLET" as const,
+        },
+      ]) {
+        vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue(caller);
+        const res = await getSyncDomain(
+          new NextRequest("http://localhost:3000/api/sync/coworking-master"),
+          { params: Promise.resolve({ domain: "coworking-master" }) }
+        );
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json.state.members).toEqual([]);
+        expect(json.state.checkLogs).toEqual([]);
+        const space = json.state.spaces.find((s: { id: string }) => s.id === "sp-ded-1");
+        expect(space?.status).toBe("OCCUPIED");
+        expect(space?.currentSession).toBeUndefined();
+      }
+    });
+
+    it("menolak POST /api/events/upload tanpa login dengan HTTP 401 dan CHECKIN_STAFF atau CASHIER dengan HTTP 403", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        scopeLevel: null,
+        permissions: [],
+      });
+      const unauthRes = await postEventsUpload(
+        new NextRequest("http://localhost:3000/api/events/upload", { method: "POST" })
+      );
+      expect(unauthRes.status).toBe(401);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "checkin-1",
+        email: "checkin@dagocreative.id",
+        role: "CHECKIN_STAFF" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+      const checkinRes = await postEventsUpload(
+        new NextRequest("http://localhost:3000/api/events/upload", { method: "POST" })
+      );
+      expect(checkinRes.status).toBe(403);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+      const cashierRes = await postEventsUpload(
+        new NextRequest("http://localhost:3000/api/events/upload", { method: "POST" })
+      );
+      expect(cashierRes.status).toBe(403);
+    });
+
+    it("menegakkan isolasi kepemilikan tenant pada PATCH /api/tenant/products/[id]/toggle dengan HTTP 403", async () => {
+      await writePersistentData("master_products.json", {
+        products: INITIAL_PRODUCTS,
+        customCategories: [],
+      });
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "owner-ks",
+        role: "OWNER" as RoleSlug,
+        scopeLevel: "TENANT",
+        tenantId: "tenant-ks",
+      });
+
+      // Missing tenantId -> 403
+      const missingRes = await patchTenantProductToggle(
+        new NextRequest("http://localhost:3000/api/tenant/products/prod-101/toggle", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isAvailable: false }),
+        }),
+        { params: Promise.resolve({ id: "prod-101" }) }
+      );
+      expect(missingRes.status).toBe(403);
+
+      // Mismatched body.tenantId -> 403
+      const crossBodyRes = await patchTenantProductToggle(
+        new NextRequest("http://localhost:3000/api/tenant/products/prod-103/toggle", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tenantId: "tenant-kitchen", isAvailable: false }),
+        }),
+        { params: Promise.resolve({ id: "prod-103" }) }
+      );
+      expect(crossBodyRes.status).toBe(403);
+
+      // Spoofed body.tenantId targeting another tenant's product (prod-103 belongs to tenant-kitchen) -> 403
+      const spoofedRes = await patchTenantProductToggle(
+        new NextRequest("http://localhost:3000/api/tenant/products/prod-103/toggle", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tenantId: "tenant-ks", isAvailable: false }),
+        }),
+        { params: Promise.resolve({ id: "prod-103" }) }
+      );
+      expect(spoofedRes.status).toBe(403);
+
+      // Own product with matching tenantId -> 200
+      const ownRes = await patchTenantProductToggle(
+        new NextRequest("http://localhost:3000/api/tenant/products/prod-101/toggle", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tenantId: "tenant-ks", isAvailable: false }),
+        }),
+        { params: Promise.resolve({ id: "prod-101" }) }
+      );
+      expect(ownRes.status).toBe(200);
+    });
+
+    it("menyamarkan PII untuk Tenant OWNER pada POST/PUT dan mencegah allowUpdate menimpa poin member", async () => {
+      const targetMember = INITIAL_MEMBERS[0];
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "owner-ks",
+        role: "OWNER" as RoleSlug,
+        scopeLevel: "TENANT",
+        tenantId: "tenant-ks",
+      });
+
+      const postExistingRes = await postLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: targetMember.name,
+            phone: targetMember.phone,
+            allowUpdate: true,
+            points: 0,
+          }),
+        })
+      );
+      expect(postExistingRes.status).toBe(200);
+      const postExistingJson = await postExistingRes.json();
+      expect(postExistingJson.isExisting).toBe(true);
+      expect(postExistingJson.member.points).toBe(targetMember.points);
+      expect(postExistingJson.member.phone).toContain("****");
+      expect(postExistingJson.member.email).toContain("***");
+
+      const putRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: targetMember.id,
+            updates: { favoriteItem: "Americano" },
+          }),
+        })
+      );
+      expect(putRes.status).toBe(200);
+      const putJson = await putRes.json();
+      expect(putJson.member.phone).toContain("****");
+      expect(putJson.member.email).toContain("***");
+    });
+
+    it("mengizinkan kasir membalik poin voucher rev-redeem-* untuk order batal dan rev-* untuk booking coworking batal", async () => {
+      const baseMember = INITIAL_MEMBERS[0];
+      const memberWithHistory = {
+        ...baseMember,
+        points: 200,
+        pointHistory: [
+          {
+            id: "ptx-redeem-ord-1",
+            memberId: baseMember.id,
+            type: "REDEEM" as const,
+            points: -50,
+            balanceAfter: 200,
+            reason: "Tukar voucher",
+            relatedTransactionId: "ord-rev-redeem-1",
+            timestamp: new Date().toISOString(),
+            actorName: "Kasir",
+            outletId: "outlet-sgr",
+          },
+          {
+            id: "ptx-earn-bk-1",
+            memberId: baseMember.id,
+            type: "EARN" as const,
+            points: 40,
+            balanceAfter: 250,
+            reason: "Booking coworking",
+            relatedTransactionId: "bk-rev-earn-1",
+            timestamp: new Date().toISOString(),
+            actorName: "Kasir",
+            outletId: "outlet-sgr",
+          },
+        ],
+      };
+      await writePersistentData("loyalty_members.json", [memberWithHistory]);
+      await writePersistentData("pos_orders.json", [
+        {
+          id: "ord-rev-redeem-1",
+          orderNumber: "INV-REV-REDEEM-1",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "TAKEAWAY",
+          customerName: baseMember.name,
+          orderType: "TAKEAWAY",
+          status: "CANCELLED",
+          items: [],
+          subtotal: 50000,
+          tax: 5000,
+          total: 55000,
+          paymentStatus: "REFUNDED",
+          paymentMethod: "CASH",
+          createdAt: new Date().toISOString(),
+          statusHistory: [],
+        },
+      ]);
+      await writePersistentData("coworking_bookings.json", [
+        {
+          id: "bk-rev-earn-1",
+          bookingCode: "CWK-REV-1",
+          guestName: baseMember.name,
+          guestPhone: baseMember.phone,
+          guestEmail: baseMember.email,
+          spaceId: "sp-meet-1",
+          spaceName: "Meeting Room",
+          spaceType: "MEETING_ROOM",
+          bookingType: "HOURLY",
+          date: "2026-12-01",
+          startTime: "10:00",
+          endTime: "11:00",
+          duration: 1,
+          price: 40000,
+          discount: 0,
+          totalAmount: 40000,
+          paidAmount: 40000,
+          remainingAmount: 0,
+          paymentMethod: "CASH",
+          paymentStatus: "PAID",
+          checkInStatus: "CANCELLED",
+          outletId: "outlet-sgr",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const restoreVoucherRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: baseMember.id,
+            updates: {
+              points: 250,
+              pointHistory: [
+                {
+                  id: "ptx-rev-redeem-1",
+                  memberId: baseMember.id,
+                  type: "ADJUSTMENT",
+                  points: 50,
+                  balanceAfter: 250,
+                  reason: "Pengembalian poin voucher",
+                  relatedTransactionId: "rev-redeem-ord-rev-redeem-1",
+                  timestamp: new Date().toISOString(),
+                  actorName: "Kasir",
+                  outletId: "outlet-sgr",
+                },
+                ...memberWithHistory.pointHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(restoreVoucherRes.status).toBe(200);
+      const restoredJson = await restoreVoucherRes.json();
+      expect(restoredJson.member.points).toBe(250);
+
+      const reverseBookingRes = await putLoyaltyMembers(
+        new NextRequest("http://localhost:3000/api/loyalty/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: baseMember.id,
+            updates: {
+              points: 210,
+              pointHistory: [
+                {
+                  id: "ptx-rev-bk-1",
+                  memberId: baseMember.id,
+                  type: "ADJUSTMENT",
+                  points: -40,
+                  balanceAfter: 210,
+                  reason: "Pembatalan booking coworking",
+                  relatedTransactionId: "rev-bk-rev-earn-1",
+                  timestamp: new Date().toISOString(),
+                  actorName: "Kasir",
+                  outletId: "outlet-sgr",
+                },
+                ...restoredJson.member.pointHistory,
+              ],
+            },
+          }),
+        })
+      );
+      expect(reverseBookingRes.status).toBe(200);
+      const reversedBookingJson = await reverseBookingRes.json();
+      expect(reversedBookingJson.member.points).toBe(210);
     });
   });
 });

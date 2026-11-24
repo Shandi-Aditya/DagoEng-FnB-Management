@@ -189,6 +189,8 @@ function canonicalCoreSale(order: OrderRecord): string {
     "changeDue",
     "paymentReference",
     "qrisVerification",
+    "cashierName",
+    "splitDetails",
   ]);
   const sortKeys = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(sortKeys);
@@ -201,8 +203,13 @@ function canonicalCoreSale(order: OrderRecord): string {
     }
     return value;
   };
+  const normalized: OrderRecord = {
+    ...order,
+    tax: Math.round(order.tax ?? 0),
+    serviceCharge: Math.round(order.serviceCharge ?? 0),
+  };
   const sale = Object.fromEntries(
-    Object.entries(order).filter(
+    Object.entries(normalized).filter(
       ([key, value]) => !PAYMENT_OR_WORKFLOW_FIELDS.has(key) && value !== undefined
     )
   );
@@ -263,6 +270,18 @@ function decideOrderWrite(
     next.corporateInfo?.billingType === "INVOICE" ||
     existing?.paymentMethod === "INVOICE" ||
     existing?.corporateInfo?.billingType === "INVOICE";
+  const createsOrSwitchesToInvoice =
+    (next.paymentMethod === "INVOICE" || next.corporateInfo?.billingType === "INVOICE") &&
+    (!existing ||
+      (existing.paymentMethod !== "INVOICE" && existing.corporateInfo?.billingType !== "INVOICE"));
+
+  if (createsOrSwitchesToInvoice && !isPosRole) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN: Hanya peran kasir atau manajemen yang dapat menerbitkan pesanan tagihan perusahaan (INVOICE).",
+    };
+  }
 
   if (!isCancellingOrRefunding && !isCorporateInvoice && targetsKdsStage(next) && effectivePaymentStatus !== "PAID") {
     return {
@@ -352,6 +371,19 @@ function decideOrderWrite(
           allowed: false,
           error: "FORBIDDEN: Item dan nilai transaksi tidak boleh diubah saat pelunasan.",
         };
+      }
+      if (Array.isArray(next.splitDetails) && next.splitDetails.length > 0) {
+        const splitSum = next.splitDetails.reduce(
+          (sum, g) => sum + Math.round(Number(g.amount || 0)),
+          0
+        );
+        if (Math.abs(splitSum - Math.round(existing.total)) > 1) {
+          return {
+            allowed: false,
+            status: 400,
+            error: "INVALID_SPLIT_TOTAL: Total rincian split payment tidak sesuai dengan total pesanan.",
+          };
+        }
       }
     }
     return isPosRole

@@ -34,8 +34,11 @@ import {
 import { generateSequentialReceiptNumber } from "@/lib/receipt-publisher";
 import {
   checkCoworkingBookingConflict,
+  normalizeDateToYMD,
   validateCoworkingBookingSchedule,
 } from "@/lib/operating-hours";
+import { notify } from "@/components/app/notify";
+import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useSettings } from "./SettingsContext";
@@ -115,7 +118,13 @@ interface CoworkingContextType {
   addPlan: (plan: CoworkingMembershipPlan) => void;
   updatePlan: (id: string, updates: Partial<CoworkingMembershipPlan>) => void;
   deletePlan: (id: string) => void;
-  bookSpace: (booking: NewBookingInput) => (typeof INITIAL_BOOKINGS)[0];
+  bookSpace: (
+    booking: NewBookingInput,
+    options?: {
+      waitBeforeSync?: Promise<boolean>;
+      onSyncRejected?: (error: string) => void;
+    }
+  ) => (typeof INITIAL_BOOKINGS)[0];
   confirmBookingPayment: (
     bookingId: string,
     paymentMethod?: string,
@@ -140,7 +149,8 @@ const BOOKINGS_ENDPOINT = "/api/coworking/bookings";
 
 function syncBookingToServer(
   booking: CoworkingBookingRecord,
-  isCreate: boolean
+  isCreate: boolean,
+  onPermanentReject?: (error?: string) => void
 ): void {
   if (typeof window === "undefined") return;
   void syncWithOutbox({
@@ -149,7 +159,29 @@ function syncBookingToServer(
     method: "POST",
     isCreate,
     payload: { booking },
-  }).catch(() => {});
+  })
+    .then((res) => {
+      if (res.rejected) {
+        onPermanentReject?.(res.error);
+        notify.error(res.error || "Gagal menyimpan booking ruang kerja");
+      }
+    })
+    .catch(() => {});
+}
+
+function computeHourlyEndTime(
+  startTime?: string,
+  duration?: number
+): string | undefined {
+  if (!startTime) return undefined;
+  const match = startTime.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return undefined;
+  const startMinutes = Number(match[1]) * 60 + Number(match[2]);
+  const hours = Math.max(1, Number(duration) || 1);
+  const endMinutes = Math.min(23 * 60 + 59, startMinutes + hours * 60);
+  const endH = Math.floor(endMinutes / 60);
+  const endM = endMinutes % 60;
+  return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
 }
 
 function formatWitaPartsNow() {
@@ -568,7 +600,11 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const bookSpace = (
-    bookingData: NewBookingInput
+    bookingData: NewBookingInput,
+    options?: {
+      waitBeforeSync?: Promise<boolean>;
+      onSyncRejected?: (error: string) => void;
+    }
   ): (typeof INITIAL_BOOKINGS)[0] => {
     const scheduleCheck = validateCoworkingBookingSchedule(
       bookingData,
@@ -581,10 +617,16 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const targetSpace = spaces.find((s) => s.id === bookingData.spaceId);
     const maxCapacity =
       targetSpace?.type === "HOT_DESK" ? targetSpace.capacity || 8 : 1;
+    const resolvedEndTime =
+      bookingData.endTime ||
+      (bookingData.bookingType === "HOURLY"
+        ? computeHourlyEndTime(bookingData.startTime, bookingData.duration)
+        : undefined);
 
     const latestBookings = bookingsRef.current;
     const conflict = checkCoworkingBookingConflict(latestBookings, {
       ...bookingData,
+      endTime: resolvedEndTime,
       maxCapacity,
     });
     if (conflict.hasConflict) {
@@ -599,7 +641,10 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const { now, time: nowFormatted, date: dateFormatted } = formatWitaPartsNow();
     const actorName = user?.name || "Rian Hidayat (Manager Coworking)";
 
-    const isQris = bookingData.paymentMethod === "QRIS";
+    const isBundledPosPaid =
+      bookingData.billedViaPosOrder === true &&
+      bookingData.paymentStatus === "PAID";
+    const isQris = bookingData.paymentMethod === "QRIS" && !isBundledPosPaid;
     const effectivePaymentStatus: "PAID" | "PENDING" = isQris ? "PENDING" : (bookingData.paymentStatus ?? "PAID");
     const isPaid = effectivePaymentStatus === "PAID";
     const paidAmount = isPaid
@@ -609,9 +654,11 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const initialCheckInStatus =
       bookingData.checkInStatus ?? (isPaid ? "CHECKED_IN" : "RESERVED");
     const isCheckedInNow = initialCheckInStatus === "CHECKED_IN";
+    const prevSpaceSnapshot = rawSpaces.find((s) => s.id === bookingData.spaceId);
 
     const newBooking: CoworkingBookingRecord = {
       ...bookingData,
+      endTime: resolvedEndTime,
       id: `bk-${now.getTime()}`,
       bookingCode,
       outletId:
@@ -666,7 +713,53 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     );
 
     commitBookings((prev) => [newBooking, ...prev]);
-    syncBookingToServer(newBooking, true);
+    const rollbackBooking = (errMsg?: string) => {
+      commitBookings((prev) => prev.filter((b) => b.id !== newBooking.id));
+      if (prevSpaceSnapshot) {
+        const currentSpace = coworkingMasterSyncClient
+          .getSnapshot()
+          .spaces.find((s) => s.id === prevSpaceSnapshot.id);
+        const wasModifiedByThisBooking =
+          currentSpace?.currentSession?.bookingCode === newBooking.bookingCode ||
+          (prevSpaceSnapshot.status === "AVAILABLE" &&
+            currentSpace?.status === "RESERVED");
+        if (wasModifiedByThisBooking) {
+          const revertCmd: CoworkingMasterCommand = {
+            op: "PATCH_SPACE_SESSION",
+            spaceId: prevSpaceSnapshot.id,
+            status: prevSpaceSnapshot.status,
+            currentSession: prevSpaceSnapshot.currentSession,
+          };
+          mutateCoworkingMaster(
+            (prev) => applyCoworkingMasterCommand(prev, revertCmd),
+            {
+              id: `cwk-session-rollback-${newBooking.id}`,
+              isCreate: false,
+              command: revertCmd,
+            }
+          );
+        }
+      }
+      if (errMsg) {
+        options?.onSyncRejected?.(errMsg);
+      }
+    };
+
+    if (options?.waitBeforeSync) {
+      void options.waitBeforeSync.then((shouldSync) => {
+        if (shouldSync) {
+          syncBookingToServer(newBooking, true, (err) =>
+            rollbackBooking(err || "Gagal menyimpan booking ruang kerja")
+          );
+        } else {
+          rollbackBooking();
+        }
+      });
+    } else {
+      syncBookingToServer(newBooking, true, (err) =>
+        rollbackBooking(err || "Gagal menyimpan booking ruang kerja")
+      );
+    }
 
     addNotification({
       type: "PAYMENT_RECEIVED",
@@ -695,6 +788,15 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     return newBooking;
   };
 
+  const revertBookingUpdate = useCallback(
+    (previousBooking: CoworkingBookingRecord) => () => {
+      commitBookings((prev) =>
+        prev.map((b) => (b.id === previousBooking.id ? previousBooking : b))
+      );
+    },
+    [commitBookings]
+  );
+
   const confirmBookingPayment = (
     bookingId: string,
     paymentMethod?: string,
@@ -709,11 +811,32 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const method = paymentMethod || booking.paymentMethod || "QRIS";
     const supervisorName =
       qrisVerification?.supervisorName || user?.name || "Supervisor Coworking";
+    const todayWita = getTodayWitaDateString(now);
+    const bookingStartYmd = normalizeDateToYMD(booking.date);
+    const bookingEndYmd = booking.endDate
+      ? normalizeDateToYMD(booking.endDate)
+      : bookingStartYmd;
+    const isTerminalStatus =
+      booking.checkInStatus === "COMPLETED" ||
+      booking.checkInStatus === "CANCELLED";
+    const isTodayBooking =
+      Boolean(bookingStartYmd) &&
+      (bookingStartYmd === todayWita ||
+        (bookingStartYmd <= todayWita && todayWita <= bookingEndYmd));
+    const shouldCheckInNow =
+      !isTerminalStatus &&
+      (isTodayBooking || booking.checkInStatus === "CHECKED_IN");
+    const nextCheckInStatus = isTerminalStatus
+      ? booking.checkInStatus
+      : shouldCheckInNow
+        ? "CHECKED_IN"
+        : "RESERVED";
+
     const updatedBooking: CoworkingBookingRecord = {
       ...booking,
       paymentStatus: "PAID",
       paymentMethod: method,
-      checkInStatus: "CHECKED_IN",
+      checkInStatus: nextCheckInStatus,
       paidAmount: booking.totalAmount,
       remainingAmount: 0,
       paymentRef:
@@ -721,8 +844,12 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
         booking.paymentRef ||
         `PAY-${booking.bookingCode}`,
       paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
-      checkedInAt: booking.checkedInAt || `${dateFormatted} ${nowFormatted}`,
-      checkedInBy: booking.checkedInBy || supervisorName,
+      checkedInAt: shouldCheckInNow
+        ? booking.checkedInAt || `${dateFormatted} ${nowFormatted}`
+        : booking.checkedInAt,
+      checkedInBy: shouldCheckInNow
+        ? booking.checkedInBy || supervisorName
+        : booking.checkedInBy,
       qrisVerification: qrisVerification || booking.qrisVerification,
     };
 
@@ -730,42 +857,67 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       prev.map((b) => (b.id === booking.id ? updatedBooking : b))
     );
 
-    const newLog: CheckInOutLog = {
-      id: `chk-${now.getTime()}`,
-      bookingCode: booking.bookingCode,
-      guestName: booking.guestName,
-      spaceName: booking.spaceName,
-      checkInDate: dateFormatted,
-      checkInTime: nowFormatted,
-      checkInBy: supervisorName,
-      durationFormatted: "Sedang Aktif",
-      status: "ACTIVE_IN",
-    };
-
-    const sessionCmd: CoworkingMasterCommand = {
-      op: "PATCH_SPACE_SESSION",
-      spaceId: booking.spaceId,
-      status: "OCCUPIED",
-      currentSession: {
-        guestName: booking.guestName,
-        company: booking.company || "Personal",
-        checkInTime: nowFormatted,
-        endTime: booking.endTime || "Selesai",
-        bookingCode: booking.bookingCode,
-      },
-      checkLog: newLog,
-    };
-
-    mutateCoworkingMaster(
-      (prev) => applyCoworkingMasterCommand(prev, sessionCmd),
-      {
-        id: `cwk-session-confirm-${booking.id}`,
-        isCreate: false,
-        command: sessionCmd,
-      }
+    const hasOtherCheckedIn = bookingsRef.current.some(
+      (b) =>
+        b.id !== booking.id &&
+        b.spaceId === booking.spaceId &&
+        b.checkInStatus === "CHECKED_IN"
     );
 
-    syncBookingToServer(updatedBooking, false);
+    if (shouldCheckInNow) {
+      const newLog: CheckInOutLog = {
+        id: `chk-${now.getTime()}`,
+        bookingCode: booking.bookingCode,
+        guestName: booking.guestName,
+        spaceName: booking.spaceName,
+        checkInDate: dateFormatted,
+        checkInTime: nowFormatted,
+        checkInBy: supervisorName,
+        durationFormatted: "Sedang Aktif",
+        status: "ACTIVE_IN",
+      };
+
+      const sessionCmd: CoworkingMasterCommand = {
+        op: "PATCH_SPACE_SESSION",
+        spaceId: booking.spaceId,
+        status: "OCCUPIED",
+        currentSession: {
+          guestName: booking.guestName,
+          company: booking.company || "Personal",
+          checkInTime: nowFormatted,
+          endTime: booking.endTime || "Selesai",
+          bookingCode: booking.bookingCode,
+        },
+        checkLog: newLog,
+      };
+
+      mutateCoworkingMaster(
+        (prev) => applyCoworkingMasterCommand(prev, sessionCmd),
+        {
+          id: `cwk-session-confirm-${booking.id}`,
+          isCreate: false,
+          command: sessionCmd,
+        }
+      );
+    } else if (!isTerminalStatus && !hasOtherCheckedIn) {
+      const sessionCmd: CoworkingMasterCommand = {
+        op: "PATCH_SPACE_SESSION",
+        spaceId: booking.spaceId,
+        status: "RESERVED",
+        currentSession: undefined,
+      };
+
+      mutateCoworkingMaster(
+        (prev) => applyCoworkingMasterCommand(prev, sessionCmd),
+        {
+          id: `cwk-session-confirm-${booking.id}`,
+          isCreate: false,
+          command: sessionCmd,
+        }
+      );
+    }
+
+    syncBookingToServer(updatedBooking, false, revertBookingUpdate(booking));
 
     addNotification({
       type: "PAYMENT_RECEIVED",
@@ -855,7 +1007,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    syncBookingToServer(cancelledBooking, false);
+    syncBookingToServer(cancelledBooking, false, revertBookingUpdate(booking));
 
     logActivity({
       module: "COWORKING",
@@ -931,7 +1083,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    syncBookingToServer(checkedInBooking, false);
+    syncBookingToServer(checkedInBooking, false, revertBookingUpdate(booking));
 
     logActivity({
       module: "COWORKING",
@@ -997,7 +1149,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       commitBookings((prev) =>
         prev.map((b) => (b.id === booking.id ? completedBooking : b))
       );
-      syncBookingToServer(completedBooking, false);
+      syncBookingToServer(completedBooking, false, revertBookingUpdate(booking));
     }
 
     logActivity({

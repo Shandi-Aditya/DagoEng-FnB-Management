@@ -200,6 +200,7 @@ export default function OrdersPage() {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    paymentReference?: string;
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => {
@@ -235,11 +236,13 @@ export default function OrdersPage() {
         {
           paymentStatus: "PAID",
           paymentMethod: chosenMethod,
+          paymentReference:
+            paymentData.paymentReference || paymentData.qrisVerification?.referenceNumber,
           qrisVerification: paymentData.qrisVerification,
           splitDetails: mappedSplitDetails,
           cashierName: user?.name,
-          tax: pBreakdown.pb1,
-          serviceCharge: pBreakdown.serviceCharge,
+          tax: paymentOrder.tax ?? pBreakdown.pb1,
+          serviceCharge: paymentOrder.serviceCharge ?? pBreakdown.serviceCharge,
         }
       );
 
@@ -282,7 +285,12 @@ export default function OrdersPage() {
           (m) => m.name.toLowerCase().trim() === paymentOrder.customerName.toLowerCase().trim()
         );
       let pointsAdded = 0;
-      if (matchingMember) {
+      const alreadyEarnedForOrder = matchingMember
+        ? matchingMember.pointHistory.some(
+            (h) => h.type === "EARN" && h.relatedTransactionId === paymentOrder.id
+          )
+        : false;
+      if (matchingMember && !alreadyEarnedForOrder) {
         pointsAdded = Math.floor(paymentOrder.total / 1000);
         addPoints(
           matchingMember.id,
@@ -335,6 +343,10 @@ export default function OrdersPage() {
           status: nextStatus,
           paymentStatus: "PAID" as const,
           paymentMethod: chosenMethod,
+          paymentReference:
+            paymentData.paymentReference ||
+            paymentData.qrisVerification?.referenceNumber ||
+            paymentOrder.paymentReference,
           qrisVerification: paymentData.qrisVerification ?? paymentOrder.qrisVerification,
           splitDetails: mappedSplitDetails ?? paymentOrder.splitDetails,
           cashierName: user?.name || paymentOrder.cashierName,
@@ -473,13 +485,12 @@ export default function OrdersPage() {
           resolvedOrder.id,
           resolvedOrder.outletId
         );
-      } else if (refundOrderTarget.corporateInfo?.linkedBookingCode) {
+      }
+      if (refundOrderTarget.corporateInfo?.linkedBookingCode) {
         const matchingBooking = cwBookings.find(
           (b) => b.bookingCode === refundOrderTarget.corporateInfo?.linkedBookingCode
         );
-        if (matchingBooking) {
-          cancelBooking(matchingBooking.id);
-        }
+        cancelBooking(matchingBooking?.id || refundOrderTarget.corporateInfo.linkedBookingCode);
       }
 
       const isPostCook =
@@ -616,6 +627,7 @@ export default function OrdersPage() {
             tableNumber={paymentOrder.tableNumber}
             customerName={paymentOrder.customerName}
             orderType={paymentOrder.orderType === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"}
+            isSettlement
             onPaymentSuccess={handlePaymentSuccess}
           />
         );

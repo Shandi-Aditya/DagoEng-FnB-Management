@@ -3691,6 +3691,7 @@ export async function createInvitationTicket(
   return withBookingLock(async () => {
     let committedBooking: EventTicketOrder | null = null;
     let committedBookingsList: EventTicketOrder[] | null = null;
+    let committedEventsList: CommunityEvent[] | null = null;
 
     const result = await runWithDistributedEventLock(payload.eventId, async (tx) => {
       let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
@@ -3709,7 +3710,13 @@ export async function createInvitationTicket(
         throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk menerbitkan tiket undangan pada event ini.");
       }
 
-      await expirePendingBookings();
+      const hadExpired = expirePendingBookingsSnapshot(allBookings, allEvents, Date.now());
+      if (hadExpired) {
+        await saveBookingsToDisk(allBookings, { tx });
+        await saveEventsToDisk(allEvents, { tx });
+        committedEventsList = allEvents;
+        committedBookingsList = allBookings;
+      }
 
       // Resolve tier if specified
       let selectedTier: EventTicketTier | undefined;
@@ -3826,6 +3833,10 @@ export async function createInvitationTicket(
       return newBooking;
     });
 
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
+    }
     if (committedBookingsList) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
@@ -4415,32 +4426,29 @@ export async function createEventBooking(
     let committedBooking: EventTicketOrder | null = null;
     let committedBookingsList: EventTicketOrder[] | null = null;
     let committedEventsList: CommunityEvent[] | null = null;
+    let createdNewBooking = false;
 
     const result = await runWithDistributedEventLock(payload.eventId, async (tx) => {
       let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
       let allBookings: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
 
-      const initialEvent = allEvents.find((e) => e.id === payload.eventId);
-      if (!initialEvent) {
+      const event = allEvents.find((e) => e.id === payload.eventId);
+      if (!event) {
         throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
       }
 
-      const validation = validateEventBooking(payload, initialEvent);
+      const hadExpired = expirePendingBookingsSnapshot(allBookings, allEvents, Date.now());
+
+      const validation = validateEventBooking(payload, event);
       if (!validation.valid) {
         throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
       }
 
-      const hadExpired = expirePendingBookingsSnapshot(allBookings, allEvents, Date.now());
       if (hadExpired) {
         await saveBookingsToDisk(allBookings, { tx });
         await saveEventsToDisk(allEvents, { tx });
         committedEventsList = allEvents;
         committedBookingsList = allBookings;
-      }
-
-      const event = allEvents.find((e) => e.id === payload.eventId);
-      if (!event) {
-        throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
       }
       const activeBookings = allBookings.filter(
         (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
@@ -4661,6 +4669,7 @@ export async function createEventBooking(
 
       committedBooking = newBooking;
       committedBookingsList = allBookings;
+      createdNewBooking = true;
 
       return newBooking;
     });
@@ -4675,7 +4684,7 @@ export async function createEventBooking(
       markStorageSyncSynced("event_bookings.json");
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket gratis terbit (PAID)
-      if (result && result.paymentStatus === "PAID") {
+      if (createdNewBooking && result && result.paymentStatus === "PAID") {
         let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([

@@ -59,6 +59,10 @@ interface Selection {
   start: string;
 }
 
+function spaceMaxCapacity(space: CoworkingSpaceItem): number {
+  return space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
+}
+
 /** Pick a day, see each room's free hours, tap one to book it. */
 export function SpaceView(props: SpaceViewProps) {
   const { settings } = useSettings();
@@ -93,7 +97,14 @@ export function SpaceView(props: SpaceViewProps) {
     selection !== null &&
     hours < COWORKING_MAX_HOURS &&
     isWithinCoworkingHours(selection.start, hours + 1) &&
-    isRangeFree(props.bookings, selection.space.id, date, selection.start, hours + 1);
+    isRangeFree(
+      props.bookings,
+      selection.space.id,
+      date,
+      selection.start,
+      hours + 1,
+      spaceMaxCapacity(selection.space)
+    );
   const basePrice = selection ? selection.space.hourlyRate * hours : 0;
   const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
   const total = basePrice + taxAmount;
@@ -160,7 +171,7 @@ export function SpaceView(props: SpaceViewProps) {
                   space.id,
                   date,
                   slots,
-                  space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1,
+                  spaceMaxCapacity(space),
                   { checkPast: true }
                 ).map((slot) => (
                   <button

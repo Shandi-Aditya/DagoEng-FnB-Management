@@ -176,19 +176,27 @@ export default function ReportsPage() {
 
   const paidOrdersCount = filteredOrders.filter(isSettledPaidOrder).length;
   const paidCoworkingCount = filteredCoworkingBookings.filter(
-    (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
+    (b) =>
+      b.paymentStatus === "PAID" &&
+      b.checkInStatus !== "CANCELLED" &&
+      !b.linkedOrderId &&
+      !b.billedViaPosOrder
   ).length;
   const pendingCoworkingQrisCount = filteredCoworkingBookings.filter(
     (b) =>
       b.paymentMethod === "QRIS" &&
       b.paymentStatus === "PENDING" &&
-      b.checkInStatus !== "CANCELLED"
+      b.checkInStatus !== "CANCELLED" &&
+      !b.linkedOrderId &&
+      !b.billedViaPosOrder
   ).length;
   const discountedCoworkingCount = filteredCoworkingBookings.filter(
     (b) =>
       b.paymentStatus === "PAID" &&
       b.checkInStatus !== "CANCELLED" &&
-      (b.discount || 0) > 0
+      (b.discount || 0) > 0 &&
+      !b.linkedOrderId &&
+      !b.billedViaPosOrder
   ).length;
   const settlementRowsCount = useMemo(() => {
     const rows = calculateSettlement(filteredOrders);

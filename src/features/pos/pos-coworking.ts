@@ -34,11 +34,17 @@ export function getCurrentTimeFormatted(): string {
   }).format(now);
 }
 
-export function getValidOperationalTime(targetDateStr?: string): string {
-  const now = new Date();
+export function getValidOperationalTime(
+  targetDateStr?: string,
+  now: Date = new Date()
+): string {
   const todayStr = getTodayWitaDateString(now);
-  if (targetDateStr && targetDateStr > todayStr) {
+  const targetYmd = targetDateStr ? normalizeDateToYMD(targetDateStr) : "";
+  if (targetYmd && targetYmd > todayStr) {
     return "09:00";
+  }
+  if (targetYmd && targetYmd < todayStr) {
+    return "";
   }
   const witaHourStr = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Makassar",
@@ -49,14 +55,17 @@ export function getValidOperationalTime(targetDateStr?: string): string {
     timeZone: "Asia/Makassar",
     minute: "numeric",
   }).format(now);
-  const curH = parseInt(witaHourStr, 10);
+  const curH = parseInt(witaHourStr, 10) % 24;
   const curM = parseInt(witaMinuteStr, 10);
   if (curH < 9) return "09:00";
-  if (curH >= 9 && curH <= 17) {
-    const slotHour = curM > 15 ? Math.min(curH + 1, 17) : curH;
+  if (curH >= 9 && curH < 17) {
+    const slotHour = curM > 15 ? curH + 1 : curH;
     return `${slotHour.toString().padStart(2, "0")}:00`;
   }
-  return "09:00";
+  if (curH === 17 && curM <= 15) {
+    return "17:00";
+  }
+  return "";
 }
 
 export function calculateEndTime(startTime: string, durationHours: number): string {
@@ -96,7 +105,7 @@ export function isSlotPast(
     timeZone: "Asia/Makassar",
     minute: "numeric",
   }).format(now);
-  const curH = parseInt(witaHourStr, 10);
+  const curH = parseInt(witaHourStr, 10) % 24;
   const curM = parseInt(witaMinuteStr, 10);
   const slotH = parseHour(slotTime);
   if (slotH < curH) return true;
@@ -149,6 +158,17 @@ export function checkSlotAvailability({
       maxCapacity,
       isPast: false,
       label: "Pemeliharaan",
+    };
+  }
+
+  if (startHour + durationHours > 18) {
+    return {
+      isAvailable: false,
+      reason: "Melewati jam tutup operasional (18:00 WITA)",
+      remainingSeats: 0,
+      maxCapacity,
+      isPast,
+      label: "Tutup 18:00",
     };
   }
 

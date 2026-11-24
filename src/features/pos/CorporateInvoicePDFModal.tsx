@@ -19,6 +19,7 @@ import {
   OFFICIAL_HUB_NAME,
 } from "@/lib/contact-config";
 import { buildOrderReceiptData } from "@/features/orders/orders-domain";
+import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
 import type { POSReceiptData } from "@/features/pos/types";
 import type { OrderRecord } from "@/types/order";
 
@@ -58,6 +59,7 @@ export function CorporateInvoicePDFModal({
     order && "paymentStatus" in order
       ? order.paymentStatus === "PAID"
       : receiptData.paymentStatus === "PAID";
+  const isPrepaid = corporate?.billingType === "PREPAID";
   const rawInvoice = corporate?.invoiceNumber || receiptData.orderNumber;
   const invoiceNumber = rawInvoice.startsWith("INV-") ? rawInvoice : `INV-${rawInvoice}`;
 
@@ -80,10 +82,13 @@ export function CorporateInvoicePDFModal({
     });
   };
 
-  const dueDate = formatIndonesianDate(
-    corporate?.invoiceDueDate ||
-      new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-  );
+  const dueDate =
+    isPaid || isPrepaid
+      ? "-"
+      : formatIndonesianDate(
+          corporate?.invoiceDueDate ||
+            getTodayWitaDateString(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000))
+        );
 
   const handlePrint = () => {
     const invoiceEl = document.getElementById("printable-corporate-invoice");
@@ -207,7 +212,10 @@ export function CorporateInvoicePDFModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-full sm:max-w-5xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent
+        showCloseButton={false}
+        className="w-full sm:max-w-5xl md:max-w-6xl lg:max-w-7xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Invoice perusahaan {invoiceNumber}</DialogTitle>
           <DialogDescription>Faktur tagihan resmi perusahaan Dago Creative Hub</DialogDescription>
@@ -233,25 +241,28 @@ export function CorporateInvoicePDFModal({
         </div>
 
         {/* Scrollable Container */}
-        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-6 sm:p-8 bg-muted/10">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0"
+        >
           <div
             id="printable-corporate-invoice"
-            className="p-8 bg-card text-card-foreground font-sans leading-relaxed text-xs border rounded-lg shadow-xs max-w-4xl mx-auto"
+            className="w-full max-w-5xl min-w-0 p-6 sm:p-8 bg-card text-card-foreground font-sans leading-relaxed text-xs border rounded-lg shadow-xs mx-auto"
           >
             {/* Header & Logo */}
             <div className="flex justify-between items-start border-b border-border pb-6 mb-6">
               <div>
-                <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                <h1 className="text-xl font-semibold text-foreground">
                   {OFFICIAL_HUB_NAME}
                 </h1>
                 <p className="text-xs text-muted-foreground mt-0.5 font-medium">
-                  Coworking, Meeting Space & Curated F&B Multi-Tenant
+                  Ruang kerja, ruang pertemuan, dan F&B multi-mitra
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {OFFICIAL_HUB_ADDRESS}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  WhatsApp Hotline: {OFFICIAL_CS_WHATSAPP_NUMBER} · Email: {OFFICIAL_FINANCE_EMAIL}
+                  Layanan WhatsApp: {OFFICIAL_CS_WHATSAPP_NUMBER} · Email: {OFFICIAL_FINANCE_EMAIL}
                 </p>
               </div>
               <div className="text-right flex flex-col items-end">
@@ -259,7 +270,7 @@ export function CorporateInvoicePDFModal({
                   Faktur korporat
                 </div>
                 <p className="font-mono text-sm font-semibold text-foreground mt-2">{invoiceNumber}</p>
-                <p className="text-xs text-muted-foreground">Order Ref: #{receiptData.orderNumber}</p>
+                <p className="text-xs text-muted-foreground">Referensi pesanan: #{receiptData.orderNumber}</p>
               </div>
             </div>
 
@@ -313,7 +324,7 @@ export function CorporateInvoicePDFModal({
                         </>
                       ) : (
                         <>
-                          <Clock className="size-3" /> Belum dibayar (tempo 14 hari)
+                          <Clock className="size-3" /> {isPrepaid ? "Belum dibayar" : "Belum dibayar (tempo 14 hari)"}
                         </>
                       )}
                     </span>
@@ -323,8 +334,8 @@ export function CorporateInvoicePDFModal({
             </div>
 
             {/* Table of Items */}
-            <div className="border border-border rounded-lg overflow-hidden mb-6">
-              <table className="w-full table-fixed text-left border-collapse">
+            <div className="border border-border rounded-lg overflow-x-auto w-full mb-6">
+              <table className="w-full table-fixed min-w-[760px] sm:min-w-0 text-left border-collapse">
                 <colgroup>
                   <col className="w-[6%]" />
                   <col className="w-[42%]" />
@@ -390,14 +401,33 @@ export function CorporateInvoicePDFModal({
                     <span className="font-mono tabular-nums">- {formatCurrencyIDR(receiptData.discount)}</span>
                   </div>
                 ) : null}
-                {receiptData.tax && receiptData.tax > 0 ? (
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Pajak restoran PB1:</span>
-                    <span className="font-medium font-mono tabular-nums text-foreground">
-                      {formatCurrencyIDR(receiptData.tax)}
-                    </span>
-                  </div>
-                ) : null}
+                {(() => {
+                  const coworkingTax = receiptData.coworkingTax ?? 0;
+                  const fnbTax =
+                    receiptData.fnbTax !== undefined
+                      ? receiptData.fnbTax
+                      : Math.max(0, (receiptData.tax ?? 0) - coworkingTax);
+                  return (
+                    <>
+                      {fnbTax > 0 ? (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Pajak restoran PB1:</span>
+                          <span className="font-medium font-mono tabular-nums text-foreground">
+                            {formatCurrencyIDR(fnbTax)}
+                          </span>
+                        </div>
+                      ) : null}
+                      {coworkingTax > 0 ? (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Pajak sewa co-working:</span>
+                          <span className="font-medium font-mono tabular-nums text-foreground">
+                            {formatCurrencyIDR(coworkingTax)}
+                          </span>
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 {receiptData.serviceCharge && receiptData.serviceCharge > 0 ? (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Biaya layanan:</span>
@@ -428,7 +458,7 @@ export function CorporateInvoicePDFModal({
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground italic">
+                <p className="text-xs text-muted-foreground">
                   * Cantumkan nomor invoice <strong>{invoiceNumber}</strong> pada berita transfer untuk mempercepat verifikasi.
                 </p>
               </div>
@@ -445,7 +475,7 @@ export function CorporateInvoicePDFModal({
                 <div className="flex flex-col justify-between h-32 border-b pb-2">
                   <span className="text-muted-foreground text-xs">{OFFICIAL_HUB_NAME}</span>
                   <div className="mt-auto">
-                    <p className="font-semibold text-foreground">Finance & accounting</p>
+                    <p className="font-semibold text-foreground">Keuangan & akuntansi</p>
                     <p className="text-xs text-muted-foreground">Singaraja, Bali</p>
                   </div>
                 </div>

@@ -35,7 +35,7 @@ export const DEFAULT_CORPORATE_DRAFT: CorporateOrderDraft = {
   billingType: "PREPAID",
   meetingRoomId: undefined,
   meetingBookingDate: "",
-  meetingStartTime: "09:00",
+  meetingStartTime: "",
   meetingDurationHours: 1,
   notes: "",
 };

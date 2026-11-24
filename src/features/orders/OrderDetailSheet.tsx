@@ -100,12 +100,18 @@ function OrderDetailBody({
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
   const isPaid = selectedOrder.paymentStatus === "PAID";
+  const isRefunded = selectedOrder.paymentStatus === "REFUNDED";
   const hasFnbItems = (selectedOrder.items || []).some((it) => !isCoworkingOrderItem(it));
+  const isCorporateInvoice =
+    (selectedOrder.paymentMethod === "INVOICE" ||
+      selectedOrder.corporateInfo?.billingType === "INVOICE") &&
+    !isRefunded;
   const canPayThis =
     !isCancelled &&
     !isPaid &&
+    !isRefunded &&
     canProcessPayment &&
-    (selectedOrder.status !== "COMPLETED" || selectedOrder.paymentMethod === "INVOICE");
+    (selectedOrder.status !== "COMPLETED" || isCorporateInvoice);
   const timing = [
     { label: "Antre di dapur", minutes: metrics.kitchenQueueMinutes },
     { label: "Dimasak", minutes: metrics.cookingMinutes },

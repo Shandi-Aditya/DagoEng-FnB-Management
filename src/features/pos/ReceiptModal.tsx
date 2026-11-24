@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CorporateInvoicePDFModal } from "@/features/pos/CorporateInvoicePDFModal";
+import { paymentMethodLabel } from "@/features/orders/orders-domain";
 import {
   calculateTenantReceiptGroups,
   formatReceiptLoyaltyPoints,
@@ -443,7 +444,7 @@ export function ReceiptModal({
               <div className="space-y-1 text-xs border-b border-dashed border-border pb-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Metode bayar:</span>
-                  <span className="font-medium text-foreground">{activeReceipt.paymentMethod}</span>
+                  <span className="font-medium text-foreground">{paymentMethodLabel(activeReceipt.paymentMethod)}</span>
                 </div>
                 {activeReceipt.qrisVerification && (
                   <div className="flex justify-between text-xs text-muted-foreground">
@@ -460,7 +461,7 @@ export function ReceiptModal({
                     <span className="font-medium text-foreground block">Rincian split payment:</span>
                     {activeReceipt.splitDetails.map((g, idx) => (
                       <div key={g.id || idx} className="flex justify-between text-muted-foreground">
-                        <span>• {g.guestLabel} ({g.paymentMethod}):</span>
+                        <span>• {g.guestLabel} ({paymentMethodLabel(g.paymentMethod)}):</span>
                         <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(g.assignedAmount)}</span>
                       </div>
                     ))}
@@ -474,12 +475,18 @@ export function ReceiptModal({
                   <span className="text-muted-foreground">Kembalian:</span>
                   <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(activeReceipt.changeDue)}</span>
                 </div>
-                <div className="flex justify-between font-medium text-success">
+                <div
+                  className={`flex justify-between font-medium ${
+                    (activeReceipt.paymentStatus || "PAID") === "PAID"
+                      ? "text-success"
+                      : activeReceipt.paymentStatus === "REFUNDED"
+                        ? "text-destructive"
+                        : "text-warning"
+                  }`}
+                >
                   <span>Status pembayaran:</span>
                   <span>
-                    {formatReceiptPaymentStatus(
-                      (activeReceipt as { paymentStatus?: string }).paymentStatus || "PAID"
-                    )}
+                    {formatReceiptPaymentStatus(activeReceipt.paymentStatus || "PAID")}
                   </span>
                 </div>
               </div>
@@ -562,7 +569,7 @@ export function ReceiptModal({
                     `No: #${activeReceipt.orderNumber}\n` +
                     `Pelanggan: ${activeReceipt.customerName || "Tamu"}\n` +
                     `Total: ${formatCurrencyIDR(activeReceipt.grandTotal)}\n` +
-                    `Metode: ${activeReceipt.paymentMethod}\n` +
+                    `Metode: ${paymentMethodLabel(activeReceipt.paymentMethod)}\n` +
                     (simulatedWifiVoucher ? `Kode Wi-Fi: ${simulatedWifiVoucher.voucherCode} (${simulatedWifiVoucher.durationFormatted})\n` : "") +
                     `\nTerima kasih telah berkunjung`
                   );
@@ -582,7 +589,7 @@ export function ReceiptModal({
                 variant="outline"
                 size="lg"
                 onClick={() => setIsInvoiceModalOpen(true)}
-                className="w-full col-span-2 border-primary/40 text-primary hover:bg-primary/5 font-semibold text-xs gap-1.5"
+                className="w-full col-span-2 border-primary/40 text-primary hover:bg-primary/5 font-semibold gap-1.5"
               >
                 <FileText className="size-4" />
                 <span>Lihat invoice perusahaan</span>

@@ -32,7 +32,11 @@ import {
   formatCoworkingTaxLabel,
   type DailyPreset,
 } from "./coworking-domain";
-import { checkSlotAvailability } from "@/features/pos/pos-coworking";
+import {
+  checkSlotAvailability,
+  getValidOperationalTime,
+  isSlotPast,
+} from "@/features/pos/pos-coworking";
 
 export interface NewBookingModalProps {
   isOpen: boolean;
@@ -87,7 +91,9 @@ export function NewBookingModal({
   const [bookDailyPreset, setBookDailyPreset] = useState<DailyPreset>("1_DAY");
   const [bookStartDate, setBookStartDate] = useState(todayStr);
   const [bookEndDate, setBookEndDate] = useState(todayStr);
-  const [bookStartTime, setBookStartTime] = useState("09:00");
+  const [bookStartTime, setBookStartTime] = useState(() =>
+    getValidOperationalTime(bookStartDate)
+  );
   const [bookGuestName, setBookGuestName] = useState("");
   const [bookPhone, setBookPhone] = useState("");
   const [bookEmail, setBookEmail] = useState("");
@@ -95,6 +101,10 @@ export function NewBookingModal({
   const [bookPaymentMethod, setBookPaymentMethod] = useState("QRIS");
   const [bookIsImmediateCheckIn, setBookIsImmediateCheckIn] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    setBookStartTime(getValidOperationalTime(bookStartDate));
+  }, [bookStartDate, isOpen]);
 
   useEffect(() => {
     if (defaultSpaceId) {
@@ -156,6 +166,11 @@ export function NewBookingModal({
 
     if (!bookGuestName.trim() || !bookPhone.trim() || !selectedSpace) {
       setErrorMessage("Isi nama dan nomor WhatsApp tamu.");
+      return;
+    }
+
+    if (bookType === "HOURLY" && isSlotPast(bookStartDate, bookStartTime)) {
+      setErrorMessage("Slot jam yang dipilih sudah lewat.");
       return;
     }
 

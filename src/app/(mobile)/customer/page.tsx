@@ -35,6 +35,14 @@ import type { CoworkingBooking } from "@/types/coworking";
 import type { EventTicketOrder } from "@/types/event";
 import type { OrderRecord } from "@/types/order";
 import type { MasterProduct } from "@/types/product";
+import type { RoleSlug } from "@/types/auth";
+
+const UNSUPPORTED_BOOKING_ROLES = new Set<RoleSlug>([
+  "WAITER",
+  "KITCHEN_STAFF",
+  "CHECKIN_STAFF",
+  "INVENTORY_STAFF",
+]);
 
 const DEFAULT_PARTNER = "tenant-ks";
 
@@ -262,6 +270,13 @@ function CustomerApp() {
     if (!user) {
       notify.error("Masuk diperlukan", "Silakan login atau daftar akun untuk memesan ruang kerja.");
       setView("account");
+      return;
+    }
+    if (user.role?.slug && UNSUPPORTED_BOOKING_ROLES.has(user.role.slug)) {
+      notify.error(
+        "Akses role dibatasi",
+        "Akun staf ini tidak dapat memesan ruang kerja. Pakai akun pelanggan atau kasir."
+      );
       return;
     }
     setIsBooking(true);

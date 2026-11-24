@@ -157,7 +157,7 @@ export function PaymentTabSplit({
                     variant={guest.paymentMethod === m ? "default" : "outline"}
                     onClick={() => onGuestMethodChange(guest.id, m)}
                   >
-                    {m}
+                    {m === "CASH" ? "Tunai" : m}
                   </Button>
                 ))}
               </div>

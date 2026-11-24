@@ -5,10 +5,16 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { buildReportData, extractAvailableReportCompanies } from "@/features/reports/reports-domain";
 import { formatOrderCustomerName } from "@/features/orders/orders-domain";
+import {
+  checkSlotAvailability,
+  getValidOperationalTime,
+  isSlotPast,
+} from "@/features/pos/pos-coworking";
+import { OFFICIAL_BANK_ACCOUNTS } from "@/lib/contact-config";
 import { calculateMixedCartTaxAndService } from "@/lib/tax-breakdown";
 import { writePersistentData } from "@/lib/persistent-storage";
 import * as serverAuth from "@/lib/server-auth";
-import { PUT as putOrders } from "@/app/api/orders/route";
+import { POST as postOrders, PUT as putOrders } from "@/app/api/orders/route";
 import { DEFAULT_CORPORATE_DRAFT, type OrderRecord, type CorporateOrderInfo } from "@/types/order";
 import type { CoworkingBooking } from "@/types/coworking";
 
@@ -469,6 +475,171 @@ describe("S-36 Corporate Order, Bundling, Invoicing & Report Filtering", () => {
     expect(DEFAULT_CORPORATE_DRAFT.companyName).toBe("");
     expect(DEFAULT_CORPORATE_DRAFT.billingType).toBe("PREPAID");
     expect(DEFAULT_CORPORATE_DRAFT.headcount).toBe(1);
+    expect(DEFAULT_CORPORATE_DRAFT.meetingStartTime).toBe("");
     expect(DEFAULT_CORPORATE_DRAFT.meetingDurationHours).toBe(1);
+  });
+
+  it("uses OFFICIAL_BANK_ACCOUNTS in PaymentModal without fake hardcoded bank accounts", () => {
+    const paymentModalSrc = fs.readFileSync(
+      path.resolve(process.cwd(), "src/features/pos/PaymentModal.tsx"),
+      "utf-8"
+    );
+
+    expect(paymentModalSrc).toContain("OFFICIAL_BANK_ACCOUNTS");
+    expect(paymentModalSrc).not.toContain("PT Dago Eng Solusindo");
+    expect(paymentModalSrc).not.toContain("782-019-2819");
+    expect(paymentModalSrc).not.toContain("137-00-1928-112");
+    expect(OFFICIAL_BANK_ACCOUNTS.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("rejects over-closing coworking slots and avoids past slots during 17:16-17:59 WITA", () => {
+    const meetingRoom = {
+      id: "mr-closing-test",
+      name: "Meeting Room Singaraja",
+      type: "MEETING_ROOM" as const,
+      area: "Lantai 2",
+      capacity: 10,
+      hourlyRate: 100000,
+      dailyRate: 600000,
+      status: "AVAILABLE" as const,
+      amenities: ["WiFi"],
+      description: "Ruang meeting",
+      imageUrl: "",
+    };
+
+    const atClosingStart = checkSlotAvailability({
+      spaceId: meetingRoom.id,
+      spaces: [meetingRoom],
+      bookings: [],
+      targetDate: "2099-01-01",
+      startHour: 18,
+      durationHours: 1,
+    });
+    expect(atClosingStart.isAvailable).toBe(false);
+
+    const overClosingDuration = checkSlotAvailability({
+      spaceId: meetingRoom.id,
+      spaces: [meetingRoom],
+      bookings: [],
+      targetDate: "2099-01-01",
+      startHour: 17,
+      durationHours: 2,
+    });
+    expect(overClosingDuration.isAvailable).toBe(false);
+
+    const exactClosingFit = checkSlotAvailability({
+      spaceId: meetingRoom.id,
+      spaces: [meetingRoom],
+      bookings: [],
+      targetDate: "2099-01-01",
+      startHour: 17,
+      durationHours: 1,
+    });
+    expect(exactClosingFit.isAvailable).toBe(true);
+
+    // 17:30 WITA = 09:30 UTC
+    const wita1730 = new Date("2026-11-24T09:30:00.000Z");
+    const slot1730 = getValidOperationalTime("2026-11-24", wita1730);
+    expect(slot1730).toBe("");
+    expect(isSlotPast("2026-11-24", "17:00", wita1730)).toBe(true);
+
+    // 17:10 WITA = 09:10 UTC -> 17:00 is still open
+    const wita1710 = new Date("2026-11-24T09:10:00.000Z");
+    const slot1710 = getValidOperationalTime("2026-11-24", wita1710);
+    expect(slot1710).toBe("17:00");
+    expect(isSlotPast("2026-11-24", slot1710, wita1710)).toBe(false);
+  });
+
+  it("blocks WAITER from creating INVOICE orders (403) and allows CASHIER settlement with cashierName, splitDetails, and undefined tax normalization", async () => {
+    await writePersistentData("pos_orders.json", []);
+
+    vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+      isAuthenticated: true,
+      userId: "waiter-1",
+      name: "Pramusaji",
+      role: "WAITER",
+      scopeLevel: "OUTLET",
+      permissions: [],
+    });
+
+    const waiterInvoiceRes = await postOrders(
+      new NextRequest("http://localhost:3000/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...sampleCorporateInvoiceOrder,
+          id: "ord-waiter-inv-1",
+          orderNumber: "INV-WAITER-BLOCK",
+          status: "COOKING",
+        }),
+      })
+    );
+    expect(waiterInvoiceRes.status).toBe(403);
+
+    const selfOrderPending: OrderRecord = {
+      id: "ord-self-settle-1",
+      orderNumber: "INV-SELF-1",
+      organizationId: "org-dago-hub",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      tableNumber: "T1",
+      customerName: "Tamu QR",
+      orderType: "DINE_IN",
+      status: "SERVED",
+      targetServiceMinutes: 15,
+      items: [
+        {
+          id: "it-self-1",
+          productId: "prod-1",
+          tenantId: "tenant-ks",
+          tenantName: "Kopi Senja",
+          itemType: "FNB",
+          productName: "Kopi Aren",
+          quantity: 1,
+          unitPrice: 25000,
+        },
+      ],
+      subtotal: 25000,
+      tax: 2500,
+      total: 27500,
+      paymentStatus: "PENDING",
+      paymentMethod: "CASH",
+      createdAt: "2026-11-23T10:00:00.000Z",
+      statusHistory: [],
+    };
+    await writePersistentData("pos_orders.json", [selfOrderPending]);
+
+    vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+      isAuthenticated: true,
+      userId: "cashier-1",
+      name: "Kasir Singaraja",
+      role: "CASHIER",
+      scopeLevel: "OUTLET",
+      permissions: [],
+    });
+
+    const settleRes = await putOrders(
+      new NextRequest("http://localhost:3000/api/orders", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selfOrderPending,
+          status: "COMPLETED",
+          paymentStatus: "PAID",
+          paymentMethod: "SPLIT",
+          cashierName: "Kasir Singaraja",
+          serviceCharge: 0,
+          splitDetails: [
+            { guestNumber: 1, label: "Tamu 1", amount: 15000, method: "CASH" },
+            { guestNumber: 2, label: "Tamu 2", amount: 12500, method: "QRIS" },
+          ],
+        }),
+      })
+    );
+    expect(settleRes.status).toBe(200);
+    const settleJson = await settleRes.json();
+    expect(settleJson.order.paymentStatus).toBe("PAID");
+    expect(settleJson.order.cashierName).toBe("Kasir Singaraja");
+    expect(settleJson.order.splitDetails).toHaveLength(2);
   });
 });

@@ -127,6 +127,7 @@ import {
   parseHour,
   getCurrentTimeFormatted,
   getValidOperationalTime,
+  isSlotPast,
   calculateEndTime,
   checkSlotAvailability as checkSlotAvailabilityHelper,
   coworkingEmptyStateMessage,
@@ -176,7 +177,7 @@ export default function POSPage() {
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
   const { settings, redeemPromo } = useSettings();
-  const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace } = useCoworking();
+  const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace, cancelBooking: cwCancelBooking } = useCoworking();
   const { shifts, activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
   const isTenantScoped = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
@@ -234,7 +235,7 @@ export default function POSPage() {
   useEffect(() => {
     setIsMounted(true);
     if (!isManualTimeSet) {
-      setCwStartTime(getValidOperationalTime());
+      setCwStartTime(getValidOperationalTime(cwDate));
     }
   }, []);
 
@@ -325,10 +326,10 @@ export default function POSPage() {
 
     const duration = Math.max(1, newDraft.meetingDurationHours || 1);
     const bookingDate = newDraft.meetingBookingDate || getTodayWitaDateString();
-    const startTime = newDraft.meetingStartTime || "09:00";
-    const startHour = parseInt(startTime.split(":")[0], 10) || 9;
+    const startTime = newDraft.meetingStartTime || getValidOperationalTime(bookingDate);
+    const startHour = parseHour(startTime);
     const endHour = startHour + duration;
-    const endTime = `${String(endHour).padStart(2, "0")}:00`;
+    const endTime = startTime ? `${String(endHour).padStart(2, "0")}:00` : "";
 
     const roomCartItem: POSCartItem = {
       cartItemId: `bundle-meeting-${room.id}`,
@@ -932,6 +933,7 @@ export default function POSPage() {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    paymentReference?: string;
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => {
@@ -976,43 +978,116 @@ export default function POSPage() {
       const resolvedBillingType: CorporateBillingType = isInvoicePayment ? "INVOICE" : "PREPAID";
 
       let linkedBookingCode: string | undefined = undefined;
+      let linkedBookingId: string | undefined = undefined;
+      let resolveOrderSynced: ((ok: boolean) => void) | undefined;
       const linkedRoom = corporateDraft.meetingRoomId
         ? cwSpaces.find((s) => s.id === corporateDraft.meetingRoomId)
         : undefined;
 
       if (isCorporate && linkedRoom) {
         const meetingDate = corporateDraft.meetingBookingDate || getTodayWitaDateString();
-        const meetingTime = corporateDraft.meetingStartTime || "09:00";
+        const meetingTime = corporateDraft.meetingStartTime || getValidOperationalTime(meetingDate);
         const meetingDuration = Math.max(1, corporateDraft.meetingDurationHours || 1);
+        if (!meetingTime || isSlotPast(meetingDate, meetingTime)) {
+          notify.error(
+            "Jadwal ruang pertemuan sudah lewat",
+            "Pilih tanggal atau jam mulai ruang pertemuan yang masih tersedia."
+          );
+          isSubmittingOrderRef.current = false;
+          return;
+        }
+        if (!isWithinCoworkingHours(meetingTime, meetingDuration)) {
+          notify.error(
+            "Jadwal ruang pertemuan di luar jam operasional",
+            "Jam operasional ruang pertemuan adalah 09.00 sampai 18.00 WITA."
+          );
+          isSubmittingOrderRef.current = false;
+          return;
+        }
         const hourlyRate = linkedRoom.hourlyRate;
         const totalRoomPrice = hourlyRate * meetingDuration;
+        const maxCapacity =
+          linkedRoom.type === "HOT_DESK" ? Math.max(1, linkedRoom.capacity || 8) : 1;
+        const calculatedEndTime = calculateEndTime(meetingTime, meetingDuration).replace(
+          /\s*WITA$/i,
+          ""
+        );
 
         try {
-          const booked = cwBookSpace({
-            guestName: corporateDraft.picName.trim() || "PIC Corporate",
-            guestPhone: corporateDraft.picPhone.trim() || "-",
-            guestEmail: "",
-            company: corporateDraft.companyName.trim(),
-            spaceId: linkedRoom.id,
-            spaceName: linkedRoom.name,
-            spaceType: linkedRoom.type,
-            bookingType: "HOURLY",
-            date: meetingDate,
-            startTime: meetingTime,
-            duration: meetingDuration,
-            price: hourlyRate,
-            discount: 0,
-            totalAmount: totalRoomPrice,
-            paidAmount: isInvoicePayment ? 0 : totalRoomPrice,
-            remainingAmount: isInvoicePayment ? totalRoomPrice : 0,
-            outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
-            paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
-            paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
-            linkedOrderId: receiptNo,
-            billedViaPosOrder: true,
-          });
+          if (typeof window !== "undefined" && typeof fetch === "function") {
+            const liveRes = await fetch("/api/coworking/bookings", { cache: "no-store" });
+            if (liveRes.ok) {
+              const liveJson = await liveRes.json().catch(() => null);
+              if (liveJson && Array.isArray(liveJson.bookings)) {
+                const liveConflict = checkCoworkingBookingConflict(liveJson.bookings, {
+                  spaceId: linkedRoom.id,
+                  spaceName: linkedRoom.name,
+                  bookingType: "HOURLY",
+                  date: meetingDate,
+                  startTime: meetingTime,
+                  endTime: calculatedEndTime,
+                  maxCapacity,
+                });
+                if (liveConflict.hasConflict) {
+                  notify.error(
+                    "Ruang pertemuan sudah terisi",
+                    liveConflict.message ||
+                      "Slot ruang pertemuan sudah dipesan pihak lain. Pilih jam atau ruangan lain."
+                  );
+                  isSubmittingOrderRef.current = false;
+                  return;
+                }
+              }
+            }
+          }
+        } catch {
+          // Offline or mocked environment: fall back to local bookingsRef check in cwBookSpace
+        }
+
+        const orderSyncedPromise = new Promise<boolean>((resolve) => {
+          resolveOrderSynced = resolve;
+        });
+
+        try {
+          const booked = cwBookSpace(
+            {
+              guestName: corporateDraft.picName.trim() || "PIC Corporate",
+              guestPhone: corporateDraft.picPhone.trim() || "-",
+              guestEmail: "",
+              company: corporateDraft.companyName.trim(),
+              spaceId: linkedRoom.id,
+              spaceName: linkedRoom.name,
+              spaceType: linkedRoom.type,
+              bookingType: "HOURLY",
+              date: meetingDate,
+              startTime: meetingTime,
+              endTime: calculatedEndTime,
+              duration: meetingDuration,
+              price: hourlyRate,
+              discount: 0,
+              totalAmount: totalRoomPrice,
+              paidAmount: isInvoicePayment ? 0 : totalRoomPrice,
+              remainingAmount: isInvoicePayment ? totalRoomPrice : 0,
+              outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+              paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
+              paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
+              linkedOrderId: receiptNo,
+              billedViaPosOrder: true,
+            },
+            {
+              waitBeforeSync: orderSyncedPromise,
+              onSyncRejected: (err) => {
+                notify.error(
+                  "Sinkronisasi ruang pertemuan ditolak server",
+                  `${err} Periksa atau batalkan pesanan ${receiptNo} bila ruangan perlu dijadwalkan ulang.`
+                );
+              },
+            }
+          );
           linkedBookingCode = booked?.bookingCode;
+          linkedBookingId = booked?.id;
         } catch (e: any) {
+          resolveOrderSynced?.(false);
           const errMsg = e?.message || "Ruang pertemuan tidak tersedia pada jadwal yang dipilih.";
           notify.error("Gagal memesan ruangan", errMsg);
           isSubmittingOrderRef.current = false;
@@ -1031,7 +1106,7 @@ export default function POSPage() {
             billingType: resolvedBillingType,
             invoiceNumber,
             invoiceDueDate: isInvoicePayment
-              ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+              ? getTodayWitaDateString(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000))
               : undefined,
             notes: orderNotes.trim() || undefined,
             linkedBookingCode,
@@ -1067,7 +1142,7 @@ export default function POSPage() {
         total: grandTotal,
         notes: orderNotes.trim() || undefined,
         paymentMethod: paymentData.method,
-        paymentReference: paymentData.qrisVerification?.referenceNumber,
+        paymentReference: paymentData.paymentReference || paymentData.qrisVerification?.referenceNumber,
         qrisVerification: paymentData.qrisVerification,
         splitDetails: paymentData.splitDetails?.map((g, idx) => ({
           guestNumber: idx + 1,
@@ -1099,12 +1174,18 @@ export default function POSPage() {
 
       const syncResult = await serverSync;
       if (syncResult.rejected) {
+        if (resolveOrderSynced) {
+          resolveOrderSynced(false);
+        } else if (linkedBookingId || linkedBookingCode) {
+          cwCancelBooking(linkedBookingId || linkedBookingCode!);
+        }
         notify.error(
           "Transaksi ditolak server",
           syncResult.error || "Pembayaran tidak dapat diselesaikan."
         );
         return;
       }
+      resolveOrderSynced?.(true);
 
       const createdOrder = syncResult.order ?? optimisticOrder;
 
@@ -1178,14 +1259,17 @@ export default function POSPage() {
             createdOrder.id
           );
         }
-        const earnedPoints = Math.floor(grandTotal / 1000);
-        addPoints(
-          selectedMember.id,
-          earnedPoints,
-          `Transaksi POS #${createdOrder.orderNumber}`,
-          createdOrder.id,
-          grandTotal
-        );
+        const earnedPoints =
+          createdOrder.paymentStatus === "PAID" ? Math.floor(grandTotal / 1000) : 0;
+        if (earnedPoints > 0 && createdOrder.paymentStatus === "PAID") {
+          addPoints(
+            selectedMember.id,
+            earnedPoints,
+            `Transaksi POS #${createdOrder.orderNumber}`,
+            createdOrder.id,
+            grandTotal
+          );
+        }
 
         loyaltyReceiptInfo = {
           name: selectedMember.name,
@@ -1265,6 +1349,7 @@ export default function POSPage() {
         coworkingDiscount: cartTaxBreakdown.coworkingDiscount,
         grandTotal,
         paymentMethod: paymentData.method,
+        paymentStatus: createdOrder.paymentStatus,
         amountPaid: paymentData.amountPaid,
         changeDue: paymentData.changeDue,
         splitDetails: paymentData.splitDetails,
@@ -1360,6 +1445,7 @@ export default function POSPage() {
         targetDate: cwDate,
         startHour: startH,
         durationHours: cwDuration,
+        checkPast: true,
       }).isAvailable
     ).length;
   }, [filteredCwSpaces, cwSpaces, cwBookings, cwDate, cwStartTime, cwDuration]);
@@ -1569,7 +1655,13 @@ export default function POSPage() {
       if (cwCustomerType === "MEMBER" && cwSelectedMember) {
         const earnedPoints = Math.floor(cwPricing.total / 1000);
         if (earnedPoints > 0) {
-          addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${createdBooking.bookingCode}`);
+          addPoints(
+            cwSelectedMember.id,
+            earnedPoints,
+            `Booking Coworking #${createdBooking.bookingCode}`,
+            createdBooking.id,
+            cwPricing.total
+          );
         }
       }
 
@@ -1651,7 +1743,13 @@ export default function POSPage() {
     if (cwCustomerType === "MEMBER" && cwSelectedMember) {
       const earnedPoints = Math.floor(verifiedBooking.totalAmount / 1000);
       if (earnedPoints > 0) {
-        addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${verifiedBooking.bookingCode}`);
+        addPoints(
+          cwSelectedMember.id,
+          earnedPoints,
+          `Booking Coworking #${verifiedBooking.bookingCode}`,
+          verifiedBooking.id,
+          verifiedBooking.totalAmount
+        );
       }
     }
 
@@ -1763,6 +1861,25 @@ export default function POSPage() {
       ) {
         notify.error("Data perusahaan belum lengkap", "Isi nama perusahaan dan kontak PIC.");
         return;
+      }
+      if (corporateDraft.meetingRoomId) {
+        const meetingDate = corporateDraft.meetingBookingDate || getTodayWitaDateString();
+        const meetingTime = corporateDraft.meetingStartTime || getValidOperationalTime(meetingDate);
+        const meetingDuration = Math.max(1, corporateDraft.meetingDurationHours || 1);
+        if (!meetingTime || isSlotPast(meetingDate, meetingTime)) {
+          notify.error(
+            "Jadwal ruang pertemuan sudah lewat",
+            "Pilih tanggal atau jam mulai ruang pertemuan yang masih tersedia."
+          );
+          return;
+        }
+        if (!isWithinCoworkingHours(meetingTime, meetingDuration)) {
+          notify.error(
+            "Jadwal ruang pertemuan di luar jam operasional",
+            "Jam operasional ruang pertemuan adalah 09.00 sampai 18.00 WITA."
+          );
+          return;
+        }
       }
     }
     setIsPaymentModalOpen(true);

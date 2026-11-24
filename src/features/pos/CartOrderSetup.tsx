@@ -15,6 +15,7 @@ import {
   COWORKING_TIME_SLOTS,
   getValidOperationalTime,
   isSlotPast,
+  parseHour,
 } from "@/features/pos/pos-coworking";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 import type { CorporateBillingType, CorporateOrderDraft } from "@/types/order";
@@ -104,8 +105,23 @@ export function CartOrderSetup({
 
   const todayWita = getTodayWitaDateString();
   const meetingBookingDate = corporateDraft.meetingBookingDate || todayWita;
-  const meetingStartTime = corporateDraft.meetingStartTime || getValidOperationalTime(meetingBookingDate);
   const meetingDurationHours = corporateDraft.meetingDurationHours || 1;
+  const validStartSlots = COWORKING_TIME_SLOTS.filter((slot) => {
+    if (slot === "18:00") return false;
+    return parseHour(slot) + meetingDurationHours <= 18;
+  });
+  const validOperationalTime = getValidOperationalTime(meetingBookingDate);
+  const rawStartTime = corporateDraft.meetingStartTime;
+  const isRawStartTimeValid =
+    Boolean(rawStartTime) &&
+    !isSlotPast(meetingBookingDate, rawStartTime!) &&
+    validStartSlots.includes(rawStartTime as (typeof COWORKING_TIME_SLOTS)[number]);
+  const meetingStartTime = isRawStartTimeValid
+    ? rawStartTime!
+    : validStartSlots.includes(validOperationalTime as (typeof COWORKING_TIME_SLOTS)[number]) &&
+        !isSlotPast(meetingBookingDate, validOperationalTime)
+      ? validOperationalTime
+      : "";
 
   const updateDraft = (patch: Partial<CorporateOrderDraft>) => {
     onCorporateDraftChange?.({ ...corporateDraft, ...patch });
@@ -171,7 +187,7 @@ export function CartOrderSetup({
             <Building2 className="size-4 shrink-0 text-primary" aria-hidden="true" />
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-semibold leading-tight text-foreground">Order perusahaan</span>
-              <span className="text-xs text-muted-foreground leading-tight truncate">Tim, instansi, atau paket konsumsi + meeting room</span>
+              <span className="text-xs text-muted-foreground leading-tight truncate">Tim, instansi, atau paket konsumsi + ruang pertemuan</span>
             </div>
           </div>
           <Button
@@ -281,7 +297,7 @@ export function CartOrderSetup({
                       updateDraft({
                         meetingRoomId: e.target.value,
                         meetingBookingDate: meetingBookingDate || todayWita,
-                        meetingStartTime: meetingStartTime || "09:00",
+                        meetingStartTime,
                         meetingDurationHours: meetingDurationHours || 1,
                       });
                       onSelectedMeetingRoomChange?.(e.target.value);
@@ -308,7 +324,22 @@ export function CartOrderSetup({
                         min={todayWita}
                         className="h-8 text-xs font-mono"
                         value={meetingBookingDate}
-                        onChange={(e) => updateDraft({ meetingBookingDate: e.target.value })}
+                        onChange={(e) => {
+                          const nextDate = e.target.value;
+                          const nextValidTime = getValidOperationalTime(nextDate);
+                          const currentValid =
+                            Boolean(corporateDraft.meetingStartTime) &&
+                            !isSlotPast(nextDate, corporateDraft.meetingStartTime!) &&
+                            validStartSlots.includes(
+                              corporateDraft.meetingStartTime as (typeof COWORKING_TIME_SLOTS)[number]
+                            );
+                          updateDraft({
+                            meetingBookingDate: nextDate,
+                            meetingStartTime: currentValid
+                              ? corporateDraft.meetingStartTime
+                              : nextValidTime,
+                          });
+                        }}
                       />
                     </Field>
 
@@ -323,8 +354,15 @@ export function CartOrderSetup({
                           value={meetingStartTime}
                           onChange={(e) => updateDraft({ meetingStartTime: e.target.value })}
                         >
-                          {COWORKING_TIME_SLOTS.map((slot) => {
-                            const hour = parseInt(slot.split(":")[0], 10);
+                          {!meetingStartTime ? (
+                            <NativeSelectOption value="" disabled>
+                              {validStartSlots.length === 0 || !validOperationalTime
+                                ? "Tidak ada slot tersedia"
+                                : "Pilih jam mulai"}
+                            </NativeSelectOption>
+                          ) : null}
+                          {validStartSlots.map((slot) => {
+                            const hour = parseHour(slot);
                             const slotAvailability =
                               coworkingSpaces.length > 0
                                 ? checkSlotAvailability({
@@ -368,11 +406,16 @@ export function CartOrderSetup({
                           max={12}
                           className="h-8 text-xs font-mono"
                           value={meetingDurationHours}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const nextDuration = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            const fitsClosing =
+                              Boolean(meetingStartTime) &&
+                              parseHour(meetingStartTime) + nextDuration <= 18;
                             updateDraft({
-                              meetingDurationHours: Math.max(1, parseInt(e.target.value) || 1),
-                            })
-                          }
+                              meetingDurationHours: nextDuration,
+                              meetingStartTime: fitsClosing ? meetingStartTime : "",
+                            });
+                          }}
                         />
                       </Field>
                     </div>
@@ -390,7 +433,7 @@ export function CartOrderSetup({
           id="pos-order-notes"
           value={orderNotes || ""}
           onChange={(e) => onOrderNotesChange?.(e.target.value)}
-          placeholder='Contoh: "TES QA - abaikan"'
+          placeholder="Contoh: Tanpa gula, rapat lantai 2"
         />
       </Field>
 

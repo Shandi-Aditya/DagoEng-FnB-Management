@@ -1,8 +1,14 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import * as dataStorage from "@/lib/data-storage";
+import * as doku from "@/lib/doku";
+import * as email from "@/lib/email";
 import {
   createEventSubmission,
+  createInvitationTicket,
   updateEventStatus,
   loadEventsFromDisk,
   loadBookingsFromDisk,
@@ -10,12 +16,14 @@ import {
   saveBookingsToDisk,
   saveEventSettingsToDisk,
   getEventRevenuePolicy,
+  resetLastCommittedTimestampsForTesting,
 } from "@/lib/events";
 import { POST as bookTicketRoute } from "@/app/api/events/[id]/book/route";
 import type { CommunityEvent, EventRevenueSharingPolicy } from "@/types/event";
 
 describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () => {
-  const originalEnv = process.env;
+  let tempDir = "";
+  let prevDataDirOverride: string | undefined;
   let paidEvent: CommunityEvent;
   let freeEvent: CommunityEvent;
 
@@ -24,7 +32,11 @@ describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () =
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
+    prevDataDirOverride = process.env.DATA_DIR_OVERRIDE;
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "s33-booking-"));
+    process.env.DATA_DIR_OVERRIDE = tempDir;
+    resetLastCommittedTimestampsForTesting();
+
     dataStorage.resetStorageSyncStatus();
     dataStorage.setStorageSyncStatus("events.json", "SYNCED");
     dataStorage.setStorageSyncStatus("event_bookings.json", "SYNCED");
@@ -89,8 +101,16 @@ describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () =
   });
 
   afterEach(() => {
-    process.env = originalEnv;
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (prevDataDirOverride === undefined) {
+      delete process.env.DATA_DIR_OVERRIDE;
+    } else {
+      process.env.DATA_DIR_OVERRIDE = prevDataDirOverride;
+    }
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("1. Pesan sukses langsung menghasilkan paymentUrl dan status 201 tanpa error 503", async () => {
@@ -361,5 +381,391 @@ describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () =
     expect(res2.status).toBe(201);
     expect(json2.data.id).toBe(json1.data.id);
     expect(json2.data.ticketCode).toBe(json1.data.ticketCode);
+  });
+
+  it("7. in-tx expirePendingBookingsSnapshot melepaskan kuota tiket dan promo secara atomik saat pemesanan atau undangan baru", async () => {
+    const sub = await createEventSubmission({
+      organizerName: "Promo Capacity Event",
+      organizerEmail: "promo@dagocreative.id",
+      organizerPhone: "081234567892",
+      title: "Limited Promo Session",
+      category: "WORKSHOP",
+      description: "Event berkapasitas 1 kursi dengan 1 kode promo",
+      startDate: eventStartDate,
+      endDate: eventEndDate,
+      location: "Studio Dago",
+      isPaid: true,
+      price: 100000,
+      posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      maxCapacity: 1,
+      maxTicketsPerBooking: 1,
+    });
+    const promoEvent = await updateEventStatus(sub.id, "APPROVED");
+    const allEvents = loadEventsFromDisk();
+    const evIdx = allEvents.findIndex((e) => e.id === promoEvent.id);
+    allEvents[evIdx].maxCapacity = 1;
+    allEvents[evIdx].ticketTiers = [
+      {
+        id: "tier-promo-1",
+        name: "Single VIP",
+        price: 100000,
+        quota: 1,
+        isActive: true,
+      },
+    ];
+    allEvents[evIdx].promoCodes = [
+      {
+        id: "promo-hemat-10",
+        eventId: promoEvent.id,
+        code: "HEMAT10",
+        discountType: "PERCENT",
+        discountValue: 10,
+        quota: 1,
+        usedCount: 0,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ];
+    await saveEventsToDisk(allEvents);
+
+    // First booking consumes the only seat and promo quota
+    const res1 = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${promoEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.71",
+        },
+        body: JSON.stringify({
+          guestName: "Tamu Kedaluwarsa",
+          guestEmail: "expired.guest@example.com",
+          guestPhone: "081233334444",
+          ticketCount: 1,
+          ticketTierId: "tier-promo-1",
+          promoCode: "HEMAT10",
+        }),
+      }),
+      { params: Promise.resolve({ id: promoEvent.id }) }
+    );
+    const json1 = await res1.json();
+    expect(res1.status).toBe(201);
+    expect(json1.data.discountAmount).toBe(10000);
+
+    // Backdate booking beyond 60-minute expiry window without paymentProofUrl
+    const bookings = loadBookingsFromDisk();
+    const expiredIdx = bookings.findIndex((b) => b.id === json1.data.id);
+    bookings[expiredIdx] = {
+      ...bookings[expiredIdx],
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    };
+    await saveBookingsToDisk(bookings);
+
+    // Second booking arrives; in-tx expirePendingBookingsSnapshot releases seat & promo quota
+    const res2 = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${promoEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.72",
+        },
+        body: JSON.stringify({
+          guestName: "Tamu Baru",
+          guestEmail: "fresh.guest@example.com",
+          guestPhone: "081255556666",
+          ticketCount: 1,
+          ticketTierId: "tier-promo-1",
+          promoCode: "HEMAT10",
+        }),
+      }),
+      { params: Promise.resolve({ id: promoEvent.id }) }
+    );
+    const json2 = await res2.json();
+    expect(res2.status).toBe(201);
+    expect(json2.data.discountAmount).toBe(10000);
+    expect(json2.data.totalPrice).toBe(90000);
+
+    const updatedBookings = loadBookingsFromDisk();
+    const firstStored = updatedBookings.find((b) => b.id === json1.data.id);
+    expect(firstStored?.paymentStatus).toBe("EXPIRED");
+    const updatedPromo = loadEventsFromDisk()
+      .find((e) => e.id === promoEvent.id)
+      ?.promoCodes?.find((p) => p.code === "HEMAT10");
+    expect(updatedPromo?.usedCount).toBe(1);
+
+    // Also verify createInvitationTicket releases expired pending bookings inside its tx
+    const invBooking = updatedBookings.find((b) => b.id === json2.data.id)!;
+    const invIdx = updatedBookings.findIndex((b) => b.id === invBooking.id);
+    updatedBookings[invIdx] = {
+      ...invBooking,
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    };
+    await saveBookingsToDisk(updatedBookings);
+
+    const invitation = await createInvitationTicket(
+      {
+        eventId: promoEvent.id,
+        guestName: "Tamu Undangan VIP",
+        guestEmail: "vip.invite@example.com",
+        ticketTierId: "tier-promo-1",
+        ticketCount: 1,
+      },
+      "admin"
+    );
+    expect(invitation.paymentStatus).toBe("PAID");
+    expect(
+      loadBookingsFromDisk().find((b) => b.id === invBooking.id)?.paymentStatus
+    ).toBe("EXPIRED");
+  });
+
+  it("8. retry clientReferenceId dengan guestPhone kosong atau tidak cocok tidak membocorkan guestToken", async () => {
+    const initialRes = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${paidEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.81",
+        },
+        body: JSON.stringify({
+          guestName: "Sari Rahayu",
+          guestEmail: "sari.guard@example.com",
+          guestPhone: "081234567890",
+          ticketCount: 1,
+          clientReferenceId: "ref-s33-token-guard-01",
+        }),
+      }),
+      { params: Promise.resolve({ id: paidEvent.id }) }
+    );
+    const initialJson = await initialRes.json();
+    expect(initialRes.status).toBe(201);
+    const originalToken = initialJson.data.guestToken as string;
+    expect(originalToken).toBeTruthy();
+
+    // Retry with empty guestPhone
+    const emptyPhoneRes = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${paidEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.82",
+        },
+        body: JSON.stringify({
+          guestName: "Sari Rahayu",
+          guestEmail: "sari.guard@example.com",
+          guestPhone: "",
+          ticketCount: 1,
+          clientReferenceId: "ref-s33-token-guard-01",
+        }),
+      }),
+      { params: Promise.resolve({ id: paidEvent.id }) }
+    );
+    const emptyPhoneBody = await emptyPhoneRes.text();
+    expect(emptyPhoneRes.status).toBe(400);
+    expect(emptyPhoneBody).not.toContain(originalToken);
+
+    // Retry with mismatched guestPhone
+    const mismatchPhoneRes = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${paidEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.83",
+        },
+        body: JSON.stringify({
+          guestName: "Sari Rahayu",
+          guestEmail: "sari.guard@example.com",
+          guestPhone: "089988776655",
+          ticketCount: 1,
+          clientReferenceId: "ref-s33-token-guard-01",
+        }),
+      }),
+      { params: Promise.resolve({ id: paidEvent.id }) }
+    );
+    const mismatchPhoneBody = await mismatchPhoneRes.text();
+    expect(mismatchPhoneRes.status).toBe(400);
+    expect(mismatchPhoneBody).not.toContain(originalToken);
+  });
+
+  it("9. Promise.all concurrent last-seat booking hanya mengizinkan 1 transaksi berhasil dan menolak sisanya", async () => {
+    const sub = await createEventSubmission({
+      organizerName: "Concurrent Event",
+      organizerEmail: "race@dagocreative.id",
+      organizerPhone: "081234567899",
+      title: "Last Seat Race Test",
+      category: "COMMUNITY",
+      description: "Uji konkurensi kursi terakhir",
+      startDate: eventStartDate,
+      endDate: eventEndDate,
+      location: "Studio B",
+      isPaid: true,
+      price: 75000,
+      posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      maxCapacity: 1,
+      maxTicketsPerBooking: 1,
+    });
+    const raceEvent = await updateEventStatus(sub.id, "APPROVED");
+    const allEvents = loadEventsFromDisk();
+    const idx = allEvents.findIndex((e) => e.id === raceEvent.id);
+    allEvents[idx].maxCapacity = 1;
+    allEvents[idx].ticketTiers = [
+      {
+        id: "tier-race-1",
+        name: "Last Seat",
+        price: 75000,
+        quota: 1,
+        isActive: true,
+      },
+    ];
+    await saveEventsToDisk(allEvents);
+
+    const [resA, resB] = await Promise.all([
+      bookTicketRoute(
+        new NextRequest(`http://localhost:3000/api/events/${raceEvent.id}/book`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-forwarded-for": "10.0.0.91",
+          },
+          body: JSON.stringify({
+            guestName: "Peserta A",
+            guestEmail: "peserta.a@example.com",
+            guestPhone: "081211112222",
+            ticketCount: 1,
+            ticketTierId: "tier-race-1",
+          }),
+        }),
+        { params: Promise.resolve({ id: raceEvent.id }) }
+      ),
+      bookTicketRoute(
+        new NextRequest(`http://localhost:3000/api/events/${raceEvent.id}/book`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-forwarded-for": "10.0.0.92",
+          },
+          body: JSON.stringify({
+            guestName: "Peserta B",
+            guestEmail: "peserta.b@example.com",
+            guestPhone: "081233334444",
+            ticketCount: 1,
+            ticketTierId: "tier-race-1",
+          }),
+        }),
+        { params: Promise.resolve({ id: raceEvent.id }) }
+      ),
+    ]);
+
+    const statuses = [resA.status, resB.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 400]);
+
+    const activeRaceBookings = loadBookingsFromDisk().filter(
+      (b) => b.eventId === raceEvent.id && b.paymentStatus !== "CANCELLED"
+    );
+    expect(activeRaceBookings).toHaveLength(1);
+  });
+
+  it("10. idempotent retry pada DOKU Checkout memakai ulang dokuPaymentUrl dan retry tiket gratis tidak menggandakan email", async () => {
+    const dokuSpy = vi.spyOn(doku, "createDokuCheckoutSession");
+    const emailSpy = vi.spyOn(email, "dispatchPaidTicketEmail").mockResolvedValue({
+      sent: true,
+      message: "mock-sent",
+      timestamp: new Date().toISOString(),
+    });
+
+    // 1. DOKU Checkout retry reuses stored dokuPaymentUrl
+    const dokuPayload = {
+      guestName: "Rama DOKU",
+      guestEmail: "rama.doku@example.com",
+      guestPhone: "081299001122",
+      ticketCount: 1,
+      paymentMethod: "DOKU_CHECKOUT",
+      clientReferenceId: "ref-s33-doku-retry-01",
+    };
+
+    const dokuRes1 = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${paidEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.101",
+        },
+        body: JSON.stringify(dokuPayload),
+      }),
+      { params: Promise.resolve({ id: paidEvent.id }) }
+    );
+    const dokuJson1 = await dokuRes1.json();
+    expect(dokuRes1.status).toBe(201);
+    expect(dokuJson1.data.paymentUrl).toBeTruthy();
+
+    const dokuRes2 = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${paidEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.102",
+        },
+        body: JSON.stringify(dokuPayload),
+      }),
+      { params: Promise.resolve({ id: paidEvent.id }) }
+    );
+    const dokuJson2 = await dokuRes2.json();
+    expect(dokuRes2.status).toBe(201);
+    expect(dokuJson2.data.paymentUrl).toBe(dokuJson1.data.paymentUrl);
+    expect(dokuSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Free ticket idempotent retry does NOT double-send email even when another booking expires in same call
+    const freePayload = {
+      guestName: "Dina Gratis",
+      guestEmail: "dina.free@example.com",
+      guestPhone: "081355667788",
+      ticketCount: 1,
+      clientReferenceId: "ref-s33-free-retry-01",
+    };
+
+    const freeRes1 = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${freeEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.103",
+        },
+        body: JSON.stringify(freePayload),
+      }),
+      { params: Promise.resolve({ id: freeEvent.id }) }
+    );
+    expect(freeRes1.status).toBe(201);
+    expect(emailSpy).toHaveBeenCalledTimes(1);
+
+    // Add an unrelated stale pending booking so expirePendingBookingsSnapshot triggers on retry
+    const currentBookings = loadBookingsFromDisk();
+    currentBookings.push({
+      ...currentBookings[0],
+      id: "tkt-stale-unrelated",
+      ticketCode: "DAGO-EVT-99999",
+      guestToken: "stale-token-unrelated",
+      eventId: paidEvent.id,
+      guestEmail: "stale.unrelated@example.com",
+      totalPrice: 50000,
+      paymentStatus: "PENDING",
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+    await saveBookingsToDisk(currentBookings);
+
+    const freeRes2 = await bookTicketRoute(
+      new NextRequest(`http://localhost:3000/api/events/${freeEvent.id}/book`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": "10.0.0.104",
+        },
+        body: JSON.stringify(freePayload),
+      }),
+      { params: Promise.resolve({ id: freeEvent.id }) }
+    );
+    expect(freeRes2.status).toBe(201);
+    expect(emailSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -115,7 +115,7 @@ export function ReportsPreviewTable({
                 onChange={(e) => companyFilter.onCompanyChange(e.target.value)}
                 aria-label="Filter perusahaan"
               >
-                <NativeSelectOption value="ALL">Semua Perusahaan</NativeSelectOption>
+                <NativeSelectOption value="ALL">Semua perusahaan</NativeSelectOption>
                 {companyFilter.availableCompanies.map((c) => (
                   <NativeSelectOption key={c} value={c}>
                     {c}

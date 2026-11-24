@@ -54,6 +54,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       if (isManualTransfer) {
         // Direct attendee to payment & ticket page with destination bank snapshot
         paymentUrl = `/events/tickets/${booking.guestToken}`;
+      } else if (booking.dokuPaymentUrl) {
+        // Idempotent retry: reuse existing DOKU Checkout URL without creating duplicate session
+        paymentUrl = booking.dokuPaymentUrl;
       } else {
         // Initiate DOKU Checkout session
         try {

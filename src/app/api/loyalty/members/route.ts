@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   deletePersistentLoyaltyMember,
+  getCoworkingBookings,
   getPersistentLoyaltyMembers,
   getPersistentLoyaltyPoints,
   getPersistentOrders,
@@ -354,11 +355,11 @@ export async function POST(req: NextRequest) {
     const isManagerial = canUserViewFullCustomerContacts(auth.role, auth.scopeLevel);
 
     // If existing member found:
-    // CASHIER is strictly forbidden from overwriting points, tier, or using allowUpdate
-    if (existing && (auth.role === "CASHIER" || !memberData.allowUpdate)) {
+    // Non-managerial callers (CASHIER, TENANT OWNER) are strictly forbidden from overwriting points, tier, or using allowUpdate
+    if (existing && (!isManagerial || !memberData.allowUpdate)) {
       return NextResponse.json({
         success: true,
-        member: sanitizeMemberForRole(existing, auth.role),
+        member: sanitizeMemberForRole(existing, auth.role, auth.scopeLevel),
         isExisting: true,
       });
     }
@@ -427,7 +428,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      member: sanitizeMemberForRole(saved, auth.role),
+      member: sanitizeMemberForRole(saved, auth.role, auth.scopeLevel),
       isExisting: Boolean(existing),
     });
   } catch (error: unknown) {
@@ -502,10 +503,58 @@ export async function PUT(req: NextRequest) {
     }
 
     const isManagerial = canUserViewFullCustomerContacts(auth.role, auth.scopeLevel);
+    const existingPointHistory = Array.isArray(target.pointHistory) ? target.pointHistory : [];
 
-    // Validate updates.points for non-managerial callers (CASHIER)
-    if (!isManagerial && updates.points !== undefined && updates.points !== target.points) {
-      const existingPointHistory = Array.isArray(target.pointHistory) ? target.pointHistory : [];
+    // Validate updates.pointHistory suffix for non-managerial callers (CASHIER)
+    if (!isManagerial && updates.pointHistory !== undefined) {
+      if (
+        !Array.isArray(updates.pointHistory) ||
+        updates.pointHistory.length < existingPointHistory.length
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Akses ditolak: Riwayat transaksi poin tidak boleh dikurangi atau dihapus oleh kasir.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const suffixStart = updates.pointHistory.length - existingPointHistory.length;
+      const suffixEntries = updates.pointHistory.slice(suffixStart) as unknown[];
+      const tamperedExistingHistory = existingPointHistory.some((orig, idx) => {
+        const cand = suffixEntries[idx];
+        if (!cand || typeof cand !== "object" || Array.isArray(cand)) return true;
+        const c = cand as Record<string, unknown>;
+        return (
+          c.id !== orig.id ||
+          c.type !== orig.type ||
+          c.points !== orig.points ||
+          c.relatedTransactionId !== orig.relatedTransactionId ||
+          c.timestamp !== orig.timestamp
+        );
+      });
+
+      if (tamperedExistingHistory) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Akses ditolak: Riwayat transaksi poin lama tidak boleh diubah oleh kasir.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    const hasPointChange = updates.points !== undefined && updates.points !== target.points;
+    const hasAddedPointHistory =
+      Array.isArray(updates.pointHistory) &&
+      updates.pointHistory.length > existingPointHistory.length;
+
+    // Validate updates.points and new pointHistory entries for non-managerial callers (CASHIER)
+    if (!isManagerial && (hasPointChange || hasAddedPointHistory)) {
       if (!Array.isArray(updates.pointHistory) || updates.pointHistory.length <= existingPointHistory.length) {
         return NextResponse.json(
           {
@@ -517,21 +566,56 @@ export async function PUT(req: NextRequest) {
       }
 
       const addedCount = updates.pointHistory.length - existingPointHistory.length;
-      const addedEntries = updates.pointHistory.slice(0, addedCount);
-      const orders = await getPersistentOrders();
+      const addedEntries = updates.pointHistory.slice(0, addedCount) as unknown[];
+      const [orders, coworkingBookings] = await Promise.all([
+        getPersistentOrders(),
+        getCoworkingBookings(),
+      ]);
 
-      const deltaPoints = updates.points - target.points;
+      const seenHistoryKeys = new Set<string>();
+      for (const orig of existingPointHistory) {
+        const origTxId =
+          typeof orig.relatedTransactionId === "string"
+            ? orig.relatedTransactionId.trim()
+            : "";
+        if (origTxId) {
+          seenHistoryKeys.add(`${orig.type}:${origTxId}`);
+        }
+      }
+
+      const deltaPoints = updates.points !== undefined ? updates.points - target.points : 0;
       let totalAddedPoints = 0;
 
-      for (const entry of addedEntries) {
-        if (!entry || typeof entry !== "object") {
+      for (const rawEntry of addedEntries) {
+        if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
           return NextResponse.json(
             { success: false, error: "Akses ditolak: Entri riwayat poin tidak valid." },
             { status: 403 }
           );
         }
 
-        const relatedTxId = typeof entry.relatedTransactionId === "string" ? entry.relatedTransactionId.trim() : "";
+        const entry = rawEntry as Record<string, unknown>;
+        if (entry.type !== "EARN" && entry.type !== "REDEEM" && entry.type !== "ADJUSTMENT") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Akses ditolak: Tipe mutasi poin [${String(entry.type)}] tidak diizinkan untuk kasir.`,
+            },
+            { status: 403 }
+          );
+        }
+
+        if (typeof entry.points !== "number" || !Number.isFinite(entry.points)) {
+          return NextResponse.json(
+            { success: false, error: "Akses ditolak: Nilai poin entri riwayat tidak valid." },
+            { status: 403 }
+          );
+        }
+        const entryPoints = entry.points;
+
+        const rawRelatedTxId =
+          typeof entry.relatedTransactionId === "string" ? entry.relatedTransactionId : "";
+        const relatedTxId = rawRelatedTxId.trim();
         if (!relatedTxId) {
           return NextResponse.json(
             {
@@ -542,31 +626,147 @@ export async function PUT(req: NextRequest) {
           );
         }
 
-        const matchingOrder = orders.find((o) => o.id === relatedTxId || o.orderNumber === relatedTxId);
-        if (!matchingOrder || matchingOrder.paymentStatus !== "PAID") {
+        const dedupKey = `${entry.type}:${relatedTxId}`;
+        if (seenHistoryKeys.has(dedupKey)) {
           return NextResponse.json(
             {
               success: false,
-              error: `Akses ditolak: Transaksi [${relatedTxId}] tidak ditemukan atau belum berstatus PAID.`,
+              error: `Akses ditolak: Transaksi poin (${entry.type}, ${relatedTxId}) sudah tercatat dan tidak dapat diputar ulang.`,
             },
             { status: 403 }
           );
         }
+        seenHistoryKeys.add(dedupKey);
 
-        const entryPoints = Number(entry.points) || 0;
-        if (entry.type === "EARN") {
-          const maxAllowedEarn = Math.floor(matchingOrder.total / 1000);
-          if (entryPoints <= 0 || entryPoints > maxAllowedEarn) {
+        if (entry.type === "ADJUSTMENT") {
+          const isRedeemReversal = relatedTxId.startsWith("rev-redeem-");
+          const isEarnReversal = !isRedeemReversal && relatedTxId.startsWith("rev-");
+          if (rawRelatedTxId !== relatedTxId || (!isRedeemReversal && !isEarnReversal)) {
             return NextResponse.json(
               {
                 success: false,
-                error: `Akses ditolak: Poin EARN [${entryPoints}] melebihi batas maksimal transaksi [${maxAllowedEarn}].`,
+                error:
+                  "Akses ditolak: Penyesuaian poin (ADJUSTMENT) oleh kasir hanya diizinkan untuk pembalikan transaksi rev- yang sah.",
               },
               { status: 403 }
             );
           }
-        } else if (entry.type === "REDEEM") {
-          if (entryPoints >= 0) {
+
+          const txId = isRedeemReversal
+            ? relatedTxId.slice("rev-redeem-".length)
+            : relatedTxId.slice("rev-".length);
+          if (!txId) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: "Akses ditolak: ID pesanan pembalikan poin tidak valid.",
+              },
+              { status: 403 }
+            );
+          }
+
+          const cancelledOrRefundedOrder = orders.find(
+            (o) =>
+              (o.id === txId || o.orderNumber === txId) &&
+              (o.status === "CANCELLED" || o.paymentStatus === "REFUNDED")
+          );
+          const cancelledBooking = !cancelledOrRefundedOrder
+            ? coworkingBookings.find(
+                (b) =>
+                  (b.id === txId || b.bookingCode === txId) &&
+                  b.checkInStatus === "CANCELLED"
+              )
+            : undefined;
+          if (!cancelledOrRefundedOrder && !cancelledBooking) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Akses ditolak: Transaksi [${txId}] tidak ditemukan atau belum berstatus CANCELLED/REFUNDED.`,
+              },
+              { status: 403 }
+            );
+          }
+
+          const alreadyReversed = existingPointHistory.some(
+            (h) => h.relatedTransactionId === relatedTxId
+          );
+          if (isRedeemReversal) {
+            const priorRedeem = existingPointHistory.find(
+              (h) => h.type === "REDEEM" && h.relatedTransactionId === txId
+            );
+            if (!priorRedeem || alreadyReversed || entryPoints !== Math.abs(priorRedeem.points)) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error:
+                    "Akses ditolak: Pengembalian poin voucher ADJUSTMENT tidak cocok dengan riwayat REDEEM asal atau sudah pernah dikembalikan.",
+                },
+                { status: 403 }
+              );
+            }
+          } else {
+            const priorEarn = existingPointHistory.find(
+              (h) => h.type === "EARN" && h.relatedTransactionId === txId
+            );
+            if (!priorEarn || alreadyReversed || entryPoints !== -priorEarn.points) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error:
+                    "Akses ditolak: Pembalikan poin ADJUSTMENT tidak cocok dengan riwayat EARN asal atau sudah pernah dibalik.",
+                },
+                { status: 403 }
+              );
+            }
+          }
+        } else {
+          const matchingOrder = orders.find(
+            (o) =>
+              (o.id === relatedTxId || o.orderNumber === relatedTxId) &&
+              o.paymentStatus === "PAID" &&
+              o.status !== "CANCELLED"
+          );
+          const matchingBooking = !matchingOrder
+            ? coworkingBookings.find(
+                (b) =>
+                  (b.id === relatedTxId || b.bookingCode === relatedTxId) &&
+                  b.paymentStatus === "PAID" &&
+                  b.checkInStatus !== "CANCELLED"
+              )
+            : undefined;
+
+          if (!matchingOrder && !matchingBooking) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Akses ditolak: Transaksi [${relatedTxId}] tidak ditemukan, belum berstatus PAID, atau telah dibatalkan.`,
+              },
+              { status: 403 }
+            );
+          }
+
+          const transactionAmount = matchingOrder
+            ? Number(matchingOrder.total) || 0
+            : Number(matchingBooking?.totalAmount ?? matchingBooking?.price) || 0;
+
+          if (entry.type === "EARN") {
+            const maxAllowedEarn = Math.floor(transactionAmount / 1000);
+            const allowZeroPointEarn =
+              deltaPoints === 0 && maxAllowedEarn === 0 && addedEntries.length === 1;
+            if (
+              entryPoints < 0 ||
+              (!allowZeroPointEarn && entryPoints === 0) ||
+              entryPoints > maxAllowedEarn
+            ) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: `Akses ditolak: Poin EARN [${entryPoints}] melebihi batas maksimal transaksi [${maxAllowedEarn}].`,
+                },
+                { status: 403 }
+              );
+            }
+          } else if (entryPoints >= 0) {
             return NextResponse.json(
               {
                 success: false,
@@ -727,7 +927,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      member: sanitizeMemberForRole(saved, auth.role),
+      member: sanitizeMemberForRole(saved, auth.role, auth.scopeLevel),
     });
   } catch (error: unknown) {
     const message =

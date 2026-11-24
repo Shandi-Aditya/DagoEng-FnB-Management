@@ -13,13 +13,14 @@
  */
 
 import fs from "fs";
+import path from "path";
 import { PrismaClient } from "@prisma/client";
 import { getDataFilePath } from "@/lib/data-storage";
 import type { ShiftRecord } from "@/types/shift";
 import type { OrderRecord } from "@/types/order";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 
-const prisma = new PrismaClient();
+export const prisma = new PrismaClient();
 
 export const S34_TARGETS = {
   shiftIds: new Set([
@@ -39,6 +40,10 @@ export const S34_TARGETS = {
     "evt-1793515068148-7xazf",
     "evt-1793513163350-b87do",
     "evt-1793810790340-73pia",
+    "evt-1793073538004-rekb8",
+    "evt-1793004679533-13yqp",
+    "evt-1793073371363-zli0p",
+    "evt-1793083665642-lv4kl",
   ]),
   testTicketCodes: new Set([
     "DAGO-EVT-14704",
@@ -140,6 +145,14 @@ export function transformOrders(
   return { items, count };
 }
 
+type LegacyProposedRevenueSplit = Omit<
+  NonNullable<CommunityEvent["proposedRevenueSplit"]>,
+  "status"
+> & {
+  status: NonNullable<CommunityEvent["proposedRevenueSplit"]>["status"] | "ARCHIVED";
+  resolutionNotes?: string;
+};
+
 /**
  * 3. Transform Events:
  * Arsipkan event uji coba dan selesaikan usulan bagi hasil pending dengan status legal REJECTED.
@@ -153,7 +166,7 @@ export function transformEvents(
   const archivedEventIds = new Set<string>();
 
   const items = events.map((e) => {
-    let updated = { ...e };
+    const updated = { ...e };
     let modified = false;
 
     const titleLower = (e.title || "").toLowerCase();
@@ -174,35 +187,35 @@ export function transformEvents(
       }
 
       // Tolak usulan bagi hasil HANYA untuk event uji coba dengan status legal REJECTED
-      if (
-        updated.proposedRevenueSplit &&
-        (updated.proposedRevenueSplit.status === "PENDING" ||
-          (updated.proposedRevenueSplit.status as string) === "ARCHIVED")
-      ) {
-        updated.proposedRevenueSplit = {
-          ...updated.proposedRevenueSplit,
-          status: "REJECTED",
-          reason: "Dibersihkan via Task S-34 (Usulan uji coba diabaikan)",
-        };
-        modified = true;
+      if (updated.proposedRevenueSplit) {
+        const split: LegacyProposedRevenueSplit = updated.proposedRevenueSplit;
+        if (split.status === "PENDING" || split.status === "ARCHIVED") {
+          updated.proposedRevenueSplit = {
+            ...updated.proposedRevenueSplit,
+            status: "REJECTED",
+            reason: "Dibersihkan via Task S-34 (Usulan uji coba diabaikan)",
+          };
+          modified = true;
+        }
       }
     } else {
       // Pulihkan usulan bagi hasil event nyata jika pernah tertolak/terarsip keliru oleh skrip lama
-      if (
-        updated.proposedRevenueSplit &&
-        (updated.proposedRevenueSplit.status === "REJECTED" ||
-          (updated.proposedRevenueSplit.status as string) === "ARCHIVED") &&
-        (updated.proposedRevenueSplit.reason?.includes("Task S-34") ||
-          (updated.proposedRevenueSplit as any).resolutionNotes?.includes("Task S-34"))
-      ) {
-        const cleanedSplit = { ...updated.proposedRevenueSplit };
-        delete (cleanedSplit as any).resolutionNotes;
-        updated.proposedRevenueSplit = {
-          ...cleanedSplit,
-          status: "PENDING",
-          reason: "Usulan bagi hasil awal saat pengajuan event",
-        };
-        modified = true;
+      if (updated.proposedRevenueSplit) {
+        const split: LegacyProposedRevenueSplit = updated.proposedRevenueSplit;
+        if (
+          (split.status === "REJECTED" || split.status === "ARCHIVED") &&
+          (split.reason?.includes("Task S-34") ||
+            split.resolutionNotes?.includes("Task S-34"))
+        ) {
+          const { resolutionNotes: _removed, ...restSplit } = split;
+          void _removed;
+          updated.proposedRevenueSplit = {
+            ...restSplit,
+            status: "PENDING",
+            reason: "Usulan bagi hasil awal saat pengajuan event",
+          };
+          modified = true;
+        }
       }
     }
 
@@ -261,9 +274,130 @@ export function transformBookings(
   return { items, count };
 }
 
-export async function runCleanup(options?: { apply?: boolean }) {
+export interface CleanupStore {
+  findSetting: (key: string) => Promise<{ value: string } | null>;
+  upsertSettings: (
+    entries: Array<{ key: string; file: string; value: string }>
+  ) => Promise<void>;
+}
+
+const prismaCleanupStore: CleanupStore = {
+  findSetting: (key) => prisma.systemSetting.findUnique({ where: { key } }),
+  upsertSettings: async (entries) => {
+    await prisma.$transaction(
+      entries.map((f) =>
+        prisma.systemSetting.upsert({
+          where: { key: f.key },
+          create: {
+            key: f.key,
+            value: f.value,
+            description: `Persistent storage for ${f.file}`,
+          },
+          update: {
+            value: f.value,
+            updatedAt: new Date(),
+          },
+        })
+      )
+    );
+  },
+};
+
+type SourceOrigin = "db" | "disk" | "missing" | "unreadable";
+
+interface LoadedSource<T> {
+  items: T[];
+  origin: SourceOrigin;
+  diskExists: boolean;
+  hasNonEmptyDbRow: boolean;
+}
+
+function loadSource<T>(dbRow: { value: string } | null, fileName: string): LoadedSource<T> {
+  const filePath = getDataFilePath(fileName);
+  const diskExists = fs.existsSync(filePath);
+
+  if (dbRow !== null) {
+    if (!dbRow.value || dbRow.value.trim() === "") {
+      return {
+        items: [],
+        origin: "unreadable",
+        diskExists,
+        hasNonEmptyDbRow: false,
+      };
+    }
+    try {
+      const parsed: unknown = JSON.parse(dbRow.value);
+      if (!Array.isArray(parsed)) {
+        console.warn(`Payload DB bukan array untuk ${fileName}.`);
+        return {
+          items: [],
+          origin: "unreadable",
+          diskExists,
+          hasNonEmptyDbRow: false,
+        };
+      }
+      return {
+        items: parsed as T[],
+        origin: "db",
+        diskExists,
+        hasNonEmptyDbRow: parsed.length > 0,
+      };
+    } catch (err) {
+      console.warn(`Gagal parse DB row untuk ${fileName}:`, err);
+      return {
+        items: [],
+        origin: "unreadable",
+        diskExists,
+        hasNonEmptyDbRow: false,
+      };
+    }
+  }
+
+  if (diskExists) {
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      if (!Array.isArray(parsed)) {
+        console.warn(`Payload disk bukan array untuk ${fileName}.`);
+        return {
+          items: [],
+          origin: "unreadable",
+          diskExists: true,
+          hasNonEmptyDbRow: false,
+        };
+      }
+      return {
+        items: parsed as T[],
+        origin: "disk",
+        diskExists: true,
+        hasNonEmptyDbRow: false,
+      };
+    } catch (err) {
+      console.warn(`Gagal baca disk fallback untuk ${fileName}:`, err);
+      return {
+        items: [],
+        origin: "unreadable",
+        diskExists: true,
+        hasNonEmptyDbRow: false,
+      };
+    }
+  }
+
+  return {
+    items: [],
+    origin: "missing",
+    diskExists: false,
+    hasNonEmptyDbRow: false,
+  };
+}
+
+export async function runCleanup(options?: {
+  apply?: boolean;
+  store?: CleanupStore;
+}) {
   const isApply = options?.apply ?? process.argv.includes("--apply");
   const isDryRun = !isApply;
+  const store = options?.store ?? prismaCleanupStore;
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== "");
 
   console.log("=== MEMULAI PEMBERSIHAN DATA UJI & REKONSILIASI SHIFT (S-34) ===");
   if (isDryRun) {
@@ -272,41 +406,35 @@ export async function runCleanup(options?: { apply?: boolean }) {
     console.log("[APPLY] Mode eksekusi aktif (--apply). Perubahan akan disimpan ke Database dan Disk.");
   }
 
-  const [shiftRow, orderRow, eventRow, bookingRow] = await Promise.all([
-    prisma.systemSetting.findUnique({ where: { key: "STORAGE_shifts.json" } }).catch(() => null),
-    prisma.systemSetting.findUnique({ where: { key: "STORAGE_pos_orders.json" } }).catch(() => null),
-    prisma.systemSetting.findUnique({ where: { key: "STORAGE_events.json" } }).catch(() => null),
-    prisma.systemSetting.findUnique({ where: { key: "STORAGE_event_bookings.json" } }).catch(() => null),
-  ]);
+  let shiftRow: { value: string } | null = null;
+  let orderRow: { value: string } | null = null;
+  let eventRow: { value: string } | null = null;
+  let bookingRow: { value: string } | null = null;
 
-  function loadFallback<T>(dbRow: { value: string } | null, fileName: string): T[] {
-    if (dbRow?.value) {
-      try {
-        return JSON.parse(dbRow.value) as T[];
-      } catch (err) {
-        console.warn(`Gagal parse DB row untuk ${fileName}:`, err);
-      }
+  if (hasDatabaseUrl) {
+    try {
+      [shiftRow, orderRow, eventRow, bookingRow] = await Promise.all([
+        store.findSetting("STORAGE_shifts.json"),
+        store.findSetting("STORAGE_pos_orders.json"),
+        store.findSetting("STORAGE_events.json"),
+        store.findSetting("STORAGE_event_bookings.json"),
+      ]);
+    } catch (dbErr) {
+      console.error("[Database] Gagal membaca data SystemSetting dari DB:", dbErr);
+      process.exitCode = 1;
+      throw dbErr;
     }
-    const filePath = getDataFilePath(fileName);
-    if (fs.existsSync(filePath)) {
-      try {
-        return JSON.parse(fs.readFileSync(filePath, "utf8")) as T[];
-      } catch (err) {
-        console.warn(`Gagal baca disk fallback untuk ${fileName}:`, err);
-      }
-    }
-    return [];
   }
 
-  const shiftsInput = loadFallback<ShiftRecord>(shiftRow, "shifts.json");
-  const ordersInput = loadFallback<OrderRecord>(orderRow, "pos_orders.json");
-  const eventsInput = loadFallback<CommunityEvent>(eventRow, "events.json");
-  const bookingsInput = loadFallback<EventTicketOrder>(bookingRow, "event_bookings.json");
+  const shiftsSource = loadSource<ShiftRecord>(shiftRow, "shifts.json");
+  const ordersSource = loadSource<OrderRecord>(orderRow, "pos_orders.json");
+  const eventsSource = loadSource<CommunityEvent>(eventRow, "events.json");
+  const bookingsSource = loadSource<EventTicketOrder>(bookingRow, "event_bookings.json");
 
-  const shiftsRes = transformShifts(shiftsInput);
-  const ordersRes = transformOrders(ordersInput);
-  const eventsRes = transformEvents(eventsInput);
-  const bookingsRes = transformBookings(bookingsInput, eventsRes.archivedEventIds);
+  const shiftsRes = transformShifts(shiftsSource.items);
+  const ordersRes = transformOrders(ordersSource.items);
+  const eventsRes = transformEvents(eventsSource.items);
+  const bookingsRes = transformBookings(bookingsSource.items, eventsRes.archivedEventIds);
 
   console.log(`[Shifts] Direkonsiliasi/ditutup: ${shiftsRes.count} shift.`);
   console.log(`[KDS Orders] Pesanan uji diselesaikan: ${ordersRes.count} pesanan.`);
@@ -328,46 +456,91 @@ export async function runCleanup(options?: { apply?: boolean }) {
     };
   }
 
-  const filesToWrite = [
-    { key: "STORAGE_shifts.json", file: "shifts.json", data: shiftsRes.items },
-    { key: "STORAGE_pos_orders.json", file: "pos_orders.json", data: ordersRes.items },
-    { key: "STORAGE_events.json", file: "events.json", data: eventsRes.items },
-    { key: "STORAGE_event_bookings.json", file: "event_bookings.json", data: bookingsRes.items },
+  const datasets = [
+    {
+      key: "STORAGE_shifts.json",
+      file: "shifts.json",
+      data: shiftsRes.items,
+      count: shiftsRes.count,
+      source: shiftsSource,
+    },
+    {
+      key: "STORAGE_pos_orders.json",
+      file: "pos_orders.json",
+      data: ordersRes.items,
+      count: ordersRes.count,
+      source: ordersSource,
+    },
+    {
+      key: "STORAGE_events.json",
+      file: "events.json",
+      data: eventsRes.items,
+      count: eventsRes.count,
+      source: eventsSource,
+    },
+    {
+      key: "STORAGE_event_bookings.json",
+      file: "event_bookings.json",
+      data: bookingsRes.items,
+      count: bookingsRes.count,
+      source: bookingsSource,
+    },
   ];
 
-  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== "");
+  const dbTargets = datasets.filter((d) => {
+    if (d.source.origin === "missing" || d.source.origin === "unreadable") {
+      return false;
+    }
+    if (d.count === 0) {
+      return false;
+    }
+    if (d.source.origin === "db" && !d.source.hasNonEmptyDbRow) {
+      return false;
+    }
+    return d.data.length > 0;
+  });
+
   if (hasDatabaseUrl) {
-    try {
-      await prisma.$transaction(
-        filesToWrite.map((f) =>
-          prisma.systemSetting.upsert({
-            where: { key: f.key },
-            create: {
-              key: f.key,
-              value: JSON.stringify(f.data, null, 2),
-              description: `Persistent storage for ${f.file}`,
-            },
-            update: {
-              value: JSON.stringify(f.data, null, 2),
-              updatedAt: new Date(),
-            },
-          })
-        )
-      );
-      console.log("[Database] Seluruh data berhasil di-upsert secara atomik ke Neon DB.");
-    } catch (dbErr) {
-      console.error("[Database] Gagal update transaksi DB:", dbErr);
-      process.exitCode = 1;
-      throw dbErr;
+    if (dbTargets.length > 0) {
+      try {
+        await store.upsertSettings(
+          dbTargets.map((f) => ({
+            key: f.key,
+            file: f.file,
+            value: JSON.stringify(f.data, null, 2),
+          }))
+        );
+        console.log(`[Database] ${dbTargets.length} key berhasil di-upsert secara atomik ke Neon DB.`);
+      } catch (dbErr) {
+        console.error("[Database] Gagal update transaksi DB:", dbErr);
+        process.exitCode = 1;
+        throw dbErr;
+      }
+    } else {
+      console.log("[Database] Tidak ada key yang dimodifikasi dari sumber valid; melewati upsert database.");
     }
   } else {
     console.log("[Database] DATABASE_URL tidak diatur / kosong, melewati upsert database.");
   }
 
-  // Sinkronisasi ke disk
-  for (const f of filesToWrite) {
+  // Sinkronisasi ke disk hanya untuk dataset valid yang dimodifikasi dan tidak menciptakan file kosong baru
+  const diskTargets = datasets.filter((d) => {
+    if (d.source.origin === "missing" || d.source.origin === "unreadable") {
+      return false;
+    }
+    if (d.count === 0) {
+      return false;
+    }
+    if (!d.source.diskExists && d.data.length === 0) {
+      return false;
+    }
+    return d.data.length > 0 || d.source.diskExists;
+  });
+
+  for (const f of diskTargets) {
     try {
       const diskPath = getDataFilePath(f.file);
+      fs.mkdirSync(path.dirname(diskPath), { recursive: true });
       fs.writeFileSync(diskPath, JSON.stringify(f.data, null, 2), "utf8");
     } catch (diskErr) {
       console.warn(`[Disk] Gagal simpan ke ${f.file}:`, diskErr);
