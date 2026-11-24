@@ -58,6 +58,8 @@ export function formatReportHeaderBadge(type: ReportType): string {
       return "Laporan Audit Finansial";
     case "SETTLEMENT":
       return "Laporan Settlement";
+    case "SETTLEMENT_CONSOLIDATED":
+      return "Laporan Konsolidasi Mitra";
     case "EVENTS":
       return "Laporan Acara";
     case "RECONCILIATION":

@@ -1103,8 +1103,8 @@ export function buildTenantProfileWithDefaults(
   const fnbInfo =
     SEED_FNB_TENANTS.find((t) => t.id === tenantId) ||
     customTenants.find((t) => t.id === tenantId) || {
-      id: tenantId,
-      code: tenantId.toUpperCase(),
+      id: tenantId || "unknown",
+      code: (tenantId || "UNKNOWN").toUpperCase(),
       name: tenantId,
       tagline: "Mitra Resmi Dago Creative Hub",
       desc: "Mitra kuliner terdaftar di Dago Creative Hub.",

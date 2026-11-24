@@ -25,10 +25,16 @@ import {
   extractAvailableReportCompanies,
   filterReportRows,
   getReportCategories,
+  getWeeklySettlementPeriod,
   isSettledPaidOrder,
   projectOrdersForTenant,
+  type MdrBearerMode,
   type ReportType,
 } from "@/features/reports/reports-domain";
+import {
+  getSettlementPaymentStatus,
+  setSettlementPaymentStatus,
+} from "@/features/reports/settlement-weekly-domain";
 import { analyzeTransactionDiscrepancies } from "@/features/reports/reconciliation-domain";
 import StructuredReportPDFModal from "@/features/reports/StructuredReportPDFModal";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
@@ -55,6 +61,8 @@ export default function ReportsPage() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>("ALL");
+  const [mdrBearer, setMdrBearer] = useState<MdrBearerMode>("MITRA");
+  const [settlementRefreshTrigger, setSettlementRefreshTrigger] = useState(0);
 
   const isTenantScope = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
   const tenantId = isTenantScope ? user?.tenant?.id : undefined;
@@ -267,7 +275,28 @@ export default function ReportsPage() {
     operatorName: user?.name,
     isTimestampInRange: isDateInRange,
     companyName: selectedCompany,
+    mdrBearer,
+    referenceDate: startDate ? new Date(startDate) : undefined,
   });
+
+  const handleToggleSettlementStatus = (targetTenantId: string) => {
+    const period = getWeeklySettlementPeriod(startDate ? new Date(startDate) : undefined);
+    const current = getSettlementPaymentStatus(period.periodKey, targetTenantId);
+    const nextStatus = current.status === "PAID" ? "PENDING" : "PAID";
+    setSettlementPaymentStatus(
+      period.periodKey,
+      targetTenantId,
+      nextStatus,
+      user?.name || "Staf Finance",
+      `Diperbarui dari halaman laporan pada ${new Date().toLocaleTimeString("id-ID")}`
+    );
+    setSettlementRefreshTrigger((prev) => prev + 1);
+    if (nextStatus === "PAID") {
+      notify.success("Settlement ditandai Lunas", `Mitra ${targetTenantId} berhasil ditandai Lunas.`);
+    } else {
+      notify.info("Status settlement diubah", `Mitra ${targetTenantId} dikembalikan ke Belum lunas.`);
+    }
+  };
 
   const exportableReportRows = useMemo(
     () => filterReportRows(currentReport.tableRows, searchQuery),
@@ -408,6 +437,22 @@ export default function ReportsPage() {
                   setCurrentPage(1);
                 },
               }
+            : undefined
+        }
+        mdrBearerFilter={
+          effectiveReportType === "SETTLEMENT" ||
+          effectiveReportType === "SETTLEMENT_CONSOLIDATED"
+            ? {
+                selected: mdrBearer,
+                onChange: (mode) => setMdrBearer(mode),
+              }
+            : undefined
+        }
+        onToggleSettlementStatus={
+          !isTenantScope &&
+          (effectiveReportType === "SETTLEMENT" ||
+            effectiveReportType === "SETTLEMENT_CONSOLIDATED")
+            ? handleToggleSettlementStatus
             : undefined
         }
       />
