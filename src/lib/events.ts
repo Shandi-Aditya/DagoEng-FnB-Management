@@ -5098,7 +5098,7 @@ export async function updateBookingCheckIn(
             if (currentCheckedInQty >= ticketCount) {
               const timeFormatted = formatCheckInTimeWita(existing.checkInTime);
               throw new Error(
-                `Tiket sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pukul ${timeFormatted})` : " (semua tiket dalam pemesanan ini sudah selesai check-in)"}.`
+                `Tiket sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pukul ${timeFormatted})` : ""} (semua tiket dalam pemesanan ini sudah selesai check-in).`
               );
             }
 

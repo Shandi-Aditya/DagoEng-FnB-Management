@@ -6,6 +6,7 @@ import {
   emptyReservationsMessage,
   filterReservations,
   formatReservationDateTime,
+  getWitaDatePlusDays,
   isTableAvailableForPax,
   reservationStatusLabel,
   reservationStatusTone,
@@ -122,10 +123,8 @@ describe("reservationStatusTone and reservationStatusLabel", () => {
 
 describe("formatReservationDateTime", () => {
   it("formats today, tomorrow and explicit dates with WITA time", () => {
-    const today = new Date().toISOString().split("T")[0];
-    const tomorrowDate = new Date();
-    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const tomorrow = tomorrowDate.toISOString().split("T")[0];
+    const today = getWitaDatePlusDays(0);
+    const tomorrow = getWitaDatePlusDays(1);
 
     expect(formatReservationDateTime(today, "19:00")).toBe("Hari ini, 19:00 WITA");
     expect(formatReservationDateTime(tomorrow, "20:00")).toBe("Besok, 20:00 WITA");

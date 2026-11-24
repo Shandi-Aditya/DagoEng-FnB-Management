@@ -1013,6 +1013,73 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "SETTLEMENT": {
       const effectiveBasis = settlementBasis ?? getStoredSettlementReceiptPolicy().settlementBasis;
+
+      if (!mdrBearer) {
+        const rawSettlementData = calculateSettlement(orders, undefined, customSplits, {
+          settlementBasis: effectiveBasis,
+        });
+        const settlementData = tenantId
+          ? rawSettlementData.filter((s) => s.tenantId === tenantId)
+          : rawSettlementData;
+        const totalNetSettlement = settlementData.reduce(
+          (sum, s) => sum + (s.dpp ?? (s.grossRevenue - s.discount)),
+          0
+        );
+        const totalTenantShare = settlementData.reduce((sum, s) => sum + (s.tenantShareAmount || 0), 0);
+        const totalDagoShare = settlementData.reduce((sum, s) => sum + (s.dagoShareAmount || 0), 0);
+        const totalDiscount = settlementData.reduce((sum, s) => sum + s.discount, 0);
+
+        const tableRows = settlementData.map((s) => {
+          const payout = getTenantPayoutAccount(s.tenantId);
+          const payoutDisplay =
+            s.tenantId === "DAGO_HUB"
+              ? "Rekening pusat DAGO"
+              : `${payout.bankName} ${maskAccountNumber(payout.accountNumber)}`;
+          const splitDisplay =
+            s.tenantId === "DAGO_HUB"
+              ? "100% DAGO"
+              : `${s.tenantSharePercent}% Mitra / ${s.dagoSharePercent}% DAGO`;
+
+          return [
+            s.tenantId,
+            s.tenantName,
+            payoutDisplay,
+            splitDisplay,
+            s.transactionCount,
+            `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
+            `Rp ${(s.tenantShareAmount || 0).toLocaleString("id-ID")}`,
+            `Rp ${(s.dagoShareAmount || 0).toLocaleString("id-ID")}`,
+            `Rp ${(s.dpp ?? (s.grossRevenue - s.discount)).toLocaleString("id-ID")}`,
+          ];
+        });
+
+        return {
+          title: "Laporan settlement mitra",
+          subtitle: `Rincian bagi hasil tenant dan rekonsiliasi pembayaran di ${scopeName}`,
+          summaryCards: [
+            { label: "Settlement bersih", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
+            { label: "Bagian mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
+            { label: "Bagian DAGO", value: `Rp ${totalDagoShare.toLocaleString("id-ID")}` },
+            { label: "Diskon (prorata)", value: `Rp ${totalDiscount.toLocaleString("id-ID")}` },
+          ],
+          tableHeaders: [
+            "ID mitra",
+            "Mitra",
+            "Rekening pencairan",
+            "Bagi hasil",
+            "Transaksi",
+            "Kotor (Rp)",
+            "Bagian mitra (Rp)",
+            "Bagian DAGO (Rp)",
+            "Bersih (Rp)",
+          ],
+          tableRows,
+          reconciliationInfo: [
+            { label: "Dasar bagi hasil", value: settlementBasisLabel(effectiveBasis) },
+          ],
+        };
+      }
+
       const period = getWeeklySettlementPeriod(referenceDate);
       const effectiveMdrBearer: MdrBearerMode = mdrBearer || "MITRA";
 
