@@ -23,6 +23,8 @@ export interface OrderStatusHistoryItem {
 
 export type OrderItemCategoryType = "FNB" | "COWORKING";
 
+export type OrderDiscountSource = "MANUAL" | "PROMO" | "VOUCHER";
+
 export type CoworkingOrderItemMeta = {
   spaceId: string;
   spaceName: string;
@@ -70,6 +72,10 @@ export interface OrderRecord {
   fnbDiscount?: number;
   coworkingDiscount?: number;
   promoId?: string;
+  discountSource?: OrderDiscountSource;
+  manualDiscountReason?: string;
+  manualDiscountApprovedBy?: string;
+  voucherTitle?: string;
   tax: number;
   fnbTax?: number;
   coworkingTax?: number;
@@ -95,7 +101,9 @@ export interface OrderRecord {
     verifiedAt: string;
     note?: string;
   };
+  loyaltyMemberId?: string;
   loyaltyPointsCredited?: boolean;
+  loyaltyPointsReversed?: boolean;
   bomDeducted?: boolean;
   bomRestored?: boolean;
   syncStatus?: "SYNCED" | "PENDING" | "REJECTED";

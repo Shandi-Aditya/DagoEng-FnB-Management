@@ -79,11 +79,22 @@ async function reconcileMembersWithServerLoyaltyPoints(
 
     for (const rec of matchedRecords) {
       const creditedIds = Array.isArray(rec.creditedOrderIds)
-        ? Array.from(new Set(rec.creditedOrderIds.map((id) => id.trim()).filter(Boolean)))
+        ? Array.from(
+            new Set(
+              rec.creditedOrderIds
+                .map((id) => id.trim())
+                .filter((id) => Boolean(id) && !id.startsWith("refund:"))
+            )
+          )
         : [];
       if (creditedIds.length === 0) continue;
 
-      const missingOrderIds = creditedIds.filter((oid) => !existingTxIds.has(oid));
+      const missingOrderIds = creditedIds.filter(
+        (oid) =>
+          !existingTxIds.has(oid) &&
+          !existingTxIds.has(`rev-${oid}`) &&
+          ordersById.get(oid)?.paymentStatus !== "REFUNDED"
+      );
       if (missingOrderIds.length === 0) continue;
 
       const presentIds = creditedIds.filter((oid) => existingTxIds.has(oid));
@@ -508,21 +519,22 @@ export async function PUT(req: NextRequest) {
         hasTierHistoryTampering = true;
       } else {
         const addedCount = updates.tierHistory.length - existingHistory.length;
-        const addedEntries = updates.tierHistory.slice(0, addedCount);
-        const suffixEntries = updates.tierHistory.slice(addedCount);
+        const addedEntries: unknown[] = updates.tierHistory.slice(0, addedCount);
+        const suffixEntries: unknown[] = updates.tierHistory.slice(addedCount);
         const existingIds = new Set(existingHistory.map((e) => e.id));
+        const isRecord = (val: unknown): val is Record<string, unknown> =>
+          typeof val === "object" && val !== null;
 
         const invalidAdded = addedEntries.some(
-          (entry: any) =>
-            !entry ||
-            typeof entry !== "object" ||
+          (entry) =>
+            !isRecord(entry) ||
             entry.isManualOverride === true ||
             (typeof entry.id === "string" && existingIds.has(entry.id))
         );
 
         const tamperedExisting = existingHistory.some((orig, idx) => {
           const cand = suffixEntries[idx];
-          if (!cand || typeof cand !== "object") return true;
+          if (!isRecord(cand)) return true;
           return (
             cand.id !== orig.id ||
             cand.memberId !== orig.memberId ||
