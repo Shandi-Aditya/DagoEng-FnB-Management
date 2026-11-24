@@ -15,6 +15,7 @@ interface TicketOrderSummaryProps {
   ticketCount: number;
   totalPrice: number;
   ticketTierName?: string | null;
+  selectedSeats?: string[];
   isInvitation?: boolean;
   invitationNote?: string | null;
   discountAmount?: number;
@@ -31,6 +32,7 @@ export function TicketOrderSummary({
   ticketCount,
   totalPrice,
   ticketTierName,
+  selectedSeats,
   isInvitation,
   invitationNote,
   discountAmount,
@@ -97,6 +99,12 @@ export function TicketOrderSummary({
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Jenis tiket:</span>
             <span className="font-medium text-foreground">{ticketTierName}</span>
+          </div>
+        )}
+        {selectedSeats && selectedSeats.length > 0 && (
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Nomor kursi:</span>
+            <span className="font-mono font-semibold text-primary">{selectedSeats.join(", ")}</span>
           </div>
         )}
         {isInvitation && (

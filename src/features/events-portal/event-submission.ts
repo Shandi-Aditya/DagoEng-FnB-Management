@@ -70,6 +70,7 @@ export interface SubmissionForm {
   honeypot: string;
   ticketTiers?: EventTicketTier[];
   refundPolicy?: EventRefundPolicy;
+  hasSeatingChart?: boolean;
 }
 
 export type SubmissionField = keyof SubmissionForm;
@@ -101,6 +102,7 @@ export function emptySubmissionForm(organizer: { name?: string; email?: string; 
     honeypot: "",
     ticketTiers: [],
     refundPolicy: { policyType: "NO_REFUND" },
+    hasSeatingChart: false,
   };
 }
 
@@ -215,6 +217,7 @@ export function buildSubmissionPayload(form: SubmissionForm): EventSubmissionPay
     maxCapacity: (tierCap > 0 ? tierCap : Number(form.maxCapacity)) || DEFAULT_CAPACITY,
     ticketTiers: hasTiers ? form.ticketTiers : undefined,
     refundPolicy: isPaid ? (form.refundPolicy || { policyType: "NO_REFUND" }) : { policyType: "NO_REFUND" },
+    hasSeatingChart: Boolean(form.hasSeatingChart),
     proposedOrganizerPercent: organizerPercent,
     proposedPlatformPercent: 100 - organizerPercent,
     collaborationFacilities: isHubVenue(form.location) ? form.collaborationFacilities : [],

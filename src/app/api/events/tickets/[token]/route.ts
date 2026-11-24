@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   loadBookingsFromDisk,
+  loadEventsFromDisk,
+  loadConsistentEventSnapshotsFromDb,
   getAdminEvents,
   updateBookingPaymentProof,
   resolveDestinationBankAccount,
@@ -44,10 +46,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
     }
 
     const token = rawToken.trim();
-    await syncStorageFromDb("event_bookings.json").catch(() => {});
     await expirePendingBookings().catch(() => {});
-    const allBookings = loadBookingsFromDisk();
-    const booking = allBookings.find((b) => b.guestToken === token);
+    const snapshot = await loadConsistentEventSnapshotsFromDb().catch(() => null);
+    const allBookings = snapshot?.bookings || loadBookingsFromDisk();
+    const allEvents = snapshot?.events || loadEventsFromDisk();
+    const booking = allBookings.find((b: any) => b.guestToken === token);
 
     if (!booking) {
       return NextResponse.json(
@@ -60,7 +63,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
     }
 
     // Enrich with event details
-    const allEvents = await getAdminEvents();
     const matchingEvent = allEvents.find((e: CommunityEvent) => e.id === booking.eventId);
 
     const resolvedTransferBank = resolveActiveTransferBankForBooking(booking, matchingEvent);
@@ -109,6 +111,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
       paymentVerificationNote: booking.paymentVerificationNote || null,
       ticketTierId: booking.ticketTierId || null,
       ticketTierName: booking.ticketTierName || null,
+      selectedSeats: booking.selectedSeats || null,
       isInvitation: Boolean(booking.isInvitation),
       invitationNote: booking.invitationNote || null,
       promoCode: booking.promoCode || null,

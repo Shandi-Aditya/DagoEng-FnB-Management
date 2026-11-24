@@ -576,6 +576,7 @@ export default function CommunityOrganizerPortalPage() {
       "Check In",
       "Waktu Check In",
       "Petugas Check In",
+      "Nomor Kursi",
     ];
     const rows = buildAttendeesExportRows(rowsToExport);
 

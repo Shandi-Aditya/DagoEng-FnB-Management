@@ -109,6 +109,11 @@ import {
 } from "@/lib/payout";
 import { dispatchPaidTicketEmail } from "@/lib/email";
 import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
+import {
+  generateTierSeats,
+  getEventOccupiedSeats,
+  validateSeatSelection,
+} from "@/lib/event-seating";
 
 const getEventsFile = () => getDataFilePath("events.json");
 const getBookingsFile = () => getDataFilePath("event_bookings.json");
@@ -1749,6 +1754,8 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     status: "APPROVED",
     guidelines: event.guidelines || null,
     refundPolicy: event.refundPolicy || { policyType: "NO_REFUND" },
+    hasSeatingChart: Boolean(event.hasSeatingChart),
+    seatingConfig: event.seatingConfig,
     createdAt: event.createdAt,
     maxTicketsPerBooking: maxLimit,
     destinationBank: destBank,
@@ -2058,6 +2065,30 @@ export async function loadConsistentEventSnapshotsFromDb(): Promise<{
     bookings = loadBookingsFromDisk();
   }
 
+  // Overlay local disk event modifications (such as local seating chart configuration or mock bookings)
+  try {
+    const localEvents = loadEventsFromDisk();
+    events = events.map((dbEvt) => {
+      const local = localEvents.find((l) => l.id === dbEvt.id);
+      if (local && (local.hasSeatingChart !== undefined || (local.updatedAt && local.updatedAt > dbEvt.updatedAt))) {
+        return { ...dbEvt, ...local };
+      }
+      return dbEvt;
+    });
+    for (const le of localEvents) {
+      if (!events.some((e) => e.id === le.id)) {
+        events.push(le);
+      }
+    }
+
+    const localBookings = loadBookingsFromDisk();
+    for (const lb of localBookings) {
+      if (!bookings.some((b) => b.id === lb.id || (b.ticketCode && b.ticketCode === lb.ticketCode))) {
+        bookings.push(lb);
+      }
+    }
+  } catch {}
+
   return { events, bookings };
 }
 
@@ -2115,6 +2146,9 @@ export async function getPublicEventById(id: string): Promise<PublicCommunityEve
   const publicEvt = toPublicEvent(event);
   publicEvt.availability = getEventTicketAvailability(event.id, allEvents, allBookings);
   publicEvt.tierAvailability = publicEvt.availability.tiers;
+  if (event.hasSeatingChart) {
+    publicEvt.occupiedSeats = Array.from(getEventOccupiedSeats(event.id, allBookings));
+  }
   return publicEvt;
 }
 
@@ -2505,6 +2539,8 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
         ticketTiers: effectiveTiers,
         promoCodes: Array.isArray((payload as any).promoCodes) ? (payload as any).promoCodes : [],
         refundPolicy: effectiveRefundPolicy,
+        hasSeatingChart: Boolean(payload.hasSeatingChart),
+        seatingConfig: payload.seatingConfig,
 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2784,6 +2820,12 @@ export async function updateEventDetails(
       }
       if (updates.promoCodes !== undefined) {
         sanitizedUpdates.promoCodes = Array.isArray(updates.promoCodes) ? updates.promoCodes : undefined;
+      }
+      if (updates.hasSeatingChart !== undefined) {
+        sanitizedUpdates.hasSeatingChart = Boolean(updates.hasSeatingChart);
+      }
+      if (updates.seatingConfig !== undefined) {
+        sanitizedUpdates.seatingConfig = updates.seatingConfig;
       }
       if (updates.refundPolicy !== undefined) {
         const refVal = validateEventRefundPolicy(updates.refundPolicy);
@@ -4537,6 +4579,24 @@ export async function createEventBooking(
       let totalPrice = subtotalPrice;
       let appliedPromoCode: string | null = null;
 
+      // Seating chart validation under distributed lock
+      let confirmedSeats: string[] | undefined = undefined;
+      if (event.hasSeatingChart) {
+        const occupiedSeats = getEventOccupiedSeats(event.id, allBookings);
+        const tierSeats = selectedTier ? generateTierSeats(selectedTier) : undefined;
+        const seatValidation = validateSeatSelection({
+          hasSeatingChart: true,
+          selectedSeats: payload.selectedSeats,
+          ticketCount,
+          tierSeats,
+          occupiedSeats,
+        });
+        if (!seatValidation.valid) {
+          throw new Error(seatValidation.error || "Validasi kursi gagal.");
+        }
+        confirmedSeats = payload.selectedSeats?.map((s) => s.trim().toUpperCase());
+      }
+
       if (payload.promoCode && payload.promoCode.trim() !== "") {
         const promoCalc = validateAndCalculatePromoDiscount(
           event,
@@ -4644,6 +4704,7 @@ export async function createEventBooking(
         ticketTierId: selectedTier?.id,
         ticketTierName: selectedTier?.name,
         ticketCount,
+        selectedSeats: confirmedSeats,
         unitPrice,
         subtotalPrice,
         discountAmount,

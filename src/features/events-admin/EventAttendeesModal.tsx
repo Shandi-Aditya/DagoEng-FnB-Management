@@ -122,6 +122,7 @@ export function EventAttendeesModal({
       "Email",
       "WhatsApp",
       "Jumlah Tiket",
+      "Nomor Kursi",
       "Total Bayar",
       "Status Bayar",
       "Status Kehadiran",
@@ -141,6 +142,7 @@ export function EventAttendeesModal({
         b.guestEmail,
         b.guestPhone || "—",
         qty,
+        b.selectedSeats && b.selectedSeats.length > 0 ? b.selectedSeats.join(", ") : "—",
         b.totalPrice,
         b.paymentStatus,
         attendanceLabel,
@@ -270,6 +272,11 @@ export function EventAttendeesModal({
                             <span className="font-mono text-xs font-medium text-foreground">
                               {b.ticketCode}
                             </span>
+                            {b.selectedSeats && b.selectedSeats.length > 0 && (
+                              <span className="font-mono text-xs text-primary font-medium">
+                                Kursi: {b.selectedSeats.join(", ")}
+                              </span>
+                            )}
                             {b.ticketTierName ? (
                               <span className="text-xs text-muted-foreground font-medium">
                                 {b.ticketTierName}

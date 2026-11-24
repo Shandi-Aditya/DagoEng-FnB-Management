@@ -164,6 +164,9 @@ export function ActivityView(props: ActivityViewProps) {
                       <span className="truncate text-sm font-medium">{ticket.eventTitle}</span>
                       <span className="text-xs text-muted-foreground">
                         <span className="font-mono tabular-nums">{ticket.ticketCount}</span> tiket, {ticket.ticketCode}
+                        {ticket.selectedSeats && ticket.selectedSeats.length > 0 && (
+                          <span className="font-mono text-primary font-medium"> &bull; Kursi: {ticket.selectedSeats.join(", ")}</span>
+                        )}
                       </span>
                     </span>
                     {ticket.paymentStatus !== "PAID" ? (

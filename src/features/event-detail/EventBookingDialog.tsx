@@ -11,7 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { generateTierSeats } from "@/lib/event-seating";
 import type { PublicCommunityEvent } from "@/types/event";
 
 export interface BookingFormData {
@@ -21,6 +23,7 @@ export interface BookingFormData {
   institution: string;
   ticketCount: number;
   ticketTierId?: string;
+  selectedSeats?: string[];
   promoCode?: string;
 }
 
@@ -91,6 +94,64 @@ export function EventBookingDialog({
     : event?.isPaid
       ? Number(event?.price || 0)
       : 0;
+
+  const selectedSeats = React.useMemo(
+    () => (Array.isArray(form.selectedSeats) ? form.selectedSeats : []),
+    [form.selectedSeats]
+  );
+
+  const occupiedSet = React.useMemo(
+    () => new Set((event?.occupiedSeats || []).map((s) => s.toUpperCase())),
+    [event?.occupiedSeats]
+  );
+
+  const tierSeats = React.useMemo(() => {
+    if (!event?.hasSeatingChart) return [];
+    if (selectedTier) {
+      return generateTierSeats(selectedTier);
+    }
+    return generateTierSeats({ quota: event?.maxCapacity || 20 });
+  }, [event?.hasSeatingChart, event?.maxCapacity, selectedTier]);
+
+  const handleToggleSeat = (seatCode: string) => {
+    const clean = seatCode.trim().toUpperCase();
+    if (occupiedSet.has(clean)) return;
+
+    setForm((prev) => {
+      const current = Array.isArray(prev.selectedSeats) ? [...prev.selectedSeats] : [];
+      const isAlreadySelected = current.includes(clean);
+
+      if (isAlreadySelected) {
+        return {
+          ...prev,
+          selectedSeats: current.filter((s) => s !== clean),
+        };
+      }
+
+      if (current.length < prev.ticketCount) {
+        return {
+          ...prev,
+          selectedSeats: [...current, clean],
+        };
+      }
+
+      if (prev.ticketCount === 1) {
+        return {
+          ...prev,
+          selectedSeats: [clean],
+        };
+      }
+
+      return {
+        ...prev,
+        selectedSeats: [...current.slice(1), clean],
+      };
+    });
+  };
+
+  const isSeatSelectionIncomplete = Boolean(
+    event?.hasSeatingChart && selectedSeats.length !== form.ticketCount
+  );
 
   const subtotalPrice = unitPrice * form.ticketCount;
 
@@ -194,6 +255,7 @@ export function EventBookingDialog({
                           ...prev,
                           ticketTierId: tier.id,
                           ticketCount: 1,
+                          selectedSeats: [],
                         }));
                       }}
                       className={`w-full text-left p-3 rounded-lg border transition-colors flex flex-col gap-1.5 ${isSelected
@@ -317,7 +379,13 @@ export function EventBookingDialog({
                 type="button"
                 variant="outline"
                 size="icon-lg"
-                onClick={() => setForm((prev) => ({ ...prev, ticketCount: Math.max(1, prev.ticketCount - 1) }))}
+                onClick={() =>
+                  setForm((prev) => {
+                    const nextCount = Math.max(1, prev.ticketCount - 1);
+                    const nextSeats = (prev.selectedSeats || []).slice(0, nextCount);
+                    return { ...prev, ticketCount: nextCount, selectedSeats: nextSeats };
+                  })
+                }
                 disabled={form.ticketCount <= 1}
                 aria-label="Kurangi jumlah tiket"
               >
@@ -337,6 +405,85 @@ export function EventBookingDialog({
               </Button>
             </div>
           </div>
+
+          {/* Interactive Seating Chart */}
+          {event.hasSeatingChart && (
+            <div className="rounded-xl border bg-muted/20 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-foreground block">Pilih nomor kursi</span>
+                  <span className="text-xs text-muted-foreground block mt-0.5">
+                    Pilih {form.ticketCount} kursi ({selectedSeats.length}/{form.ticketCount} terpilih)
+                  </span>
+                </div>
+                {selectedSeats.length === form.ticketCount ? (
+                  <Badge variant="default" className="text-xs">
+                    Kursi lengkap
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs text-warning border-warning/40">
+                    Kurang {form.ticketCount - selectedSeats.length} kursi
+                  </Badge>
+                )}
+              </div>
+
+              {/* Seating Grid */}
+              <div className="bg-background rounded-lg border p-3">
+                <div className="text-center text-xs text-muted-foreground pb-2 border-b mb-3 font-medium">
+                  [ AREA PANGGUNG / LAYAR UTAMA ]
+                </div>
+
+                <div className="grid grid-cols-5 sm:grid-cols-8 gap-1.5 max-h-48 overflow-y-auto p-1">
+                  {tierSeats.map((seat) => {
+                    const isOccupied = occupiedSet.has(seat.toUpperCase());
+                    const isSelected = selectedSeats.includes(seat.toUpperCase());
+
+                    return (
+                      <button
+                        key={seat}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => handleToggleSeat(seat)}
+                        title={isOccupied ? `Kursi ${seat} sudah terisi` : `Pilih kursi ${seat}`}
+                        className={`h-8 rounded text-xs font-mono font-medium transition-colors flex items-center justify-center ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground shadow-xs font-semibold ring-2 ring-primary ring-offset-1"
+                            : isOccupied
+                            ? "bg-muted text-muted-foreground/40 border border-muted cursor-not-allowed line-through"
+                            : "bg-card border border-border hover:border-primary/60 hover:bg-primary/5 text-foreground cursor-pointer"
+                        }`}
+                      >
+                        {seat}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-3 border-t mt-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-3 rounded border border-border bg-card" />
+                    <span>Tersedia</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-3 rounded bg-primary" />
+                    <span>Dipilih</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-3 rounded bg-muted border border-muted line-through" />
+                    <span>Terisi</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedSeats.length > 0 && (
+                <div className="text-xs text-foreground bg-card rounded border p-2 flex items-center justify-between">
+                  <span className="text-muted-foreground">Kursi pilihan Anda:</span>
+                  <span className="font-mono font-semibold text-primary">{selectedSeats.join(", ")}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Promo Code Input (for paid bookings) */}
           {subtotalPrice > 0 && (
@@ -408,6 +555,7 @@ export function EventBookingDialog({
                 size="lg"
                 disabled={
                   isSubmitting ||
+                  isSeatSelectionIncomplete ||
                   (hasTiers &&
                     (!form.ticketTierId ||
                       !selectedTier ||
@@ -419,9 +567,11 @@ export function EventBookingDialog({
               >
                 {isSubmitting
                   ? "Memproses..."
-                  : totalPrice > 0
-                    ? "Lanjut ke pembayaran"
-                    : "Dapatkan tiket"}
+                  : isSeatSelectionIncomplete
+                    ? `Pilih ${form.ticketCount - selectedSeats.length} kursi lagi`
+                    : totalPrice > 0
+                      ? "Lanjut ke pembayaran"
+                      : "Dapatkan tiket"}
               </Button>
             </DialogFooter>
           </div>

@@ -298,6 +298,7 @@ export function buildAttendeesExportRows(
       checkInLabel,
       formattedTime,
       b.checkedInBy || (checkInLabel !== "Belum hadir" ? "Petugas Check-In" : "—"),
+      b.selectedSeats && b.selectedSeats.length > 0 ? b.selectedSeats.join(", ") : "—",
     ];
   });
 }

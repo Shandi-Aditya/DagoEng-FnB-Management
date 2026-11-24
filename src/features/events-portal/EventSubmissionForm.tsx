@@ -382,9 +382,28 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
               )}
 
               {/* Editor Jenis Tiket Bertingkat (Opsional jika ingin multi-tier) */}
-              <div className="border-t pt-3">
+              <div className="border-t pt-3 space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                  <div className="space-y-0.5">
+                    <FieldLabel htmlFor="submission-has-seating" className="text-xs font-medium cursor-pointer block">
+                      Pakai nomor kursi
+                    </FieldLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Pembeli memilih kursi di denah visual saat pesan tiket (contoh VIP A1-A10, Reguler B1-B20).
+                    </p>
+                  </div>
+                  <input
+                    id="submission-has-seating"
+                    type="checkbox"
+                    checked={Boolean(form.hasSeatingChart)}
+                    onChange={(e) => set("hasSeatingChart", e.target.checked)}
+                    className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                  />
+                </div>
+
                 <TicketTiersEditor
                   tiers={form.ticketTiers || []}
+                  hasSeatingChart={Boolean(form.hasSeatingChart)}
                   onChange={(tiers) => {
                     set("ticketTiers", tiers);
                     const sumQ = tiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);

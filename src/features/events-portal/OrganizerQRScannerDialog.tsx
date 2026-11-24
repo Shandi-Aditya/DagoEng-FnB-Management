@@ -46,6 +46,7 @@ interface ScanResultFeedback {
   eventTitle?: string;
   checkedInQty?: number;
   ticketCount?: number;
+  seatLabel?: string;
   timestamp: string;
 }
 
@@ -260,6 +261,14 @@ export function OrganizerQRScannerDialog({
 
         playBeep(true);
         const updatedBooking = (json.data || json.booking) as EventTicketOrder;
+        let seatLabel: string | undefined = undefined;
+        if (updatedBooking.selectedSeats && updatedBooking.selectedSeats.length > 0) {
+          if (matchSeat && updatedBooking.selectedSeats[parseInt(matchSeat[2], 10) - 1]) {
+            seatLabel = updatedBooking.selectedSeats[parseInt(matchSeat[2], 10) - 1];
+          } else {
+            seatLabel = updatedBooking.selectedSeats.join(", ");
+          }
+        }
         setFeedback({
           type: "SUCCESS",
           title: "Check-in berhasil",
@@ -267,6 +276,7 @@ export function OrganizerQRScannerDialog({
           ticketCode: updatedBooking.ticketCode,
           guestName: updatedBooking.guestName,
           eventTitle: updatedBooking.eventTitle,
+          seatLabel,
           checkedInQty: updatedBooking.checkedInQty ?? updatedBooking.ticketCount,
           ticketCount: updatedBooking.ticketCount,
           timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
@@ -475,6 +485,9 @@ export function OrganizerQRScannerDialog({
               {feedback.guestName && (
                 <div className="text-xs text-foreground font-medium pt-1">
                   Peserta: {feedback.guestName} &bull; {feedback.ticketCode}
+                  {feedback.seatLabel && (
+                    <span className="font-mono text-primary font-semibold"> &bull; Kursi: {feedback.seatLabel}</span>
+                  )}
                 </div>
               )}
             </div>

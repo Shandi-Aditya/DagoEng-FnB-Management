@@ -56,6 +56,7 @@ interface ScanFeedback {
   ticketCode?: string;
   guestName?: string;
   timestamp: string;
+  seatNumberLabel?: string;
   isInvitation?: boolean;
   invitationNote?: string;
   ticketTierName?: string;
@@ -203,6 +204,14 @@ export function EventCheckInScannerDialog({
 
         playChime(true);
         const ticketCount = booking.ticketCount || 1;
+        let seatLabel: string | undefined = undefined;
+        if (booking.selectedSeats && booking.selectedSeats.length > 0) {
+          if (seatNumber && booking.selectedSeats[seatNumber - 1]) {
+            seatLabel = booking.selectedSeats[seatNumber - 1];
+          } else {
+            seatLabel = booking.selectedSeats.join(", ");
+          }
+        }
         setFeedback({
           tone: "success",
           title: "Check-in dicatat",
@@ -212,6 +221,7 @@ export function EventCheckInScannerDialog({
               : `Tiket ${cleanCode} atas nama ${booking.guestName} berhasil diverifikasi.`,
           ticketCode: cleanCode,
           guestName: booking.guestName,
+          seatNumberLabel: seatLabel,
           isInvitation: booking.isInvitation,
           invitationNote: booking.invitationNote || undefined,
           ticketTierName: booking.ticketTierName,
@@ -407,6 +417,11 @@ export function EventCheckInScannerDialog({
                   <span className="text-xs text-muted-foreground font-mono">
                     {feedback.ticketCode} {feedback.guestName ? `• ${feedback.guestName}` : ""}
                   </span>
+                  {feedback.seatNumberLabel && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-primary/10 text-primary border border-primary/20">
+                      Kursi {feedback.seatNumberLabel}
+                    </span>
+                  )}
                   {feedback.isInvitation && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                       Tiket undangan

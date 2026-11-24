@@ -135,6 +135,14 @@ export function CustomerTicketPassModal({
               <span className="text-muted-foreground">Nama pemesan</span>
               <span className="font-medium text-foreground">{ticket.guestName}</span>
             </div>
+            {ticket.selectedSeats && ticket.selectedSeats.length > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Nomor kursi</span>
+                <span className="font-mono font-medium text-primary">
+                  {ticket.selectedSeats.join(", ")}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Email</span>
               <span className="text-foreground">{ticket.guestEmail}</span>

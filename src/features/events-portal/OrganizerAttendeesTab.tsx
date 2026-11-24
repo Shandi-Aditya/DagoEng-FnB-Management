@@ -320,6 +320,11 @@ export function OrganizerAttendeesTab({
                           <div className="font-mono font-medium text-foreground">
                             {b.ticketCode}
                           </div>
+                          {b.selectedSeats && b.selectedSeats.length > 0 && (
+                            <div className="font-mono text-xs text-primary font-medium">
+                              Kursi: {b.selectedSeats.join(", ")}
+                            </div>
+                          )}
                           {isCheckedIn && b.checkInTime ? (
                             <div className="text-xs text-muted-foreground mt-0.5">
                               {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
@@ -447,6 +452,7 @@ export function OrganizerAttendeesTab({
                                       <div>
                                         <span className="font-mono font-medium block">
                                           {seatCode}
+                                          {b.selectedSeats?.[idx] ? ` (Kursi ${b.selectedSeats[idx]})` : ""}
                                         </span>
                                         <span className="text-muted-foreground text-xs block">
                                           Tiket #{seatNum}

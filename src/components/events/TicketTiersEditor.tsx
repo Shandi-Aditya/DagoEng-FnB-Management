@@ -15,6 +15,7 @@ interface TicketTiersEditorProps {
   onChange: (tiers: EventTicketTier[]) => void;
   maxVenueCapacity?: number;
   disabled?: boolean;
+  hasSeatingChart?: boolean;
 }
 
 function toDateTimeLocalString(isoOrStr?: string): string {
@@ -56,6 +57,7 @@ export function TicketTiersEditor({
   onChange,
   maxVenueCapacity,
   disabled = false,
+  hasSeatingChart = false,
 }: TicketTiersEditorProps) {
   const [rawPrices, setRawPrices] = React.useState<Record<string, string>>({});
   const [rawQuotas, setRawQuotas] = React.useState<Record<string, string>>({});
@@ -68,6 +70,7 @@ export function TicketTiersEditor({
   };
 
   const handleAddTier = () => {
+    const nextPrefix = String.fromCharCode(65 + (tiers.length % 26));
     const newTier: EventTicketTier = {
       id: `tier-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: tiers.length === 0 ? "Reguler" : tiers.length === 1 ? "VIP" : `Tier ${tiers.length + 1}`,
@@ -75,6 +78,9 @@ export function TicketTiersEditor({
       quota: 50,
       description: "",
       isActive: true,
+      rowPrefix: nextPrefix,
+      totalRows: 1,
+      seatsPerRow: 10,
     };
     onChange([...tiers, newTier]);
   };
@@ -345,6 +351,76 @@ export function TicketTiersEditor({
                     className="h-8 text-xs"
                   />
                 </div>
+
+                {/* Konfigurasi Denah Kursi jika hasSeatingChart aktif */}
+                {hasSeatingChart && (
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-foreground">Pengaturan nomor kursi</span>
+                      <span className="font-mono text-xs text-primary font-medium">
+                        {tier.rowPrefix
+                          ? `Denah: ${tier.rowPrefix}1–${tier.rowPrefix}${tier.seatsPerRow || 10}`
+                          : "Format otomatis"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="space-y-1">
+                        <Label htmlFor={`tier-row-prefix-${index}`} className="text-xs text-muted-foreground">
+                          Huruf baris (contoh A/VIP)
+                        </Label>
+                        <Input
+                          id={`tier-row-prefix-${index}`}
+                          type="text"
+                          maxLength={4}
+                          disabled={disabled}
+                          value={tier.rowPrefix || ""}
+                          onChange={(e) => handleUpdateTier(index, { rowPrefix: e.target.value.toUpperCase() })}
+                          placeholder={index === 0 ? "A" : index === 1 ? "B" : "C"}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor={`tier-total-rows-${index}`} className="text-xs text-muted-foreground">
+                          Jumlah baris
+                        </Label>
+                        <Input
+                          id={`tier-total-rows-${index}`}
+                          type="number"
+                          min={1}
+                          max={26}
+                          disabled={disabled}
+                          value={tier.totalRows ?? 1}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            handleUpdateTier(index, { totalRows: isNaN(val) || val < 1 ? 1 : val });
+                          }}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor={`tier-seats-per-row-${index}`} className="text-xs text-muted-foreground">
+                          Kursi per baris
+                        </Label>
+                        <Input
+                          id={`tier-seats-per-row-${index}`}
+                          type="number"
+                          min={1}
+                          max={100}
+                          disabled={disabled}
+                          value={tier.seatsPerRow ?? (tier.quota || 10)}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            handleUpdateTier(index, { seatsPerRow: isNaN(val) || val < 1 ? 1 : val });
+                          }}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

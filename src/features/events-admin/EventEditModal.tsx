@@ -279,10 +279,29 @@ export function EventEditModal({
             />
           </div>
 
-          {/* Editor Jenis Tiket Bertingkat */}
-          <div className="border-t pt-3">
+          {/* Editor Jenis Tiket Bertingkat & Denah Kursi */}
+          <div className="border-t pt-3 space-y-3">
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+              <div className="space-y-0.5">
+                <Label htmlFor="edit-has-seating" className="text-xs font-medium cursor-pointer block">
+                  Pakai nomor kursi
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Pembeli memilih kursi di denah visual saat pesan tiket (contoh VIP A1-A10, Reguler B1-B20).
+                </p>
+              </div>
+              <input
+                id="edit-has-seating"
+                type="checkbox"
+                checked={Boolean(formData.hasSeatingChart)}
+                onChange={(e) => onFormDataChange({ ...formData, hasSeatingChart: e.target.checked })}
+                className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+              />
+            </div>
+
             <TicketTiersEditor
               tiers={formData.ticketTiers || []}
+              hasSeatingChart={Boolean(formData.hasSeatingChart)}
               onChange={(newTiers) => {
                 const isPaid = newTiers.some((t) => Number(t.price) > 0);
                 const sumQuota = newTiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);

@@ -323,6 +323,7 @@ export function OrganizerRevisionDialog({
             <div className="border-t pt-3">
               <TicketTiersEditor
                 tiers={ticketTiers || []}
+                hasSeatingChart={Boolean(event.hasSeatingChart)}
                 onChange={(newTiers) => {
                   setTicketTiers(newTiers);
                   const sumQuota = newTiers.reduce((acc, t) => acc + (t.quota || 0), 0);

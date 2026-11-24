@@ -23,6 +23,21 @@ export interface EventTicketTier {
   salesStartDate?: string;
   salesEndDate?: string;
   isActive?: boolean;
+  rowPrefix?: string; // Prefix baris denah kursi, contoh "A" untuk VIP atau "B" untuk Reguler
+  totalRows?: number; // Jumlah baris kursi untuk tier ini, default 1
+  seatsPerRow?: number; // Jumlah kursi per baris, contoh 10 (A1-A10)
+}
+
+export interface TierSeatingConfig {
+  tierId: string;
+  rowPrefix: string; // Prefix baris denah kursi, contoh "A"
+  totalRows: number; // Jumlah baris
+  seatsPerRow: number; // Jumlah kursi per baris
+}
+
+export interface EventSeatingConfig {
+  enabled: boolean;
+  tierConfigs?: Record<string, TierSeatingConfig>;
 }
 
 export interface EventTicketTierAvailability {
@@ -130,6 +145,8 @@ export interface CommunityEvent {
   ticketTiers?: EventTicketTier[];
   promoCodes?: EventPromoCode[];
   refundPolicy?: EventRefundPolicy;
+  hasSeatingChart?: boolean;
+  seatingConfig?: EventSeatingConfig;
 
   // Collaboration requirements
   collaborationFacilities?: string[] | string | null;
@@ -248,6 +265,9 @@ export interface PublicCommunityEvent {
   guidelines?: string[] | null;
   ticketTiers?: EventTicketTier[];
   tierAvailability?: EventTicketTierAvailability[];
+  hasSeatingChart?: boolean;
+  seatingConfig?: EventSeatingConfig;
+  occupiedSeats?: string[];
   hasActivePromos?: boolean;
   refundPolicy?: EventRefundPolicy;
   availability?: EventTicketAvailability;
@@ -271,6 +291,8 @@ export interface EventSubmissionPayload {
   price?: number;
   ticketTiers?: EventTicketTier[];
   refundPolicy?: EventRefundPolicy;
+  hasSeatingChart?: boolean;
+  seatingConfig?: EventSeatingConfig;
   posterUrl: string;
   externalRegistrationUrl?: string;
   guidelines?: string[] | string | null;
@@ -354,6 +376,7 @@ export interface EventTicketOrder {
   ticketTierId?: string;
   ticketTierName?: string;
   ticketCount: number;
+  selectedSeats?: string[]; // Daftar kode nomor kursi yang dipilih (contoh: ["A1", "A2"])
   checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
   checkedInSeats?: number[]; // Daftar nomor index tiket (1..ticketCount) yang sudah check-in
   seatCheckInTimes?: Record<string, string>; // Catatan timestamp waktu check-in per sub-tiket (key: seat number "1", "2")
@@ -402,6 +425,7 @@ export interface EventBookingPayload {
   institution?: string;
   ticketTierId?: string;
   ticketCount: number;
+  selectedSeats?: string[]; // Nomor kursi yang dipilih pemesan
   promoCode?: string;
   paymentMethod?: TicketPaymentMethod;
   destinationBankId?: string;
