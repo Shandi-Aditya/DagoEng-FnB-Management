@@ -8,6 +8,8 @@ Format pencatatan mengacu pada [Keep a Changelog](https://keepachangelog.com/id/
 ## [Unreleased]
 
 ### Ditambahkan
+- **Arsitektur Rilis dan Server Staging (S-31)**: Pemisahan branch `develop` khusus server Staging dengan database Neon terisolasi dan branch `main` khusus server Produksi dengan siklus rilis terjadwal setiap Senin.
+- **Order Perusahaan dan Integrasi Invoice POS (S-36)**: Dukungan pemesanan F&B korporat, bundling sewa ruang meeting, invoice PDF resmi berkop A4, dan filter laporan penjualan per instansi.
 - Penambahan verifikasi atomic booking tiket berbayar dan pelindung double-click pada alur pembayaran (S-33).
 - Visualisasi sisa kuota slot coworking, label status "Lewat", dan pencegahan overbooking (S-35).
 
@@ -34,7 +36,6 @@ Rilis stabil pertama untuk konsolidasi perbaikan operasional POS dan Modul Web E
 - **Standarisasi Coworking WITA dan Nota Resmi (S-10)**: Penyelarasan tanggal transaksi booking coworking ke zona waktu WITA (`Asia/Makassar`), format struk thermal 80mm monokrom beralamat resmi Dago Creative Hub Singaraja, dan standarisasi tarif pajak non-PB1.
 - **Konsistensi Laporan Penjualan dan Margin (S-11)**: Agregasi menu terlaris, pendapatan kotor, dan margin operasional disaring secara ketat hanya dari transaksi yang telah berstatus `PAID` (lunas).
 - **Pembatasan Waktu Meja Check-in (S-06)**: Restriksi meja registrasi `/events/checkin` agar hanya menampilkan dan menerima pemindaian tiket untuk event yang berlangsung pada hari ini (WITA).
-- **Arsitektur Rilis dan Server Staging (S-31)**: Pemisahan branch `develop` khusus server Staging dengan database terisolasi dan branch `main` khusus server Produksi dengan siklus rilis terjadwal setiap Senin.
 
 ### Diperbaiki
 - Perbaikan deadlock validasi harga pada formulir pengajuan event multi-tier berbayar.

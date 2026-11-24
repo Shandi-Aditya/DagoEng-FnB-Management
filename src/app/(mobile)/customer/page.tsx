@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { notify } from "@/components/app/notify";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
-import { useInventory } from "@/contexts/InventoryContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -29,6 +28,7 @@ import { buildOrderReceiptData } from "@/features/orders/orders-domain";
 import { PaymentWaitingModal } from "@/features/payment/PaymentWaitingModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { isCoworkingDateOpen, isTenantAcceptingOrders } from "@/lib/operating-hours";
+import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import { getAllFnbTenants, isTenantActive } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CoworkingBooking } from "@/types/coworking";
@@ -37,7 +37,6 @@ import type { OrderRecord } from "@/types/order";
 import type { MasterProduct } from "@/types/product";
 
 const DEFAULT_PARTNER = "tenant-ks";
-const POINTS_PER_RUPIAH = 1000;
 
 /** Old links used ?tab=MENU|COWORKING|ORDERS|LOYALTY|PROFILE; keep them working. */
 function viewFromParam(raw: string | null): CustomerView {
@@ -66,12 +65,12 @@ function CustomerApp() {
   const { user, logout } = useAuth();
   const { activeOutlet, activeOutletId, setOutlet } = useOutlet();
   const { filteredProducts } = useProducts();
-  const { members, addPoints } = useLoyalty();
+  const { members } = useLoyalty();
   const { orders, createOrder, advanceOrderStatus } = useOrders();
-  const { filteredAreas, releaseTableToAvailable, occupyTableWithOrder } = useTables();
-  const { deductOrderBOM } = useInventory();
-  const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
-  const { settings, redeemPromo } = useSettings();
+  const { filteredAreas, releaseTableToAvailable } = useTables();
+  const { spaces, bookings, bookSpace, cancelBooking } = useCoworking();
+  const { settings } = useSettings();
+  const qrisOnly = isQrSelfOrderQrisOnly(settings);
 
   const [view, setView] = useState<CustomerView>(() => viewFromParam(searchParams.get("tab")));
 
@@ -168,9 +167,16 @@ function CustomerApp() {
       prev.flatMap((item) => (item.product.id !== productId ? [item] : item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : [])),
     );
 
+  useEffect(() => {
+    if (qrisOnly && form.payment !== "QRIS") {
+      setForm((prev) => ({ ...prev, payment: "QRIS" }));
+    }
+  }, [qrisOnly, form.payment]);
+
   const openCheckout = () => {
     setForm((prev) => ({
       ...prev,
+      payment: qrisOnly ? "QRIS" : prev.payment,
       name: prev.name || identity.name || "",
       phone: prev.phone || identity.phone || "",
       tableNumber: lockedTable ?? prev.tableNumber,
@@ -178,21 +184,35 @@ function CustomerApp() {
     setIsCheckoutOpen(true);
   };
 
-  // Payment state shared by orders and bookings
-  const [waitingOrder, setWaitingOrder] = useState<OrderRecord | null>(null);
-  const [waitingBooking, setWaitingBooking] = useState<CoworkingBooking | null>(null);
+  const [waitingOrderId, setWaitingOrderId] = useState<string | null>(null);
+  const [waitingOrderSnapshot, setWaitingOrderSnapshot] = useState<OrderRecord | null>(null);
+  const [waitingBookingId, setWaitingBookingId] = useState<string | null>(null);
+  const [waitingBookingSnapshot, setWaitingBookingSnapshot] = useState<CoworkingBooking | null>(null);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+
   const openPayment = (order: OrderRecord | null, booking: CoworkingBooking | null) => {
-    setWaitingOrder(order);
-    setWaitingBooking(booking);
+    setWaitingOrderId(order?.id ?? null);
+    setWaitingOrderSnapshot(order);
+    setWaitingBookingId(booking?.id ?? null);
+    setWaitingBookingSnapshot(booking);
     setIsPaymentOpen(true);
   };
+
+  const waitingOrder = useMemo(
+    () => (waitingOrderId ? orders.find((o) => o.id === waitingOrderId) ?? waitingOrderSnapshot : null),
+    [orders, waitingOrderId, waitingOrderSnapshot],
+  );
+  const waitingBooking = useMemo(
+    () => (waitingBookingId ? bookings.find((b) => b.id === waitingBookingId) ?? waitingBookingSnapshot : null),
+    [bookings, waitingBookingId, waitingBookingSnapshot],
+  );
 
   const submitOrder = () => {
     if (cart.length === 0) return;
     const name = form.name.trim();
     const phone = form.phone.trim();
     const table = form.orderType === "DINE_IN" ? lockedTable ?? form.tableNumber : "TAKEAWAY";
+    const effectivePayment = qrisOnly ? "QRIS" : form.payment;
     setIsSubmitting(true);
     try {
       const order = createOrder({
@@ -218,14 +238,14 @@ function CustomerApp() {
         outletName: activeOutlet?.name || "Singaraja",
         status: "NEW",
         paymentStatus: "PENDING",
-        paymentMethod: form.payment === "CASHIER" ? "CASH" : "QRIS",
+        paymentMethod: effectivePayment === "CASHIER" ? "CASH" : "QRIS",
         notes: form.notes.trim() || undefined,
       });
       remember({ name, phone });
       setCart([]);
       setForm((prev) => ({ ...EMPTY_FORM, name: prev.name, phone: prev.phone }));
       setIsCheckoutOpen(false);
-      if (form.payment === "QRIS") {
+      if (effectivePayment === "QRIS") {
         openPayment(order, null);
       } else {
         notify.success("Pesanan dikirim", `#${order.orderNumber}. Bayar ${formatCurrencyIDR(order.total)} di kasir.`);
@@ -241,6 +261,7 @@ function CustomerApp() {
   const submitBooking = (request: SpaceBookingRequest) => {
     setIsBooking(true);
     try {
+      const effectivePayment = qrisOnly ? "QRIS" : request.payment;
       const subtotal = request.space.hourlyRate * request.hours;
       const cwTaxConfig = settings?.categoryTax?.coworking;
       const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
@@ -269,12 +290,12 @@ function CustomerApp() {
         totalAmount,
         paidAmount: 0,
         remainingAmount: totalAmount,
-        paymentMethod: request.payment,
+        paymentMethod: effectivePayment,
         paymentStatus: "PENDING",
         notes: `Booking ${request.space.name}`,
       });
       remember({ name: request.name.trim(), phone: request.phone.trim() });
-      if (request.payment === "QRIS") {
+      if (effectivePayment === "QRIS") {
         openPayment(null, booking);
       } else {
         notify.success("Ruang dipesan", `${request.space.name}, bayar ${formatCurrencyIDR(totalAmount)} di kasir.`);
@@ -286,42 +307,6 @@ function CustomerApp() {
     } finally {
       setIsBooking(false);
     }
-  };
-
-  const handlePaymentSuccess = (payload: { type: "FNB" | "COWORKING"; id: string }) => {
-    if (payload.type === "FNB") {
-      const order = orders.find((o) => o.id === payload.id) || waitingOrder;
-      if (order && order.paymentStatus !== "PAID") {
-        advanceOrderStatus(order.id, "CONFIRMED", "Pembayaran lunas via QRIS", { paymentStatus: "PAID", paymentMethod: order.paymentMethod || "QRIS" });
-        deductOrderBOM(order.items.map((item) => ({ productId: item.productId, productName: item.productName, quantity: item.quantity, modifiers: item.modifiers })));
-        if (currentMember) {
-          const points = Math.floor(order.total / POINTS_PER_RUPIAH);
-          if (points > 0) addPoints(currentMember.id, points, `Pesanan #${order.orderNumber}`, order.id, order.total);
-        }
-        if (order.orderType === "DINE_IN" && order.tableNumber && order.tableNumber !== "TAKEAWAY") {
-          occupyTableWithOrder(order.tableNumber, {
-            customerName: order.customerName,
-            totalFormatted: formatCurrencyIDR(order.total),
-            itemsCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
-            orderId: order.id,
-          });
-        }
-        if (order.promoId) redeemPromo(order.promoId, identity.phone || "cust");
-        notify.success("Pembayaran diterima", `Pesanan #${order.orderNumber} diteruskan ke dapur.`);
-      }
-    } else {
-      const booking = bookings.find((b) => b.id === payload.id) || waitingBooking;
-      if (booking) {
-        confirmBookingPayment(booking.id, booking.paymentMethod || "QRIS");
-        if (currentMember) {
-          const points = Math.floor(booking.totalAmount / POINTS_PER_RUPIAH);
-          if (points > 0) addPoints(currentMember.id, points, `Booking #${booking.bookingCode}`, booking.id);
-        }
-        notify.success("Pembayaran diterima", `${booking.spaceName} siap dipakai.`);
-      }
-    }
-    setIsPaymentOpen(false);
-    setView("activity");
   };
 
   const handlePaymentCancel = (payload: { type: "FNB" | "COWORKING"; id: string }) => {
@@ -458,13 +443,20 @@ function CustomerApp() {
         cart={cart}
         totals={totals}
         form={form}
-        onFormChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+        onFormChange={(patch) =>
+          setForm((prev) => ({
+            ...prev,
+            ...patch,
+            payment: qrisOnly ? "QRIS" : (patch.payment ?? prev.payment),
+          }))
+        }
         lockedTable={lockedTable}
         tables={freeTables}
         onAdd={addById}
         onRemove={removeProduct}
         onSubmit={submitOrder}
         isSubmitting={isSubmitting}
+        qrisOnly={qrisOnly}
       />
 
       {isPaymentOpen ? (
@@ -473,7 +465,6 @@ function CustomerApp() {
           onClose={() => setIsPaymentOpen(false)}
           order={waitingOrder}
           booking={waitingBooking}
-          onPaymentSuccess={handlePaymentSuccess}
           onCancelPayment={handlePaymentCancel}
         />
       ) : null}

@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  claimQrisSessionForOrder,
   getPersistentOrders,
   getPersistentProductsData,
+  getPersistentQrisSession,
+  isVerifiedQrisStatus,
+  mutatePersistentOrders,
   readSeededPersistentData,
-  savePersistentOrder,
-  updatePersistentLoyaltyPoints,
+  savePersistentQrisSession,
+  upsertOrderInList,
 } from "@/lib/persistent-storage";
 import { POS_PRODUCTS } from "@/features/pos/mock-data";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import { calculateOrderPricing } from "@/lib/promo";
+import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
+import { resolveSelfOrderPaymentMethod } from "@/lib/self-order-policy";
 import { calculateCartTaxAndService } from "@/lib/tax-breakdown";
-import { OrderItemRecord, OrderRecord, OrderStatus } from "@/types/order";
+import { OrderItemRecord, OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
 import { DEFAULT_PLATFORM_SETTINGS, PlatformSettings } from "@/types/settings";
 
@@ -19,26 +23,10 @@ export const dynamic = "force-dynamic";
 
 const MAX_SELF_ORDER_POLL_IDS = 20;
 
-const KITCHEN_STAGE_RANK: Record<OrderStatus, number> = {
-  NEW: 0,
-  CONFIRMED: 1,
-  KITCHEN_RECEIVED: 2,
-  COOKING: 3,
-  READY: 4,
-  SERVED: 5,
-  COMPLETED: 6,
-  CANCELLED: 7,
-};
-
 function resolveAuthoritativeItemPrice(
   rawItem: Record<string, unknown>,
-  catalogProduct: MasterProduct | undefined
+  catalogProduct: MasterProduct
 ): number {
-  if (!catalogProduct) {
-    const fallback = Number(rawItem.unitPrice);
-    return Number.isFinite(fallback) ? Math.max(0, Math.round(fallback)) : 0;
-  }
-
   const basePrice = Math.max(0, Math.round(Number(catalogProduct.basePrice) || 0));
   const variants =
     catalogProduct.variants && catalogProduct.variants.length > 0
@@ -123,30 +111,108 @@ export async function POST(req: NextRequest) {
     const rawOrder = (body?.order ?? body) as Record<string, unknown> | null;
 
     const orderId = typeof rawOrder?.id === "string" ? rawOrder.id.trim() : "";
-    if (!rawOrder || !orderId || !Array.isArray(rawOrder.items) || rawOrder.items.length === 0) {
+    if (!rawOrder || !orderId) {
       return NextResponse.json(
         { error: "INVALID_SELF_ORDER: ID pesanan dan daftar item wajib diisi." },
         { status: 400 }
       );
     }
 
-    const existingOrder = (await getPersistentOrders()).find((o) => o.id === orderId);
-    if (existingOrder) {
-      if (existingOrder.status === "CANCELLED" || existingOrder.paymentStatus === "REFUNDED") {
-        return NextResponse.json(
-          { error: "FORBIDDEN: Pesanan yang sudah dibatalkan atau di-refund tidak dapat diubah." },
-          { status: 403 }
-        );
-      }
-      if (existingOrder.paymentStatus === "PAID") {
-        if (rawOrder.paymentStatus === "PAID") {
-          return NextResponse.json({ success: true, order: existingOrder });
+    if (rawOrder.paymentStatus !== undefined && rawOrder.paymentStatus !== "PENDING") {
+      return NextResponse.json(
+        { error: "FORBIDDEN: Pelanggan tidak dapat mengubah status pembayaran menjadi lunas." },
+        { status: 403 }
+      );
+    }
+
+    if (rawOrder.qrisVerification !== undefined && rawOrder.qrisVerification !== null) {
+      return NextResponse.json(
+        { error: "FORBIDDEN: Bukti verifikasi QRIS hanya dapat diproses oleh gateway atau staf." },
+        { status: 403 }
+      );
+    }
+
+    if (
+      rawOrder.status !== undefined &&
+      rawOrder.status !== "NEW" &&
+      rawOrder.status !== "CANCELLED"
+    ) {
+      return NextResponse.json(
+        { error: "FORBIDDEN: Status pesanan tersebut hanya dapat diatur oleh staf." },
+        { status: 403 }
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const isCancelRequest = rawOrder.status === "CANCELLED";
+
+    if (isCancelRequest) {
+      const cancelOutcome = await mutatePersistentOrders<
+        | { ok: true; order: OrderRecord }
+        | { ok: false; status: number; error: string }
+      >((existingOrders) => {
+        const existingOrder = existingOrders.find((o) => o.id === orderId);
+        if (!existingOrder) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              status: 404,
+              error: `NOT_FOUND: Pesanan [${orderId}] tidak ditemukan.`,
+            },
+          };
         }
+        if (
+          existingOrder.status === "CANCELLED" ||
+          existingOrder.paymentStatus === "REFUNDED" ||
+          existingOrder.paymentStatus === "PAID"
+        ) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              status: 403,
+              error:
+                "FORBIDDEN: Pesanan yang sudah lunas, dibatalkan, atau di-refund tidak dapat diubah.",
+            },
+          };
+        }
+
+        const cancelledOrder: OrderRecord = {
+          ...existingOrder,
+          status: "CANCELLED",
+          paymentStatus: "PENDING",
+          statusHistory: [
+            ...(existingOrder.statusHistory ?? []),
+            {
+              id: `h-cancel-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              orderId,
+              fromStatus: existingOrder.status,
+              toStatus: "CANCELLED",
+              timestamp: nowIso,
+              actorName: existingOrder.customerName || "Pelanggan Meja",
+              note: "Pesanan dibatalkan oleh pelanggan",
+            },
+          ],
+        };
+        const { nextOrders, savedOrder } = upsertOrderInList(existingOrders, cancelledOrder);
+        return { nextOrders, result: { ok: true, order: savedOrder } };
+      });
+
+      if (!cancelOutcome.ok) {
         return NextResponse.json(
-          { error: "FORBIDDEN: Pesanan yang sudah lunas tidak dapat diubah oleh tamu." },
-          { status: 403 }
+          { error: cancelOutcome.error },
+          { status: cancelOutcome.status }
         );
       }
+      return NextResponse.json({ success: true, order: cancelOutcome.order });
+    }
+
+    if (!Array.isArray(rawOrder.items) || rawOrder.items.length === 0) {
+      return NextResponse.json(
+        { error: "INVALID_SELF_ORDER: ID pesanan dan daftar item wajib diisi." },
+        { status: 400 }
+      );
     }
 
     const [catalogData, platformSettings] = await Promise.all([
@@ -157,19 +223,44 @@ export async function POST(req: NextRequest) {
       ),
     ]);
 
+    const methodResolution = resolveSelfOrderPaymentMethod(
+      rawOrder.paymentMethod,
+      platformSettings
+    );
+    if (!methodResolution.ok) {
+      return NextResponse.json(
+        { error: methodResolution.error, code: methodResolution.code },
+        { status: methodResolution.status }
+      );
+    }
+
     const productById = new Map<string, MasterProduct>(
       catalogData.products.map((p) => [p.id, p])
     );
 
-    const nowIso = new Date().toISOString();
-    const sanitizedItems: OrderItemRecord[] = rawOrder.items.map((entry: unknown, index: number) => {
+    for (const entry of rawOrder.items) {
       const itemObj =
         entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
       const productId =
         typeof itemObj.productId === "string" && itemObj.productId.trim()
           ? itemObj.productId.trim()
-          : undefined;
-      const catalogProduct = productId ? productById.get(productId) : undefined;
+          : "";
+      if (!productId || !productById.has(productId)) {
+        return NextResponse.json(
+          {
+            error: "INVALID_PRODUCT: Menu tidak ditemukan di katalog resmi outlet.",
+            code: "INVALID_PRODUCT",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const sanitizedItems: OrderItemRecord[] = rawOrder.items.map((entry: unknown, index: number) => {
+      const itemObj =
+        entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+      const productId = (itemObj.productId as string).trim();
+      const catalogProduct = productById.get(productId)!;
       const rawQty = Number(itemObj.quantity);
       const quantity = Number.isFinite(rawQty) ? Math.max(1, Math.floor(rawQty)) : 1;
       const unitPrice = resolveAuthoritativeItemPrice(itemObj, catalogProduct);
@@ -182,17 +273,13 @@ export async function POST(req: NextRequest) {
           typeof itemObj.id === "string" && itemObj.id.trim()
             ? itemObj.id.trim()
             : `it-${Date.now()}-${index}`,
-        productId: catalogProduct?.id ?? productId,
+        productId: catalogProduct.id,
         tenantId:
-          catalogProduct?.tenantId ||
+          catalogProduct.tenantId ||
           (typeof itemObj.tenantId === "string" && itemObj.tenantId.trim()
             ? itemObj.tenantId.trim()
             : undefined),
-        productName:
-          catalogProduct?.name ||
-          (typeof itemObj.productName === "string" && itemObj.productName.trim()
-            ? itemObj.productName.trim()
-            : "Menu"),
+        productName: catalogProduct.name,
         quantity,
         unitPrice,
         notes: typeof itemObj.notes === "string" ? itemObj.notes : undefined,
@@ -249,130 +336,75 @@ export async function POST(req: NextRequest) {
       orderType: orderType === "DINE_IN" ? "DINE_IN" : "TAKEAWAY",
     });
 
-    const rawQris =
-      rawOrder.qrisVerification && typeof rawOrder.qrisVerification === "object"
-        ? (rawOrder.qrisVerification as Record<string, unknown>)
-        : null;
-    const qrisInvoiceNumber =
-      (typeof rawQris?.invoiceNumber === "string" && rawQris.invoiceNumber.trim()) ||
-      (typeof rawQris?.referenceNumber === "string" && rawQris.referenceNumber.trim()) ||
-      "";
-
-    let verifiedPaid = false;
-    let verifiedQrisRecord: OrderRecord["qrisVerification"] | undefined;
-
-    if (qrisInvoiceNumber) {
-      const claim = await claimQrisSessionForOrder({
-        invoiceNumber: qrisInvoiceNumber,
-        orderId,
-        amount: breakdown.total,
-      });
-      if (claim.ok) {
-        verifiedPaid = true;
-        verifiedQrisRecord = {
-          type:
-            claim.session.verificationMethod === "GATEWAY_WEBHOOK"
-              ? "GATEWAY_WEBHOOK"
-              : "SUPERVISOR_MANUAL",
-          referenceNumber:
-            (typeof rawQris?.referenceNumber === "string" && rawQris.referenceNumber.trim()) ||
-            claim.session.rrn ||
-            claim.session.transactionId ||
-            claim.session.invoiceNumber,
-          invoiceNumber: claim.session.invoiceNumber,
-          verifiedAt: claim.session.verifiedAt || nowIso,
-          note: typeof rawQris?.note === "string" ? rawQris.note : undefined,
-        };
-      }
-    }
-
-    const paymentStatus: OrderRecord["paymentStatus"] = verifiedPaid ? "PAID" : "PENDING";
-    const resolvedStatus: OrderStatus = verifiedPaid
-      ? existingOrder &&
-        KITCHEN_STAGE_RANK[existingOrder.status] > KITCHEN_STAGE_RANK.CONFIRMED
-        ? existingOrder.status
-        : "CONFIRMED"
-      : existingOrder
-      ? existingOrder.status
-      : "NEW";
-
-    const rawMethod = rawOrder.paymentMethod;
-    const paymentMethod: OrderRecord["paymentMethod"] = verifiedPaid
-      ? "QRIS"
-      : rawMethod === "CASH" || rawMethod === "QRIS"
-      ? rawMethod
-      : "QRIS";
+    const paymentStatus = "PENDING" as const;
+    const resolvedStatus = "NEW" as const;
+    const paymentMethod = methodResolution.paymentMethod;
 
     const customerName =
       typeof rawOrder.customerName === "string" && rawOrder.customerName.trim()
         ? rawOrder.customerName.trim()
-        : existingOrder?.customerName || "Pelanggan Meja";
+        : "Pelanggan Meja";
     const customerPhone =
       typeof rawOrder.customerPhone === "string" && rawOrder.customerPhone.trim()
         ? rawOrder.customerPhone.trim()
-        : existingOrder?.customerPhone;
+        : undefined;
 
-    const baseHistory = existingOrder?.statusHistory?.length
-      ? existingOrder.statusHistory
-      : [
-          {
-            id: `h-${Date.now()}`,
-            orderId,
-            fromStatus: null,
-            toStatus: "NEW" as const,
-            timestamp:
-              typeof rawOrder.createdAt === "string" && rawOrder.createdAt
-                ? rawOrder.createdAt
-                : nowIso,
-            actorName: customerName,
-          },
-        ];
+    const statusHistory = [
+      {
+        id: `h-${Date.now()}`,
+        orderId,
+        fromStatus: null,
+        toStatus: "NEW" as const,
+        timestamp:
+          typeof rawOrder.createdAt === "string" && rawOrder.createdAt
+            ? rawOrder.createdAt
+            : nowIso,
+        actorName: customerName,
+      },
+    ];
 
-    const statusHistory =
-      verifiedPaid && !baseHistory.some((h) => h.toStatus === "CONFIRMED")
-        ? [
-            ...baseHistory,
-            {
-              id: `h-paid-${Date.now()}`,
-              orderId,
-              fromStatus: existingOrder?.status ?? ("NEW" as const),
-              toStatus: "CONFIRMED" as const,
-              timestamp: nowIso,
-              actorName: customerName,
-              note: "Pembayaran lunas via QRIS",
-            },
-          ]
-        : baseHistory;
+    const outletName =
+      typeof rawOrder.outletName === "string" && rawOrder.outletName.trim()
+        ? rawOrder.outletName.trim()
+        : "Singaraja";
+
+    const publisher = resolvePosReceiptPublisher(sanitizedItems, { name: outletName });
+
+    // Defer final sequential uniqueness to savePersistentOrder (locked under FILE_POS_ORDERS),
+    // clearing any candidate that collides with another order's QRIS session.
+    const rawCandidateOrderNumber =
+      typeof rawOrder.orderNumber === "string" ? rawOrder.orderNumber.trim() : "";
+    const existingQrisForCandidate = rawCandidateOrderNumber
+      ? await getPersistentQrisSession(rawCandidateOrderNumber)
+      : null;
+    const candidateOrderNumber =
+      existingQrisForCandidate && existingQrisForCandidate.orderId !== orderId
+        ? ""
+        : rawCandidateOrderNumber;
 
     const orderToSave: OrderRecord = {
       id: orderId,
-      orderNumber:
-        typeof rawOrder.orderNumber === "string" && rawOrder.orderNumber.trim()
-          ? rawOrder.orderNumber.trim()
-          : existingOrder?.orderNumber || `ORD-SELF-${Date.now().toString().slice(-6)}`,
+      orderNumber: candidateOrderNumber,
       organizationId:
         typeof rawOrder.organizationId === "string" && rawOrder.organizationId.trim()
           ? rawOrder.organizationId.trim()
-          : existingOrder?.organizationId || "org-dago-hub",
+          : "org-dago-hub",
       outletId:
         typeof rawOrder.outletId === "string" && rawOrder.outletId.trim()
           ? rawOrder.outletId.trim()
-          : existingOrder?.outletId || "outlet-sgr",
-      outletName:
-        typeof rawOrder.outletName === "string" && rawOrder.outletName.trim()
-          ? rawOrder.outletName.trim()
-          : existingOrder?.outletName || "Singaraja",
+          : "outlet-sgr",
+      outletName,
+      ...(publisher.tenantId ? { tenantId: publisher.tenantId } : {}),
       tableNumber:
         orderType === "TAKEAWAY"
           ? "TAKEAWAY"
           : typeof rawOrder.tableNumber === "string" && rawOrder.tableNumber.trim()
           ? rawOrder.tableNumber.trim()
-          : existingOrder?.tableNumber || "-",
+          : "-",
       customerName,
       ...(customerPhone ? { customerPhone } : {}),
       orderType,
       status: resolvedStatus,
-      ...(existingOrder?.tenantStatuses ? { tenantStatuses: existingOrder.tenantStatuses } : {}),
       items: sanitizedItems,
       subtotal: breakdown.subtotal,
       ...(discountAmount > 0 ? { discount: discountAmount, promoId } : {}),
@@ -383,49 +415,70 @@ export async function POST(req: NextRequest) {
       total: breakdown.total,
       paymentStatus,
       paymentMethod,
-      ...(verifiedQrisRecord
-        ? {
-            qrisVerification: verifiedQrisRecord,
-            paymentReference: verifiedQrisRecord.referenceNumber,
-          }
-        : {}),
-      targetServiceMinutes: existingOrder?.targetServiceMinutes || 10,
+      targetServiceMinutes: 10,
       notes:
         typeof rawOrder.notes === "string" && rawOrder.notes.trim()
           ? rawOrder.notes.trim()
-          : existingOrder?.notes,
+          : undefined,
       createdAt:
-        existingOrder?.createdAt ||
-        (typeof rawOrder.createdAt === "string" && rawOrder.createdAt ? rawOrder.createdAt : nowIso),
-      ...(verifiedPaid ? { confirmedAt: existingOrder?.confirmedAt || nowIso } : {}),
-      ...(existingOrder?.kitchenReceivedAt
-        ? { kitchenReceivedAt: existingOrder.kitchenReceivedAt }
-        : {}),
-      ...(existingOrder?.cookingStartedAt
-        ? { cookingStartedAt: existingOrder.cookingStartedAt }
-        : {}),
-      ...(existingOrder?.cookingFinishedAt
-        ? { cookingFinishedAt: existingOrder.cookingFinishedAt }
-        : {}),
-      ...(existingOrder?.readyAt ? { readyAt: existingOrder.readyAt } : {}),
-      ...(existingOrder?.servedAt ? { servedAt: existingOrder.servedAt } : {}),
+        typeof rawOrder.createdAt === "string" && rawOrder.createdAt ? rawOrder.createdAt : nowIso,
       statusHistory,
     };
 
-    const becomesPaid =
-      verifiedPaid &&
-      existingOrder?.paymentStatus !== "PAID" &&
-      !existingOrder?.loyaltyPointsCredited;
-    const loyaltyKey = (customerPhone || customerName).trim();
-    const serverEarnedPoints = becomesPaid ? Math.floor(breakdown.total / 10000) : 0;
-    const creditsLoyalty = Boolean(loyaltyKey) && serverEarnedPoints > 0;
+    const createOutcome = await mutatePersistentOrders<
+      | { ok: true; order: OrderRecord }
+      | { ok: false; status: number; error: string }
+    >((existingOrders) => {
+      const existingOrder = existingOrders.find((o) => o.id === orderId);
+      if (existingOrder) {
+        if (
+          existingOrder.status === "CANCELLED" ||
+          existingOrder.paymentStatus === "REFUNDED" ||
+          existingOrder.paymentStatus === "PAID"
+        ) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              status: 403,
+              error:
+                "FORBIDDEN: Pesanan yang sudah lunas, dibatalkan, atau di-refund tidak dapat diubah.",
+            },
+          };
+        }
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            status: 403,
+            error: "FORBIDDEN: Pesanan yang sudah dibuat tidak dapat diubah oleh pelanggan.",
+          },
+        };
+      }
 
-    const savedOrder = await savePersistentOrder(
-      creditsLoyalty ? { ...orderToSave, loyaltyPointsCredited: true } : orderToSave
-    );
+      const { nextOrders, savedOrder } = upsertOrderInList(existingOrders, orderToSave);
+      return { nextOrders, result: { ok: true, order: savedOrder } };
+    });
 
-    if (creditsLoyalty) {
-      await updatePersistentLoyaltyPoints(loyaltyKey, serverEarnedPoints, customerName, orderId);
+    if (!createOutcome.ok) {
+      return NextResponse.json(
+        { error: createOutcome.error },
+        { status: createOutcome.status }
+      );
+    }
+    const savedOrder = createOutcome.order;
+
+    if (savedOrder.paymentMethod === "QRIS" && breakdown.total > 0) {
+      const existingQrisSession = await getPersistentQrisSession(savedOrder.orderNumber);
+      if (!existingQrisSession || !isVerifiedQrisStatus(existingQrisSession.status)) {
+        await savePersistentQrisSession({
+          orderId: savedOrder.id,
+          invoiceNumber: savedOrder.orderNumber,
+          expectedAmount: savedOrder.total,
+          status: "PENDING",
+          updatedAt: nowIso,
+        });
+      }
     }
 
     return NextResponse.json({

@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/components/app/status-badge";
-import { normalizeTenantId } from "@/features/orders/orders-domain";
+import { isCoworkingOrderItem, normalizeTenantId } from "@/features/orders/orders-domain";
 import { resolveItemTenantId } from "@/lib/settlement";
 import type { OrderItemRecord, OrderRecord, OrderStatus, SLAStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
@@ -108,12 +108,13 @@ export function ticketItems(
   tenantId: string | undefined,
   station: KitchenStation = "ALL"
 ): OrderItemRecord[] {
+  const fnbItems = (order.items || []).filter((item) => !isCoworkingOrderItem(item));
   const normTenant = normalizeTenantId(tenantId);
   const fallbackTenantId = (order as { tenantId?: string }).tenantId;
   const byTenant =
     !normTenant || normTenant === "ALL"
-      ? order.items
-      : order.items.filter((item) => {
+      ? fnbItems
+      : fnbItems.filter((item) => {
           const itemTenant = normalizeTenantId(resolveItemTenantId(item, fallbackTenantId));
           return itemTenant === normTenant;
         });
@@ -128,9 +129,16 @@ function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
   return order.orderType === "TAKEAWAY" || order.orderType === "DELIVERY";
 }
 
+export function isOrderEligibleForKds(
+  order: Pick<OrderRecord, "paymentStatus" | "status">
+): boolean {
+  return order.paymentStatus === "PAID" && order.status !== "CANCELLED";
+}
+
 /** Active tickets for the board, oldest first so the queue is served FIFO. */
 export function filterKitchenOrders(orders: readonly OrderRecord[], filters: KitchenFilters): OrderRecord[] {
   return orders
+    .filter((order) => isOrderEligibleForKds(order))
     .filter((order) => ACTIVE_STATUSES.has(effectiveKitchenStatus(order, filters.tenantId)))
     .filter((order) => ticketItems(order, filters.tenantId).length > 0)
     .filter((order) => matchesType(order, filters.type))
@@ -143,8 +151,8 @@ export function filterKitchenOrders(orders: readonly OrderRecord[], filters: Kit
 
 /**
  * Detects newly arrived unaccepted orders for the kitchen station or tenant.
- * Only includes orders in NEW or CONFIRMED status that contain items for the tenant
- * and have not yet been dismissed.
+ * Only includes paid, non-cancelled orders in NEW or CONFIRMED status that contain
+ * items for the tenant and have not yet been dismissed.
  */
 export function getNewIncomingKitchenOrders(
   orders: readonly OrderRecord[],
@@ -153,6 +161,7 @@ export function getNewIncomingKitchenOrders(
 ): OrderRecord[] {
   return orders
     .filter((o) => {
+      if (!isOrderEligibleForKds(o)) return false;
       const status = effectiveKitchenStatus(o, tenantId);
       return (
         (status === "NEW" || status === "CONFIRMED") &&
@@ -170,6 +179,7 @@ export function buildReprintTicket(
   queueNumber: number,
   timestamp: string,
 ): KitchenTicketData {
+  const fnbItems = (items || []).filter((item) => !isCoworkingOrderItem(item));
   return {
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -180,7 +190,7 @@ export function buildReprintTicket(
     orderType: order.orderType,
     purpose: "REPRINT",
     sequenceNumber: queueNumber,
-    items: items.map((item) => ({
+    items: fnbItems.map((item) => ({
       id: item.id,
       productName: item.productName,
       quantity: item.quantity,

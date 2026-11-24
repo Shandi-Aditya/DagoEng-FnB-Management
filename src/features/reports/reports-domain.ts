@@ -19,13 +19,19 @@ import {
   calculateSettlement,
   getTenantPayoutAccount,
   maskAccountNumber,
+  resolveItemTenantId,
 } from "@/lib/settlement";
 import {
   getStoredSettlementReceiptPolicy,
   settlementBasisLabel,
   type SettlementBasisMode,
 } from "@/lib/settlement-receipt-policy";
-import { aggregateOrdersTaxAndRevenue, getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import {
+  aggregateOrdersTaxAndRevenue,
+  getOrderTaxBreakdown,
+  isCoworkingOrderItem,
+} from "@/lib/tax-breakdown";
+import { getTenantName } from "@/lib/tenant";
 import type { ActivityLogEntry } from "@/types/audit";
 import type { CoworkingBooking } from "@/types/coworking";
 import type { EventTicketOrder } from "@/types/event";
@@ -231,6 +237,46 @@ export function projectOrdersForTenant(
   tenantId: string
 ): OrderRecord[] {
   return filterOrdersByTenant([...orders], tenantId, true);
+}
+
+function formatOrderUnitContext(order: OrderRecord): string {
+  const baseLabel = order.tableNumber
+    ? `Meja ${order.tableNumber}`
+    : order.orderType === "DELIVERY"
+    ? "Delivery"
+    : "Takeaway";
+  const items = order.items || [];
+  if (items.length === 0) return baseLabel;
+
+  const orderFallback = (order as { tenantId?: string }).tenantId;
+  const partnerCounts = new Map<string, { label: string; qty: number }>();
+  let hasCoworking = false;
+
+  for (const item of items) {
+    const isCw = isCoworkingOrderItem(item);
+    if (isCw) hasCoworking = true;
+    const resolvedTenant = isCw
+      ? "DAGO_HUB"
+      : resolveItemTenantId(item, orderFallback);
+    const label =
+      resolvedTenant === "DAGO_HUB"
+        ? "Dago Creative Hub (Co-Working)"
+        : getTenantName(resolvedTenant) || item.tenantName || resolvedTenant;
+    const prev = partnerCounts.get(resolvedTenant) || { label, qty: 0 };
+    partnerCounts.set(resolvedTenant, {
+      label: prev.label,
+      qty: prev.qty + (Number(item.quantity) || 0),
+    });
+  }
+
+  if (!hasCoworking && partnerCounts.size <= 1) {
+    return baseLabel;
+  }
+
+  const summary = Array.from(partnerCounts.values())
+    .map((entry) => `${entry.label} (${entry.qty}x)`)
+    .join(" + ");
+  return `${baseLabel} · ${summary}`;
 }
 
 export interface ReportSummaryCard {
@@ -528,6 +574,19 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
             0
           );
 
+      let coworkingInPosGross = 0;
+      let fnbInPosGross = 0;
+      for (const order of paidOrders) {
+        for (const item of order.items || []) {
+          const lineGross = (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0);
+          if (isCoworkingOrderItem(item)) {
+            coworkingInPosGross += lineGross;
+          } else {
+            fnbInPosGross += lineGross;
+          }
+        }
+      }
+
       const orderRows = paidOrders.map((o) => {
         const promoName = promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
         const breakdown = getOrderTaxBreakdown(o);
@@ -542,7 +601,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         return [
           o.orderNumber || o.id,
           customerDisplayName,
-          o.tableNumber ? `Meja ${o.tableNumber}` : o.orderType === "DELIVERY" ? "Delivery" : "Takeaway",
+          formatOrderUnitContext(o),
           formatMakassarDate(o.createdAt),
           promoName,
           disc > 0 ? `-Rp ${disc.toLocaleString("id-ID")}` : "-",
@@ -628,7 +687,22 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
             label: "Nontunai",
             value: `Rp ${totalNonCashRevenue.toLocaleString("id-ID")}`,
           },
-          { label: "Tunai", value: `Rp ${totalCashRevenue.toLocaleString("id-ID")}` },
+          {
+            label: "Tunai",
+            value: `Rp ${totalCashRevenue.toLocaleString("id-ID")}`,
+          },
+          ...(coworkingInPosGross > 0
+            ? [
+                {
+                  label: "Co-working POS (0% PB1)",
+                  value: `Rp ${Math.round(coworkingInPosGross).toLocaleString("id-ID")}`,
+                },
+                {
+                  label: "F&B POS",
+                  value: `Rp ${Math.round(fnbInPosGross).toLocaleString("id-ID")}`,
+                },
+              ]
+            : []),
         ],
       };
     }

@@ -94,16 +94,36 @@ Seluruh celah tersebut telah ditutup dan diverifikasi dengan tes otomatis `tests
 | 27 | `/api/events/proofs/[filename]` | Wajib (403) | Admin & Petugas Event | Aman. Bukti transfer bank terlindung dari akses publik. |
 | 28 | `/api/notifications/closing-chatbot` | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER` | Aman. Memeriksa sesi operasional. |
 | 29 | `/api/pos/qris/verify` | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER` | Aman. Verifikasi pembayaran kasir. |
-| 30 | `/api/settings/settlement-receipt` | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER` | Aman. Laporan bagi hasil mitra terlindung. |
-| 31 | `/api/sync/[domain]` | Wajib (401) | Sesi staf terautentikasi | Aman. Sinkronisasi outbox storage server. |
+| 30 | `/api/settings/settlement-receipt` | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER`, `WAITER`, `KITCHEN_STAFF` | **Diperbaiki**. Staf operasional POS dapat membaca konfigurasi cetak struk; persentase bagi hasil mitra (`revenueSplits`) disanitasi menjadi `{}` untuk peran non-manajerial. |
+| 31 | `/api/sync/[domain]` | Dibatasi per Domain | Domain internal: Sesi staf terautentikasi (401/403). Domain publik: Terbuka untuk tamu dengan data disanitasi. | **Diperbaiki**. Domain internal (`wifi`, `subscription`, `printer-config`, `inventory`) dikunci 401 tanpa login dan 403 untuk Customer. Domain publik (`platform-settings`, `tables`, `tenants`, `coworking-master`) menyaring data sensitif via `transform`. |
 | 32 | `/api/system/health` | Publik | Monitor uptime | Aman. Mengembalikan status sistem tanpa data sensitif. |
 | 33 | `/api/webhooks/doku/simulate` | Terkunci | Ditolak total di produksi (`NODE_ENV=production`) | Aman. Simulasi sandbox terkunci. |
 
 ---
 
-## 4. Kesimpulan dan Bukti Verifikasi
+## 4. Matriks Hasil Audit Seluruh Endpoint Mutasi (POST, PUT, PATCH, DELETE)
 
-1. Kriteria `Tanpa login -> 401`: Terpenuhi pada `/api/loyalty/members`, `/api/employees`, `/api/reports/closing/pdf`, dan seluruh endpoint transaksional.
-2. Kriteria `Customer hanya melihat data dirinya`: Terpenuhi pada `/api/loyalty/members` (disaring ketat berdasarkan email/userId sesi) dan `/api/coworking/bookings` (booking lain di-anonymize).
-3. Kriteria `Daftar endpoint yang dicek tercatat`: Seluruh 33 endpoint GET tercatat lengkap dalam laporan ini.
-4. Pengujian otomatis: `tests/s32-member-data-leak-and-endpoint-audit.test.ts` (19/19 skenario lulus) dan `tests/customer-role-access-and-tier.test.ts` (27/27 skenario lulus).
+| No | Endpoint | Metode | Autentikasi | Role yang Diizinkan | Keterangan & Tindakan Pengamanan |
+| :---: | :--- | :---: | :---: | :--- | :--- |
+| 1 | `/api/notifications/whatsapp` | POST | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER` | **Terkunci**. Panggilan tanpa login ditolak 401; Customer ditolak 403. Mencegah eksploitasi pengiriman WhatsApp liar. |
+| 2 | `/api/events/upload` | POST | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CUSTOMER` (Penyelenggara aktif) | **Terkunci**. Tanpa login ditolak 401; staf check-in (`CHECKIN_STAFF`) dan peran non-penyelenggara ditolak 403. File dibatasi gambar max 10MB. |
+| 3 | `/api/tenant/products/[id]/toggle` | PATCH | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER` | **Terkunci**. Menolak panggilan tanpa login dengan 401 dan peran tidak berwenang dengan 403. |
+| 4 | `/api/loyalty/members` | PUT | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER` (Penuh); `CASHIER` (Tervalidasi transaksi) | **Terkunci**. Kasir dilarang memanipulasi poin langsung tanpa entri `pointHistory` ber-`relatedTransactionId` sah dari pesanan `PAID`. |
+| 5 | `/api/loyalty/members` | POST | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER` | Terproteksi. Pendaftaran member baru oleh kasir/admin. |
+| 6 | `/api/loyalty/members` | DELETE | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER` | Terproteksi. Kasir dan role lain ditolak 403 untuk penghapusan member. |
+| 7 | `/api/tenant/operations` | POST | Wajib (401) | `SUPER_ADMIN`, `OWNER`, `MANAGER` | Terproteksi. Validasi kepemilikan tenant mencegah modifikasi lintas-tenant. |
+| 8 | `/api/orders` | POST, PUT | Wajib (401) | Staf Outlet (`SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER`, `WAITER`) | Terproteksi. Transaksi pesanan POS. |
+| 9 | `/api/orders/self-order` | POST | Publik / Tamu | Pengunjung meja / takeaway | Validasi skema Zod ketat dan verifikasi harga produk server-side. |
+| 10 | `/api/auth/register` | POST | Publik | Pengunjung / Tamu | Pendaftaran akun anggota baru mandiri. |
+| 11 | `/api/events/[id]/book` | POST | Publik / Tamu | Pengunjung katalog event | Pemesanan tiket event berbayar/gratis dengan distributed locking. |
+| 12 | `/api/coworking/bookings` | POST | Publik / Staff | Pengunjung & Kasir POS | Validasi kapasitas server-side mencegah overbooking slot coworking. |
+| 13 | `/api/pos/qris/verify` | POST | Wajib / Secret | INIT: Staf POS; WEBHOOK: Gateway dengan secret valid | Terproteksi. Inisialisasi sesi QRIS dan webhook signature DOKU/gateway. |
+
+---
+
+## 5. Kesimpulan dan Bukti Verifikasi
+
+1. Kriteria `Tanpa login -> 401`: Terpenuhi pada `/api/loyalty/members`, `/api/employees`, `/api/reports/closing/pdf`, `/api/notifications/whatsapp`, `/api/events/upload`, dan seluruh endpoint internal storage sync (`wifi`, `subscription`, `printer-config`, `inventory`).
+2. Kriteria `Customer hanya melihat data dirinya`: Terpenuhi pada `/api/loyalty/members` (disaring ketat berdasarkan email/userId sesi) dan `/api/coworking/bookings` (booking orang lain di-anonymize).
+3. Kriteria `Daftar endpoint yang dicek tercatat`: Seluruh 33 endpoint GET dan 13 rute endpoint mutasi tercatat lengkap dalam laporan ini.
+4. Pengujian otomatis: `tests/s32-member-data-leak-and-endpoint-audit.test.ts` (24/24 skenario lulus 100%), `tests/v18-receipt-settlement-and-roles.test.ts` (9/9 skenario lulus 100%), dan `tests/pos-tenant-operating-hours-v03.test.ts` (7/7 skenario lulus 100%).

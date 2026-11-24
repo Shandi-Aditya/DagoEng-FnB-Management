@@ -1,31 +1,88 @@
 import type { StatusTone } from "@/components/app/status-badge";
+import type { OrderItemBOMInput } from "@/features/inventory/inventory-data";
 import type { POSReceiptData, SplitGuestBill } from "@/features/pos/types";
-import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
+import {
+  resolveCoworkingReceiptPublisher,
+  resolvePosReceiptPublisher,
+} from "@/lib/receipt-publisher";
 import { resolveItemTenantId } from "@/lib/settlement";
-import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import {
+  allocateCategoryDiscounts,
+  allocateCategoryTaxAndService,
+  getOrderTaxBreakdown,
+  isCoworkingOrderItem,
+  normalizeTenantId,
+  type CoworkingIdentifiableItem,
+} from "@/lib/tax-breakdown";
 import { getTenantName } from "@/lib/tenant";
 import type { OrderItemRecord, OrderRecord, OrderStatus } from "@/types/order";
 import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
 
-const TENANT_ID_ALIASES: Record<string, string> = {
-  "tenant-kopi-senja": "tenant-ks",
-  "tenant-dapur-mama": "tenant-kitchen",
-  "tenant-manis-bakery": "tenant-bakery",
-  "tenant-teh-nusantara": "tenant-tea",
-};
+export { isCoworkingOrderItem, normalizeTenantId };
 
-export function normalizeTenantId(tenantId?: string | null): string | undefined {
-  const trimmed = tenantId?.trim();
-  if (!trimmed) return undefined;
-  return TENANT_ID_ALIASES[trimmed] ?? trimmed;
+export const KDS_GATED_STATUSES: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "KITCHEN_RECEIVED",
+  "COOKING",
+  "READY",
+  "SERVED",
+  "COMPLETED",
+]);
+
+const PRE_COOK_DISALLOWED_STATUSES: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "COOKING",
+  "READY",
+  "SERVED",
+  "COMPLETED",
+]);
+
+export function isKdsGatedStatus(status: OrderStatus): boolean {
+  return KDS_GATED_STATUSES.has(status);
+}
+
+export function isOrderBeforeCooking(
+  order: Pick<OrderRecord, "status" | "cookingStartedAt" | "tenantStatuses">
+): boolean {
+  if (order.cookingStartedAt) return false;
+  if (PRE_COOK_DISALLOWED_STATUSES.has(order.status)) return false;
+  if (order.tenantStatuses) {
+    for (const stage of Object.values(order.tenantStatuses)) {
+      if (PRE_COOK_DISALLOWED_STATUSES.has(stage)) return false;
+    }
+  }
+  return true;
+}
+
+export function toOrderBomItems(items: OrderRecord["items"]): OrderItemBOMInput[] {
+  return (items || [])
+    .filter((item) => !isCoworkingOrderItem(item))
+    .map((item) => ({
+      productId: item.productId || item.id,
+      productName: item.productName,
+      quantity: item.quantity,
+      modifiers: item.modifiers,
+    }));
 }
 
 export function resolveNormalizedItemTenantId(
-  item: { tenantId?: string; productId?: string; productName?: string },
+  item: CoworkingIdentifiableItem,
   orderFallbackTenantId?: string
 ): string {
+  if (isCoworkingOrderItem(item)) {
+    return "DAGO_HUB";
+  }
   const resolved = resolveItemTenantId(item, orderFallbackTenantId);
   return normalizeTenantId(resolved) ?? resolved;
+}
+
+export function getOrderWorkflowTenants(
+  items: OrderRecord["items"],
+  orderFallbackTenantId?: string
+): string[] {
+  const fnbItems = (items || []).filter((it) => !isCoworkingOrderItem(it));
+  const statusItems = fnbItems.length > 0 ? fnbItems : items || [];
+  return Array.from(
+    new Set(statusItems.map((it) => resolveNormalizedItemTenantId(it, orderFallbackTenantId)))
+  );
 }
 
 export function projectOrderForTenant(
@@ -52,21 +109,64 @@ export function projectOrderForTenant(
     return projectedStatus === order.status ? order : { ...order, status: projectedStatus };
   }
 
-  const totalGross = order.items.reduce(
-    (sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0),
-    0
-  );
-  const tenantSubtotal = Math.round(
-    matchingItems.reduce(
-      (sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0),
-      0
-    )
-  );
-  const ratio = totalGross > 0 ? tenantSubtotal / totalGross : 0;
+  const lineTotal = (it: OrderItemRecord) =>
+    Math.round((Number(it.unitPrice) || 0) * (Number(it.quantity) || 0));
+
+  const itemBuckets = order.items.map((it) => ({
+    isCoworking: isCoworkingOrderItem(it),
+    subtotal: lineTotal(it),
+    isMatch: resolveNormalizedItemTenantId(it, orderFallback) === normTenant,
+  }));
+
   const breakdown = getOrderTaxBreakdown(order);
-  const tenantDiscount = Math.round(breakdown.discount * ratio);
-  const tenantTax = Math.round(breakdown.pb1 * ratio);
-  const tenantServiceCharge = Math.round(breakdown.serviceCharge * ratio);
+  const explicitDiscountSplit =
+    order.fnbDiscount !== undefined || order.coworkingDiscount !== undefined
+      ? { fnbDiscount: order.fnbDiscount, coworkingDiscount: order.coworkingDiscount }
+      : undefined;
+  const explicitTaxSplit =
+    order.fnbTax !== undefined || order.coworkingTax !== undefined
+      ? { fnbTax: order.fnbTax, coworkingTax: order.coworkingTax }
+      : undefined;
+
+  const itemDiscounts = allocateCategoryDiscounts(
+    itemBuckets,
+    breakdown.discount,
+    explicitDiscountSplit
+  );
+  const itemTaxes = allocateCategoryTaxAndService(
+    itemBuckets,
+    breakdown.pb1,
+    breakdown.serviceCharge,
+    explicitTaxSplit
+  );
+
+  let tenantSubtotal = 0;
+  let tenantDiscount = 0;
+  let tenantTax = 0;
+  let tenantServiceCharge = 0;
+  let tenantFnbDiscount = 0;
+  let tenantCwDiscount = 0;
+  let tenantFnbTax = 0;
+  let tenantCwTax = 0;
+
+  itemBuckets.forEach((bucket, idx) => {
+    if (!bucket.isMatch) return;
+    const disc = Math.min(bucket.subtotal, itemDiscounts[idx] ?? 0);
+    const tax = itemTaxes[idx]?.tax ?? 0;
+    const svc = itemTaxes[idx]?.serviceCharge ?? 0;
+    tenantSubtotal += bucket.subtotal;
+    tenantDiscount += disc;
+    tenantTax += tax;
+    tenantServiceCharge += svc;
+    if (bucket.isCoworking) {
+      tenantCwDiscount += disc;
+      tenantCwTax += tax;
+    } else {
+      tenantFnbDiscount += disc;
+      tenantFnbTax += tax;
+    }
+  });
+
   const tenantTotal =
     Math.max(0, tenantSubtotal - tenantDiscount) + tenantTax + tenantServiceCharge;
 
@@ -76,7 +176,11 @@ export function projectOrderForTenant(
     items: matchingItems,
     subtotal: tenantSubtotal,
     discount: order.discount !== undefined ? tenantDiscount : undefined,
+    ...(order.fnbDiscount !== undefined ? { fnbDiscount: tenantFnbDiscount } : {}),
+    ...(order.coworkingDiscount !== undefined ? { coworkingDiscount: tenantCwDiscount } : {}),
     tax: tenantTax,
+    ...(order.fnbTax !== undefined ? { fnbTax: tenantFnbTax } : {}),
+    ...(order.coworkingTax !== undefined ? { coworkingTax: tenantCwTax } : {}),
     serviceCharge: order.serviceCharge !== undefined ? tenantServiceCharge : undefined,
     total: tenantTotal,
   };
@@ -196,11 +300,14 @@ export function buildReprintKitchenTicket(
 ): KitchenTicketData {
   const normTenant = normalizeTenantId(tenantId);
   const orderFallback = (order as { tenantId?: string }).tenantId;
+  const fnbItems: OrderItemRecord[] = (order.items || []).filter(
+    (i) => !isCoworkingOrderItem(i)
+  );
   const scopedItems: OrderItemRecord[] = normTenant
-    ? (order.items || []).filter(
+    ? fnbItems.filter(
         (i) => resolveNormalizedItemTenantId(i, orderFallback) === normTenant
       )
-    : order.items || [];
+    : fnbItems;
 
   return {
     orderId: order.id,
@@ -221,6 +328,7 @@ export function buildReprintKitchenTicket(
         notes: i.notes,
         tenantId: resolvedTenant,
         tenantName: getTenantName(resolvedTenant),
+        itemType: i.itemType ?? "FNB",
       };
     }),
     cashierName: cashierName || order.cashierName || "Kasir / Petugas",
@@ -231,14 +339,43 @@ export function buildReprintKitchenTicket(
 }
 
 export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
+  const orderFallback = (order as { tenantId?: string }).tenantId;
+  const mappedItems = (order.items || []).map((i) => {
+    const isCoworking = isCoworkingOrderItem(i);
+    const resolvedTenant = isCoworking
+      ? "DAGO_HUB"
+      : resolveNormalizedItemTenantId(i, orderFallback);
+    const resolvedTenantName = isCoworking
+      ? i.tenantName || "Dago Creative Hub (Co-Working)"
+      : i.tenantName || getTenantName(resolvedTenant);
+    return {
+      name: i.productName,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      subtotal: i.quantity * i.unitPrice,
+      modifiers: i.modifiers,
+      notes: i.notes,
+      tenantId: resolvedTenant,
+      tenantName: resolvedTenantName,
+      itemType: i.itemType ?? (isCoworking ? ("COWORKING" as const) : undefined),
+      category: i.category,
+      coworkingMeta: i.coworkingMeta,
+    };
+  });
+
+  const allCoworking =
+    mappedItems.length > 0 && mappedItems.every((i) => isCoworkingOrderItem(i));
   const primaryTenantId =
-    resolveNormalizedItemTenantId(order.items[0] || {}, (order as { tenantId?: string }).tenantId) ||
+    mappedItems[0]?.tenantId ||
+    resolveNormalizedItemTenantId(order.items[0] || {}, orderFallback) ||
     "tenant-ks";
-  const posPublisher = resolvePosReceiptPublisher(
-    order.items.map((i) => ({ tenantId: resolveNormalizedItemTenantId(i) })),
-    { name: order.outletName || "Singaraja (Pusat)" },
-    primaryTenantId
-  );
+  const posPublisher = allCoworking
+    ? resolveCoworkingReceiptPublisher({ name: order.outletName || "Singaraja (Pusat)" })
+    : resolvePosReceiptPublisher(
+        mappedItems.map((i) => ({ tenantId: i.tenantId, tenantName: i.tenantName })),
+        { name: order.outletName || "Singaraja (Pusat)" },
+        primaryTenantId
+      );
 
   const splitDetails: SplitGuestBill[] | undefined = order.splitDetails?.length
     ? order.splitDetails.map((s, idx) => ({
@@ -261,8 +398,10 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
       minute: "2-digit",
     }),
     cashierName: order.cashierName || "Kasir",
-    tenantId: posPublisher.tenantId || primaryTenantId,
+    tenantId: allCoworking ? "DAGO_HUB" : posPublisher.tenantId || primaryTenantId,
     tenantName: posPublisher.brandName,
+    brandName: posPublisher.brandName,
+    tagline: posPublisher.tagline,
     outletName: posPublisher.outletName,
     outletAddress: posPublisher.outletAddress,
     outletPhone: posPublisher.outletPhone,
@@ -270,24 +409,16 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     orderType: (order.orderType as POSReceiptData["orderType"]) || "DINE_IN",
-    items: order.items.map((i) => {
-      const resolvedTenant = resolveNormalizedItemTenantId(i);
-      return {
-        name: i.productName,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        subtotal: i.quantity * i.unitPrice,
-        modifiers: i.modifiers,
-        notes: i.notes,
-        tenantId: resolvedTenant,
-        tenantName: getTenantName(resolvedTenant),
-      };
-    }),
+    items: mappedItems,
     subtotal: order.subtotal,
     tax: getOrderTaxBreakdown(order).pb1,
+    fnbTax: order.fnbTax,
+    coworkingTax: order.coworkingTax,
     serviceCharge: getOrderTaxBreakdown(order).serviceCharge,
     promoName: order.promoId,
     discount: getOrderTaxBreakdown(order).discount,
+    fnbDiscount: order.fnbDiscount,
+    coworkingDiscount: order.coworkingDiscount,
     grandTotal: order.total,
     paymentMethod: (order.paymentMethod as POSReceiptData["paymentMethod"]) || "QRIS",
     amountPaid: order.total,

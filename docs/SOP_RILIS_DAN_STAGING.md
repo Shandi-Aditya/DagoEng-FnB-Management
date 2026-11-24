@@ -54,7 +54,7 @@ Tujuan SOP ini adalah:
 
 1. **Pengembangan Harian**:
    - Seluruh developer mencabangkan pekerjaan dari `develop` dengan format nama `feat/<nama-fitur>` atau `fix/<nama-bug>`.
-   - Setelah pekerjaan selesai dan lulus pemeriksaan gerbang lokal (`npm run lint:ui`, `npm run type-check`, `npm test`), buat Merge Request ke cabang `develop`.
+   - Setelah pekerjaan selesai dan lulus pemeriksaan gerbang lokal (`npm run lint:ui`, `npm run type-check`, `npx tsc --noEmit -p tests/tsconfig.json`, `npm test`), buat Merge Request ke cabang `develop`.
 2. **Penyatuan ke Staging**:
    - Merge Request yang disetujui digabungkan ke `develop`.
    - Webhook GitLab memicu build otomatis di Coolify Staging.
@@ -82,10 +82,11 @@ Rilis ke server produksi dilakukan secara rutin setiap hari **Senin pukul 08.00 
      git checkout develop
      git pull origin develop
      ```
-   - Jalankan pemeriksaan 4 gerbang rilis secara berurutan:
+   - Jalankan pemeriksaan 5 gerbang rilis secara berurutan:
      ```bash
      npm run lint:ui
      npm run type-check
+     npx tsc --noEmit -p tests/tsconfig.json
      npm test
      npm run build
      ```
@@ -190,6 +191,7 @@ Jika ditemukan bug kritis di server produksi (`pos.veryyyy.com`) yang menghentik
    ```bash
    npm run lint:ui
    npm run type-check
+   npx tsc --noEmit -p tests/tsconfig.json
    npm test
    npm run build
    ```

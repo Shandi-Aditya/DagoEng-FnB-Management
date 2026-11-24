@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthUser } from "@/lib/server-auth";
 
 interface WhatsAppSendPayload {
   message: string;
@@ -7,8 +8,28 @@ interface WhatsAppSendPayload {
   filename?: string;
 }
 
+const ALLOWED_WHATSAPP_ROLES = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: auth.error || "UNAUTHORIZED: Autentikasi sesi staf diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    if (!ALLOWED_WHATSAPP_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `FORBIDDEN: Role [${auth.role}] tidak berhak mengirim notifikasi WhatsApp.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = (await req.json()) as WhatsAppSendPayload;
     const { message, targetPhone, url, filename } = body;
 

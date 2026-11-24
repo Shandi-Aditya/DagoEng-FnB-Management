@@ -3,6 +3,7 @@ import type { ServerAuthResult } from "@/lib/server-auth";
 import {
   DEFAULT_CATEGORY_TAX_CONFIG,
   DEFAULT_PLATFORM_SETTINGS,
+  type OutletReceiptCombineMode,
   type PlatformSettings,
 } from "@/types/settings";
 import {
@@ -614,6 +615,13 @@ function normalizeActiveOrgModules(
   return Array.from(set);
 }
 
+function normalizeReceiptCombineMode(
+  mode: unknown,
+  fallback: OutletReceiptCombineMode = "COMBINED"
+): OutletReceiptCombineMode {
+  return mode === "SEPARATE" || mode === "COMBINED" ? mode : fallback;
+}
+
 export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
   return {
     ...DEFAULT_PLATFORM_SETTINGS,
@@ -653,6 +661,10 @@ export function defaultPlatformSettingsState(): PlatformSettingsDomainState {
         },
     activeOrgModules: normalizeActiveOrgModules(
       DEFAULT_PLATFORM_SETTINGS.activeOrgModules
+    ),
+    qrSelfOrderQrisOnly: DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
+    receiptCombineMode: normalizeReceiptCombineMode(
+      DEFAULT_PLATFORM_SETTINGS.receiptCombineMode
     ),
     appliedPromoOpIds: [],
   };
@@ -737,6 +749,16 @@ export function mergePlatformSettingsState(
       patch.activeOrgModules !== undefined
         ? normalizeActiveOrgModules(patch.activeOrgModules)
         : normalizeActiveOrgModules(base.activeOrgModules),
+    qrSelfOrderQrisOnly:
+      typeof patch.qrSelfOrderQrisOnly === "boolean"
+        ? patch.qrSelfOrderQrisOnly
+        : typeof base.qrSelfOrderQrisOnly === "boolean"
+          ? base.qrSelfOrderQrisOnly
+          : DEFAULT_PLATFORM_SETTINGS.qrSelfOrderQrisOnly ?? true,
+    receiptCombineMode: normalizeReceiptCombineMode(
+      patch.receiptCombineMode,
+      normalizeReceiptCombineMode(base.receiptCombineMode)
+    ),
     appliedPromoOpIds: Array.isArray(patch.appliedPromoOpIds)
       ? patch.appliedPromoOpIds.slice(-MAX_APPLIED_OP_IDS)
       : base.appliedPromoOpIds ?? [],
@@ -864,7 +886,23 @@ export const platformSettingsDomainSpec: ServerDomainSpec<"platform-settings"> =
   domain: "platform-settings",
   filename: "platform_settings.json",
   defaultState: defaultPlatformSettingsState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    const isStaff =
+      auth.isAuthenticated &&
+      Boolean(auth.role) &&
+      auth.role !== "CUSTOMER";
+    if (!isStaff) {
+      return {
+        allowed: true,
+        transform: (state) => ({
+          ...state,
+          eventRevenueSharing: {
+            ...state.eventRevenueSharing,
+            history: [],
+          },
+        }),
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -1445,7 +1483,21 @@ export const wifiDomainSpec: ServerDomainSpec<"wifi"> = {
   domain: "wifi",
   filename: "wifi_state.json",
   defaultState: defaultWifiState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses konfigurasi Wi-Fi.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses konfigurasi Wi-Fi internal.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -1686,7 +1738,21 @@ export const subscriptionDomainSpec: ServerDomainSpec<"subscription"> = {
   domain: "subscription",
   filename: "subscription_state.json",
   defaultState: defaultSubscriptionState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses data langganan.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses data langganan internal.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -1940,12 +2006,13 @@ export function applyPrinterConfigCommand(
     }
     case "PATCH_SETTINGS": {
       if (!isPlainRecord(command.updates)) return current;
+      const nextSettings: POSPrintingSettings = {
+        ...current.settings,
+        ...command.updates,
+      };
       return {
         ...current,
-        settings: {
-          ...current.settings,
-          ...command.updates,
-        },
+        settings: nextSettings,
       };
     }
     default: {
@@ -1959,7 +2026,21 @@ export const printerConfigDomainSpec: ServerDomainSpec<"printer-config"> = {
   domain: "printer-config",
   filename: "printer_config.json",
   defaultState: defaultPrinterConfigState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses konfigurasi printer.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses konfigurasi printer.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {

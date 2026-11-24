@@ -89,7 +89,7 @@ import {
   type WifiVoucherRecord,
   type WifiVoucherStatus,
 } from "@/lib/wifi";
-import type { CategoryTaxType } from "@/types/settings";
+import type { CategoryTaxType, OutletReceiptCombineMode } from "@/types/settings";
 import type { CoworkingMembershipPlan } from "@/types/coworking";
 import type { TableStatus } from "@/contexts/TableContext";
 import type { CommunityEvent, EventRevenueSharingPolicy, DEFAULT_EVENT_POLICY } from "@/types/event";
@@ -154,6 +154,10 @@ export default function SettingsPage() {
   const [cwTaxRate, setCwTaxRate] = useState(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
   const [cwTaxEnabled, setCwTaxEnabled] = useState(settings.categoryTax?.coworking?.isEnabled ?? false);
   const [serviceCharge, setServiceCharge] = useState(settings.serviceChargePercent);
+  const [qrSelfOrderQrisOnly, setQrSelfOrderQrisOnly] = useState<boolean>(settings.qrSelfOrderQrisOnly !== false);
+  const [receiptCombineMode, setReceiptCombineMode] = useState<OutletReceiptCombineMode>(
+    settings.receiptCombineMode ?? "COMBINED"
+  );
 
   // Loyalty thresholds
   const [silverPts, setSilverPts] = useState(settings.loyaltyTiers.silverMin);
@@ -379,6 +383,8 @@ export default function SettingsPage() {
     setCwTaxRate(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
     setCwTaxEnabled(settings.categoryTax?.coworking?.isEnabled ?? false);
     setServiceCharge(settings.serviceChargePercent);
+    setQrSelfOrderQrisOnly(settings.qrSelfOrderQrisOnly !== false);
+    setReceiptCombineMode(settings.receiptCombineMode ?? "COMBINED");
     setSilverPts(settings.loyaltyTiers.silverMin);
     setGoldPts(settings.loyaltyTiers.goldMin);
     setPlatPts(settings.loyaltyTiers.platinumMin);
@@ -1098,6 +1104,8 @@ export default function SettingsPage() {
       taxRatePercent: Number(fnbTaxRate),
       isTaxEnabled: fnbTaxEnabled,
       serviceChargePercent: Number(serviceCharge),
+      qrSelfOrderQrisOnly,
+      receiptCombineMode,
       categoryTax: {
         fnb: {
           taxType: fnbTaxType,
@@ -1915,6 +1923,10 @@ export default function SettingsPage() {
               onFnbOpenTimeChange={setFnbOpenTime}
               fnbCloseTime={fnbCloseTime}
               onFnbCloseTimeChange={setFnbCloseTime}
+              qrSelfOrderQrisOnly={qrSelfOrderQrisOnly}
+              onQrSelfOrderQrisOnlyChange={setQrSelfOrderQrisOnly}
+              receiptCombineMode={receiptCombineMode}
+              onReceiptCombineModeChange={setReceiptCombineMode}
               cwWeekendClosed={cwWeekendClosed}
               onCwWeekendClosedChange={setCwWeekendClosed}
               cwNationalHolidaysClosed={cwNationalHolidaysClosed}

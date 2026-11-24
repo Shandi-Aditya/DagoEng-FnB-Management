@@ -82,6 +82,8 @@ export const DEFAULT_CATEGORY_TAX_CONFIG: CategoryTaxConfig = {
   },
 };
 
+export type OutletReceiptCombineMode = "COMBINED" | "SEPARATE";
+
 export interface PlatformSettings {
   language: LanguageCode;
   timezone: string;
@@ -102,6 +104,8 @@ export interface PlatformSettings {
   eventRevenueSharing: EventMarketplaceRevenuePolicy;
   categoryTax?: CategoryTaxConfig;
   activeOrgModules?: BusinessModuleCode[];
+  qrSelfOrderQrisOnly?: boolean;
+  receiptCombineMode?: OutletReceiptCombineMode;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -119,6 +123,8 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   eventRevenueSharing: DEFAULT_EVENT_REVENUE_POLICY,
   categoryTax: DEFAULT_CATEGORY_TAX_CONFIG,
   activeOrgModules: ["CORE", "FNB", "CO_WORKING"],
+  qrSelfOrderQrisOnly: true,
+  receiptCombineMode: "COMBINED",
   loyaltyTiers: {
     bronzeMin: 0,
     bronzeMax: 499,

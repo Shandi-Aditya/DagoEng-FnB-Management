@@ -502,6 +502,95 @@ export async function PUT(req: NextRequest) {
     }
 
     const isManagerial = canUserViewFullCustomerContacts(auth.role, auth.scopeLevel);
+
+    // Validate updates.points for non-managerial callers (CASHIER)
+    if (!isManagerial && updates.points !== undefined && updates.points !== target.points) {
+      const existingPointHistory = Array.isArray(target.pointHistory) ? target.pointHistory : [];
+      if (!Array.isArray(updates.pointHistory) || updates.pointHistory.length <= existingPointHistory.length) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Akses ditolak: Perubahan poin oleh kasir wajib menyertakan riwayat transaksi poin yang sah.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const addedCount = updates.pointHistory.length - existingPointHistory.length;
+      const addedEntries = updates.pointHistory.slice(0, addedCount);
+      const orders = await getPersistentOrders();
+
+      const deltaPoints = updates.points - target.points;
+      let totalAddedPoints = 0;
+
+      for (const entry of addedEntries) {
+        if (!entry || typeof entry !== "object") {
+          return NextResponse.json(
+            { success: false, error: "Akses ditolak: Entri riwayat poin tidak valid." },
+            { status: 403 }
+          );
+        }
+
+        const relatedTxId = typeof entry.relatedTransactionId === "string" ? entry.relatedTransactionId.trim() : "";
+        if (!relatedTxId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Akses ditolak: Setiap mutasi poin kasir wajib memiliki relatedTransactionId yang sah.",
+            },
+            { status: 403 }
+          );
+        }
+
+        const matchingOrder = orders.find((o) => o.id === relatedTxId || o.orderNumber === relatedTxId);
+        if (!matchingOrder || matchingOrder.paymentStatus !== "PAID") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Akses ditolak: Transaksi [${relatedTxId}] tidak ditemukan atau belum berstatus PAID.`,
+            },
+            { status: 403 }
+          );
+        }
+
+        const entryPoints = Number(entry.points) || 0;
+        if (entry.type === "EARN") {
+          const maxAllowedEarn = Math.floor(matchingOrder.total / 1000);
+          if (entryPoints <= 0 || entryPoints > maxAllowedEarn) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Akses ditolak: Poin EARN [${entryPoints}] melebihi batas maksimal transaksi [${maxAllowedEarn}].`,
+              },
+              { status: 403 }
+            );
+          }
+        } else if (entry.type === "REDEEM") {
+          if (entryPoints >= 0) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: "Akses ditolak: Poin REDEEM harus bernilai negatif.",
+              },
+              { status: 403 }
+            );
+          }
+        }
+
+        totalAddedPoints += entryPoints;
+      }
+
+      if (totalAddedPoints !== deltaPoints) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Akses ditolak: Jumlah mutasi poin riwayat (${totalAddedPoints}) tidak sesuai dengan perubahan total (${deltaPoints}).`,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const nextPoints =
       updates.points !== undefined ? updates.points : target.points;
 

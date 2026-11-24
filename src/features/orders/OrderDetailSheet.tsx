@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
-import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import { getOrderTaxBreakdown, isCoworkingOrderItem } from "@/lib/tax-breakdown";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { OrderRecord } from "@/types/order";
 
@@ -96,6 +96,7 @@ function OrderDetailBody({
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
   const isPaid = selectedOrder.paymentStatus === "PAID";
+  const hasFnbItems = (selectedOrder.items || []).some((it) => !isCoworkingOrderItem(it));
   const canPayThis =
     !isCancelled &&
     !isPaid &&
@@ -321,7 +322,7 @@ function OrderDetailBody({
             Batalkan
           </Button>
         ) : null}
-        {canPrintKitchenReceipt ? (
+        {canPrintKitchenReceipt && hasFnbItems ? (
           <Button
             variant="outline"
             size="lg"

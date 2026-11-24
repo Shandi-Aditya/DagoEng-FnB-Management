@@ -89,7 +89,6 @@ export const CONTACT = {
   address: OFFICIAL_HUB_ADDRESS,
   hours: "Senin sampai Jumat, 09.00 sampai 18.00 WITA",
   phone: OFFICIAL_CS_DISPLAY_PHONE,
-  email: "info@dagoeng.com",
   instagram: { label: "@dagocreativehub", href: "https://www.instagram.com/dagocreativehub/" },
 } as const;
 

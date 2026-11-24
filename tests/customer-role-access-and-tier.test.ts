@@ -275,6 +275,17 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
       } as any);
 
       // Ketut Dian has id "mem-001"
+      await writePersistentData("pos_orders.json", [
+        {
+          id: "ord-test-elevate",
+          orderNumber: "ORD-ELEVATE",
+          total: 500000,
+          paymentStatus: "PAID",
+          status: "COMPLETED",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+
       const req = new NextRequest("http://localhost:3000/api/loyalty/members", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -283,6 +294,17 @@ describe("S-09: Customer Role Access & Tier Calculation", () => {
           updates: {
             points: 550, // 550 qualifies naturally for Silver
             tier: "Silver",
+            pointHistory: [
+              {
+                id: "ptx-auto-1",
+                memberId: "mem-001",
+                type: "EARN",
+                points: 495,
+                relatedTransactionId: "ord-test-elevate",
+                timestamp: new Date().toISOString(),
+              },
+              ...(INITIAL_MEMBERS.find((m) => m.id === "mem-001")?.pointHistory || []),
+            ],
             tierHistory: [
               {
                 id: "th-auto-1",

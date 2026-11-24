@@ -26,6 +26,7 @@ export interface BookingLike {
   totalAmount?: number;
   paymentMethod?: string;
   paymentStatus?: string;
+  createdAt?: string;
   date?: string;
   startTime?: string;
 }
@@ -100,6 +101,7 @@ export function normalizePaymentItem(params: {
       paymentMethod: booking.paymentMethod || "QRIS",
       type: "COWORKING",
       paymentStatus: booking.paymentStatus || "PENDING",
+      createdAt: booking.createdAt,
       dateInfo: dateLabel || undefined,
       itemsBreakdown: [
         {

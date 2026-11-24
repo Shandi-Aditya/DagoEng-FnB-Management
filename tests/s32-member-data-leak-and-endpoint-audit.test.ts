@@ -1,12 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import * as serverAuth from "@/lib/server-auth";
-import { GET as getLoyaltyMembers } from "@/app/api/loyalty/members/route";
+import { GET as getLoyaltyMembers, PUT as putLoyaltyMembers } from "@/app/api/loyalty/members/route";
 import { GET as getEmployees } from "@/app/api/employees/route";
 import { GET as getClosingPdf } from "@/app/api/reports/closing/pdf/route";
 import { POST as postTenantOperations } from "@/app/api/tenant/operations/route";
 import { GET as getProducts } from "@/app/api/products/route";
 import { GET as getSettlementReceipt } from "@/app/api/settings/settlement-receipt/route";
+import { POST as postWhatsApp } from "@/app/api/notifications/whatsapp/route";
+import { GET as getSyncDomain } from "@/app/api/sync/[domain]/route";
+import { GET as getQrisVerify } from "@/app/api/pos/qris/verify/route";
 import { writePersistentData } from "@/lib/persistent-storage";
 import { INITIAL_MEMBERS, INITIAL_EMPLOYEES, INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 import type { RoleSlug } from "@/types/auth";
@@ -382,6 +385,140 @@ describe("S-32: Tutup kebocoran data member dan audit endpoint publik", () => {
       if (ownProduct && ownProduct.basePrice > 0) {
         expect(ownProduct.grossMarginPercent).not.toBe("0%");
       }
+    });
+
+    it("permits CASHIER to read settlement receipt policy with masked revenueSplits", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const req = new NextRequest("http://localhost:3000/api/settings/settlement-receipt");
+      const res = await getSettlementReceipt(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.policy).toBeDefined();
+      expect(json.policy.revenueSplits).toEqual({});
+    });
+  });
+
+  describe("6. Mutasi dan Endpoint Tambahan S-32 (WhatsApp, Sync Wifi, QRIS, Injeksi Poin)", () => {
+    it("menolak POST /api/notifications/whatsapp tanpa autentikasi dengan HTTP 401 dan CUSTOMER dengan 403", async () => {
+      // 401 unauth
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        scopeLevel: null,
+        permissions: [],
+      });
+
+      const req1 = new NextRequest("http://localhost:3000/api/notifications/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Halo test" }),
+      });
+      const res1 = await postWhatsApp(req1);
+      expect(res1.status).toBe(401);
+
+      // 403 CUSTOMER
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cust-1",
+        role: "CUSTOMER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const req2 = new NextRequest("http://localhost:3000/api/notifications/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Halo test" }),
+      });
+      const res2 = await postWhatsApp(req2);
+      expect(res2.status).toBe(403);
+    });
+
+    it("menolak GET /api/sync/wifi tanpa autentikasi dengan HTTP 401 dan CUSTOMER dengan 403", async () => {
+      // 401 unauth
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        scopeLevel: null,
+        permissions: [],
+      });
+
+      const req1 = new NextRequest("http://localhost:3000/api/sync/wifi");
+      const res1 = await getSyncDomain(req1, { params: Promise.resolve({ domain: "wifi" }) });
+      expect(res1.status).toBe(401);
+
+      // 403 CUSTOMER
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cust-1",
+        role: "CUSTOMER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const req2 = new NextRequest("http://localhost:3000/api/sync/wifi");
+      const res2 = await getSyncDomain(req2, { params: Promise.resolve({ domain: "wifi" }) });
+      expect(res2.status).toBe(403);
+
+      // 200 CASHIER
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const req3 = new NextRequest("http://localhost:3000/api/sync/wifi");
+      const res3 = await getSyncDomain(req3, { params: Promise.resolve({ domain: "wifi" }) });
+      expect(res3.status).toBe(200);
+    });
+
+    it("menolak GET /api/pos/qris/verify untuk role CUSTOMER dengan HTTP 403", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cust-1",
+        role: "CUSTOMER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const req = new NextRequest("http://localhost:3000/api/pos/qris/verify?invoiceNumber=INV-123");
+      const res = await getQrisVerify(req);
+      expect(res.status).toBe(403);
+    });
+
+    it("menolak injeksi poin sembarang oleh CASHIER pada PUT /api/loyalty/members dengan HTTP 403", async () => {
+      vi.spyOn(serverAuth, "getRequestAuthUser").mockResolvedValue({
+        isAuthenticated: true,
+        userId: "cashier-1",
+        name: "Kasir Test",
+        role: "CASHIER" as RoleSlug,
+        scopeLevel: "OUTLET",
+      });
+
+      const targetMember = INITIAL_MEMBERS[0];
+      const req = new NextRequest("http://localhost:3000/api/loyalty/members", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: targetMember.id,
+          updates: {
+            points: 99999,
+          },
+        }),
+      });
+
+      const res = await putLoyaltyMembers(req);
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.error).toContain("Akses ditolak");
     });
   });
 });
