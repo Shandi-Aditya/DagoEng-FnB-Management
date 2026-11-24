@@ -123,7 +123,8 @@ export function auditModuleLabel(module: string): string {
 const AUDIT_ACTION_LABEL: Record<string, string> = {
   VOID_ITEM: "Void item",
   VOID_ORDER: "Pembatalan pesanan",
-  REFUND_ORDER: "Pengembalian dana",
+  REFUND_ORDER: "Refund pesanan",
+  APPLY_DISCOUNT: "Diskon manual",
   PAID_ORDER_CHANGED_BY_SUPERVISOR: "Perubahan pesanan lunas",
   ORDER_VOIDED: "Pembatalan pesanan",
   ORDER_CREATED: "Pesanan dibuat",
