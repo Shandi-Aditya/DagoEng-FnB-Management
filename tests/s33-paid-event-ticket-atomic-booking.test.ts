@@ -162,6 +162,7 @@ describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () =
       guestEmail: "rani.doubleclick@example.com",
       guestPhone: "081345678901",
       ticketCount: 2,
+      clientReferenceId: "ref-test-doubleclick-rani-01",
     };
 
     // First request
@@ -253,6 +254,7 @@ describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () =
       guestEmail: "agus.free@example.com",
       guestPhone: "081234509876",
       ticketCount: 1,
+      clientReferenceId: "ref-test-doubleclick-agus-01",
     };
 
     // Request 1
@@ -331,6 +333,7 @@ describe("TASK S-33 — Atomic Paid Ticket Booking & Anti-Duplicate Guard", () =
       guestPhone: "081277778888",
       ticketCount: 1,
       ticketTierId: "tier-exclusive-1",
+      clientReferenceId: "ref-test-doubleclick-hendra-01",
     };
 
     // First click consumes the only available seat

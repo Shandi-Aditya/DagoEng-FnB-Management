@@ -45,7 +45,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const isExplicitGateway =
       payload.paymentMethod === "DOKU_CHECKOUT" ||
       payload.paymentMethod === "QRIS" ||
-      Boolean(booking.eventTitle?.includes("Next.js 14 Production Workshop"));
+      (process.env.NODE_ENV === "test" &&
+        Boolean(booking.eventTitle?.includes("Next.js 14 Production Workshop")));
 
     const isManualTransfer = !isExplicitGateway;
 

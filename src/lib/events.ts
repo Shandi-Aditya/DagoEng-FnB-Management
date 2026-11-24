@@ -3264,6 +3264,44 @@ export function getBookingPaymentExpiryMs(): number {
 }
 
 /**
+ * Checks and expires unpaid bookings in an in-transaction snapshot.
+ * Purely operates on loaded arrays and recalculates promo usage if any booking expired.
+ * Does not perform external I/O or independent transaction commits.
+ */
+export function expirePendingBookingsSnapshot(
+  bookings: EventTicketOrder[],
+  events: CommunityEvent[],
+  nowMs: number = Date.now()
+): boolean {
+  const expiryWindow = getBookingPaymentExpiryMs();
+  let modified = false;
+
+  for (let i = 0; i < bookings.length; i++) {
+    const b = bookings[i];
+    if (b.paymentStatus === "PENDING" && b.totalPrice > 0 && !b.paymentProofUrl) {
+      const createdMs = new Date(b.createdAt).getTime();
+      const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
+      const isExpiredByTimestamp = !isNaN(expiresAtMs) && nowMs > expiresAtMs;
+      const isExpiredByWindow = !isNaN(createdMs) && nowMs - createdMs > expiryWindow;
+      if (isExpiredByTimestamp || isExpiredByWindow) {
+        bookings[i] = {
+          ...b,
+          paymentStatus: "EXPIRED",
+          updatedAt: new Date(nowMs).toISOString(),
+        };
+        modified = true;
+      }
+    }
+  }
+
+  if (modified) {
+    recalculateAllPromoUsageCounts(events, bookings);
+  }
+
+  return modified;
+}
+
+/**
  * Checks and cancels/expires unpaid bookings older than the payment window.
  * Releases ticket quota immediately. Idempotent and safe to run concurrently.
  * Strictly guarantees that PAID tickets NEVER expire.
@@ -4392,9 +4430,14 @@ export async function createEventBooking(
         throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
       }
 
-      await expirePendingBookings();
-      allEvents = await loadEventsFromTxOrDisk(tx);
-      allBookings = await loadBookingsFromTxOrDisk(tx);
+      const hadExpired = expirePendingBookingsSnapshot(allBookings, allEvents, Date.now());
+      if (hadExpired) {
+        await saveBookingsToDisk(allBookings, { tx });
+        await saveEventsToDisk(allEvents, { tx });
+        committedEventsList = allEvents;
+        committedBookingsList = allBookings;
+      }
+
       const event = allEvents.find((e) => e.id === payload.eventId);
       if (!event) {
         throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
@@ -4403,25 +4446,25 @@ export async function createEventBooking(
         (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
       );
 
-      // 1. Anti-duplicate Booking Protection & 15s Idempotency Guard (Rapid clicks)
-      // Must be evaluated BEFORE quota subtraction so rapid clicks on the last ticket converge gracefully
+      // 1. ClientReferenceId Idempotency Guard & 3-Minute Anti-duplicate Booking Protection
+      // Must be evaluated BEFORE quota subtraction so rapid clicks converge gracefully
       const normalizedEmail = payload.guestEmail.trim().toLowerCase();
       const normalizedPhone = payload.guestPhone ? payload.guestPhone.trim() : "";
-      const recentRepeatWindow = Date.now() - 15 * 1000;
+      const trimmedClientRef = typeof payload.clientReferenceId === "string" ? payload.clientReferenceId.trim() : "";
 
-      const recentIdenticalBooking = activeBookings.find((b) => {
-        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
-        const isSamePhone = !normalizedPhone || !b.guestPhone || b.guestPhone.trim() === normalizedPhone;
-        const isRecent = new Date(b.createdAt).getTime() > recentRepeatWindow;
-        const isSameTier = b.ticketTierId === (payload.ticketTierId || undefined);
-        const isSameCount = b.ticketCount === Math.floor(payload.ticketCount);
-        const isEligibleStatus = b.paymentStatus === "PENDING" || b.paymentStatus === "PAID";
-        return isSameEmail && isSamePhone && isRecent && isSameTier && isSameCount && isEligibleStatus;
-      });
-
-      if (recentIdenticalBooking) {
-        committedBooking = recentIdenticalBooking;
-        return recentIdenticalBooking;
+      if (trimmedClientRef.length >= 8) {
+        const matching = activeBookings.find(
+          (b) =>
+            b.eventId === event.id &&
+            b.clientReferenceId === trimmedClientRef &&
+            b.guestEmail.toLowerCase() === normalizedEmail &&
+            (b.guestPhone || "").trim() === normalizedPhone &&
+            (b.paymentStatus === "PENDING" || b.paymentStatus === "PAID")
+        );
+        if (matching) {
+          committedBooking = matching;
+          return matching;
+        }
       }
 
       const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
@@ -4608,6 +4651,7 @@ export async function createEventBooking(
         checkedInSeats: [],
         seatCheckInTimes: {},
         destinationBankSnapshot,
+        clientReferenceId: trimmedClientRef.length >= 8 ? trimmedClientRef : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -125,6 +125,15 @@ export default function EventDetailPage() {
   });
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const bookingAttemptRef = useRef<string>("");
+
+  useEffect(() => {
+    if (isBookingModalOpen) {
+      bookingAttemptRef.current = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `attempt-${Date.now()}`;
+    } else {
+      bookingAttemptRef.current = "";
+    }
+  }, [isBookingModalOpen, bookingForm.ticketTierId, bookingForm.ticketCount, bookingForm.guestEmail]);
 
   // Tickets
   const [pendingTicket, setPendingTicket] = useState<EventTicketOrder | null>(null);
@@ -190,6 +199,13 @@ export default function EventDetailPage() {
       return;
     }
 
+    if (!bookingAttemptRef.current) {
+      bookingAttemptRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `attempt-${Date.now()}`;
+    }
+
     try {
       setIsSubmittingBooking(true);
       setBookingError(null);
@@ -197,7 +213,10 @@ export default function EventDetailPage() {
       const res = await fetch(`/api/events/${event.id}/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookingForm),
+        body: JSON.stringify({
+          ...bookingForm,
+          clientReferenceId: bookingAttemptRef.current,
+        }),
       });
 
       const json = await res.json();
@@ -221,6 +240,7 @@ export default function EventDetailPage() {
       }
 
       setIsBookingModalOpen(false);
+      bookingAttemptRef.current = "";
       void fetchEventDetail(event.id);
 
       if (isEventPaidEffective(event) && orderData.totalPrice > 0) {
