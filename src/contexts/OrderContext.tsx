@@ -1143,18 +1143,18 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
             prev.map((o) => (o.id === effectiveOrder.id ? { ...o, bomDeducted: true } : o))
           );
         }
-        logActivity({
-          module: "POS",
-          action: "POS_TRANSACTION",
-          recordId: effectiveOrder.orderNumber,
-          newValue: `Total: Rp ${effectiveOrder.total.toLocaleString()} (${effectiveOrder.paymentMethod} - LUNAS)`,
-          description: `Transaksi kasir POS selesai: ${effectiveOrder.orderNumber} (Meja ${effectiveOrder.tableNumber})`,
-          reason: "Pembayaran kasir berhasil",
-          status: "SUCCESS",
-          outletId: targetOutletId,
-          outletName: targetOutletName,
-        });
       }
+      logActivity({
+        module: "POS",
+        action: "POS_TRANSACTION",
+        recordId: effectiveOrder.orderNumber,
+        newValue: `Total: Rp ${effectiveOrder.total.toLocaleString()} (${effectiveOrder.paymentMethod} - ${effectiveOrder.paymentStatus === "PENDING" ? "BELUM DIBAYAR (TAGIHAN)" : "LUNAS"})`,
+        description: `Transaksi kasir POS selesai: ${effectiveOrder.orderNumber} (Meja ${effectiveOrder.tableNumber})`,
+        reason: "Pembayaran kasir berhasil",
+        status: "SUCCESS",
+        outletId: targetOutletId,
+        outletName: targetOutletName,
+      });
       return { ...syncRes, order: effectiveOrder };
     });
 

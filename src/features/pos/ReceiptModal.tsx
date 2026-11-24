@@ -585,7 +585,7 @@ export function ReceiptModal({
                 className="w-full col-span-2 border-primary/40 text-primary hover:bg-primary/5 font-semibold text-xs gap-1.5"
               >
                 <FileText className="size-4" />
-                <span>Lihat / Cetak Invoice Perusahaan ({receiptData.corporateInfo.companyName})</span>
+                <span>Lihat invoice perusahaan</span>
               </Button>
             )}
 

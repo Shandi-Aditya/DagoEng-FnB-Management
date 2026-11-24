@@ -21,7 +21,7 @@ export function PaymentTabInvoice({
           <Building2 className="size-5" />
         </div>
         <div>
-          <h4 className="text-sm font-semibold text-foreground">Tagihan Bertempo Perusahaan (Corporate Invoice)</h4>
+          <h4 className="text-sm font-semibold text-foreground">Tagihan bertempo perusahaan</h4>
           <p className="text-xs text-muted-foreground">
             Pesanan akan diterbitkan sebagai tagihan resmi atas nama perusahaan dengan termin pembayaran 14 hari kerja.
           </p>
@@ -30,20 +30,20 @@ export function PaymentTabInvoice({
 
       <div className="space-y-2 rounded-md border bg-background p-3 text-xs">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Instansi / Perusahaan:</span>
+          <span className="text-muted-foreground">Instansi atau perusahaan:</span>
           <span className="font-semibold text-foreground">{corporateCompany || customerName || "-"}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Status Pembayaran:</span>
-          <span className="font-semibold text-foreground">Pending (Tagihan Bertempo)</span>
+          <span className="text-muted-foreground">Status pembayaran:</span>
+          <span className="font-semibold text-foreground">Belum dibayar (tempo 14 hari)</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Jatuh Tempo:</span>
-          <span className="font-medium text-foreground">14 Hari dari Pemesanan</span>
+          <span className="text-muted-foreground">Jatuh tempo:</span>
+          <span className="font-medium text-foreground">14 hari dari pemesanan</span>
         </div>
         <div className="flex justify-between border-t border-border pt-2">
-          <span className="font-semibold text-muted-foreground">Total Tagihan:</span>
-          <span className="font-semibold text-foreground text-sm">{formatCurrencyIDR(grandTotal)}</span>
+          <span className="font-semibold text-muted-foreground">Total tagihan:</span>
+          <span className="font-semibold text-foreground text-sm font-mono">{formatCurrencyIDR(grandTotal)}</span>
         </div>
       </div>
 

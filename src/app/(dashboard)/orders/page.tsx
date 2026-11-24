@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/components/app/notify";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCoworking } from "@/contexts/CoworkingContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
@@ -17,6 +18,7 @@ import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useTables } from "@/contexts/TableContext";
+import { CorporateInvoicePDFModal } from "@/features/pos/CorporateInvoicePDFModal";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
@@ -57,6 +59,7 @@ export default function OrdersPage() {
   const { settings } = useSettings();
   const { activeShift, openShift, recordShiftTransaction, recordShiftRefund } = useEmployeeShift();
   const { canReceiveCashierReceipt, canReceiveKitchenReceipt } = usePrinter();
+  const { bookings: cwBookings, confirmBookingPayment, cancelBooking } = useCoworking();
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
@@ -122,6 +125,7 @@ export default function OrdersPage() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [receiptModalOrder, setReceiptModalOrder] = useState<POSReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState<OrderRecord | null>(null);
   const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
   const [isKitchenModalOpen, setIsKitchenModalOpen] = useState<boolean>(false);
   const [refundOrderTarget, setRefundOrderTarget] = useState<OrderRecord | null>(null);
@@ -257,6 +261,15 @@ export default function OrdersPage() {
             ? paymentOrder.total
             : 0;
       recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
+
+      if (paymentOrder.corporateInfo?.linkedBookingCode) {
+        const matchingBooking = cwBookings.find(
+          (b) => b.bookingCode === paymentOrder.corporateInfo?.linkedBookingCode
+        );
+        if (matchingBooking) {
+          confirmBookingPayment(matchingBooking.id, chosenMethod);
+        }
+      }
 
       const orderNormPhone = paymentOrder.customerPhone
         ? normalizeLoyaltyPhone(paymentOrder.customerPhone)
@@ -460,6 +473,13 @@ export default function OrdersPage() {
           resolvedOrder.id,
           resolvedOrder.outletId
         );
+      } else if (refundOrderTarget.corporateInfo?.linkedBookingCode) {
+        const matchingBooking = cwBookings.find(
+          (b) => b.bookingCode === refundOrderTarget.corporateInfo?.linkedBookingCode
+        );
+        if (matchingBooking) {
+          cancelBooking(matchingBooking.id);
+        }
       }
 
       const isPostCook =
@@ -545,6 +565,7 @@ export default function OrdersPage() {
         emptyMessage={emptyQueueMessage(orderQueue, searchQuery.trim() !== "")}
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}
+        onViewInvoice={(order) => setInvoiceModalOrder(order)}
         onOpenPayment={handleOpenPayment}
         onSelectOrder={setSelectedOrder}
       />
@@ -557,6 +578,7 @@ export default function OrdersPage() {
         canPrintCashierReceipt={canPrintCashierReceipt}
         canPrintKitchenReceipt={canPrintKitchenReceipt}
         promos={settings.promos}
+        onViewInvoice={(order) => setInvoiceModalOrder(order)}
         onOpenPayment={handleOpenPayment}
         onPrintReceipt={handlePrintReceipt}
         onPrintKitchenTicket={handlePrintKitchenTicket}
@@ -631,6 +653,13 @@ export default function OrdersPage() {
         isOpen={isReceiptModalOpen}
         receiptData={receiptModalOrder}
         onClose={() => setIsReceiptModalOpen(false)}
+      />
+
+      {/* Corporate Invoice PDF Modal */}
+      <CorporateInvoicePDFModal
+        isOpen={Boolean(invoiceModalOrder)}
+        onClose={() => setInvoiceModalOrder(null)}
+        order={invoiceModalOrder}
       />
 
       {/* Kitchen Order Thermal Ticket Modal for Reprinting (Kitchen) */}

@@ -20,6 +20,9 @@ export interface CorporateOrderDraft {
   headcount: number;
   billingType: CorporateBillingType;
   meetingRoomId?: string;
+  meetingBookingDate?: string;
+  meetingStartTime?: string;
+  meetingDurationHours?: number;
   notes?: string;
 }
 
@@ -31,6 +34,9 @@ export const DEFAULT_CORPORATE_DRAFT: CorporateOrderDraft = {
   headcount: 1,
   billingType: "PREPAID",
   meetingRoomId: undefined,
+  meetingBookingDate: "",
+  meetingStartTime: "09:00",
+  meetingDurationHours: 1,
   notes: "",
 };
 

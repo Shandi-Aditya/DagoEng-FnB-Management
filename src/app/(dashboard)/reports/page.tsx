@@ -297,6 +297,15 @@ export default function ReportsPage() {
         ];
         return fields.some((val) => val?.toLowerCase().includes(needle));
       });
+      const effectiveCoworking = filteredCoworkingBookings.filter((b) => {
+        if (
+          selectedCompany !== "ALL" &&
+          b.company?.trim().toLowerCase() !== selectedCompany.trim().toLowerCase()
+        ) {
+          return false;
+        }
+        return true;
+      });
       await exportTransactionReportExcel({
         orders: paidOrders,
         products: filteredProducts,
@@ -304,6 +313,7 @@ export default function ReportsPage() {
         endDate,
         outletName: scopeName,
         tenantId,
+        coworkingBookings: effectiveCoworking,
       });
       notify.success("Laporan transaksi diekspor ke Excel (.xlsx)", "3 sheet: transaction, detail, tenant shares");
     } catch (err) {

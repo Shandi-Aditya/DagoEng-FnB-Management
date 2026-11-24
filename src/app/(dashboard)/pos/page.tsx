@@ -301,42 +301,69 @@ export default function POSPage() {
         id: s.id,
         name: s.name,
         hourlyRate: s.hourlyRate,
+        capacity: s.capacity,
       }));
   }, [cwSpaces]);
 
-  const handleCorporateMeetingRoomChange = (roomId: string) => {
-    setCorporateDraft((prev) => ({ ...prev, meetingRoomId: roomId }));
-    if (!roomId) {
+  const handleCorporateDraftChange = (newDraft: CorporateOrderDraft) => {
+    setCorporateDraft(newDraft);
+    if (!newDraft.enabled || !newDraft.meetingRoomId) {
       setCartItems((prev) => prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-")));
       return;
     }
-    const room = cwSpaces.find((s) => s.id === roomId);
-    if (room) {
-      if (room.status === "MAINTENANCE") {
-        notify.error(
-          "Ruangan Dalam Perbaikan",
-          `Ruang pertemuan ${room.name} sedang dalam perbaikan dan tidak dapat dibundel.`
-        );
-        setCorporateDraft((prev) => ({ ...prev, meetingRoomId: undefined }));
-        return;
-      }
-      const roomCartItem: POSCartItem = {
-        cartItemId: `bundle-meeting-${room.id}`,
-        productId: `space-${room.id}`,
-        productName: `Sewa Ruang Meeting: ${room.name}`,
-        quantity: 1,
-        basePrice: room.hourlyRate,
-        selectedModifiers: [],
-        unitFinalPrice: room.hourlyRate,
-        itemTotal: room.hourlyRate,
-        tenantId: "DAGO_HUB",
-        notes: `Paket Ruang Meeting Perusahaan (${room.capacity} Pax)`,
-      };
-      setCartItems((prev) => {
-        const withoutRoom = prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-"));
-        return [...withoutRoom, roomCartItem];
-      });
+    const room = cwSpaces.find((s) => s.id === newDraft.meetingRoomId);
+    if (!room) return;
+    if (room.status === "MAINTENANCE") {
+      notify.error(
+        "Ruangan dalam perbaikan",
+        `Ruang pertemuan ${room.name} sedang dalam perbaikan dan tidak dapat dibundel.`
+      );
+      setCorporateDraft((prev) => ({ ...prev, meetingRoomId: undefined }));
+      setCartItems((prev) => prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-")));
+      return;
     }
+
+    const duration = Math.max(1, newDraft.meetingDurationHours || 1);
+    const bookingDate = newDraft.meetingBookingDate || getTodayWitaDateString();
+    const startTime = newDraft.meetingStartTime || "09:00";
+    const startHour = parseInt(startTime.split(":")[0], 10) || 9;
+    const endHour = startHour + duration;
+    const endTime = `${String(endHour).padStart(2, "0")}:00`;
+
+    const roomCartItem: POSCartItem = {
+      cartItemId: `bundle-meeting-${room.id}`,
+      productId: `space-${room.id}`,
+      productName: `Sewa Ruang Meeting: ${room.name}`,
+      quantity: duration,
+      basePrice: room.hourlyRate,
+      selectedModifiers: [],
+      unitFinalPrice: room.hourlyRate,
+      itemTotal: room.hourlyRate * duration,
+      tenantId: "DAGO_HUB",
+      itemType: "COWORKING",
+      notes: `Paket Ruang Meeting Perusahaan (${room.capacity} Pax) - ${duration} Jam`,
+      coworkingMeta: {
+        spaceId: room.id,
+        spaceName: room.name,
+        spaceType: room.type,
+        durationHours: duration,
+        startTime,
+        endTime,
+        bookingDate,
+      },
+    };
+
+    setCartItems((prev) => {
+      const withoutRoom = prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-"));
+      return [...withoutRoom, roomCartItem];
+    });
+  };
+
+  const handleCorporateMeetingRoomChange = (roomId: string) => {
+    handleCorporateDraftChange({
+      ...corporateDraft,
+      meetingRoomId: roomId || undefined,
+    });
   };
 
   // Tax Settings State
@@ -816,6 +843,9 @@ export default function POSPage() {
 
   const handleRemoveItem = (cartItemId: string) => {
     setCartItems((prev) => prev.filter((i) => i.cartItemId !== cartItemId));
+    if (cartItemId.startsWith("bundle-meeting-")) {
+      setCorporateDraft((prev) => ({ ...prev, meetingRoomId: undefined }));
+    }
   };
 
   const handleSelectMember = (memberId: string) => {
@@ -951,6 +981,12 @@ export default function POSPage() {
         : undefined;
 
       if (isCorporate && linkedRoom) {
+        const meetingDate = corporateDraft.meetingBookingDate || getTodayWitaDateString();
+        const meetingTime = corporateDraft.meetingStartTime || "09:00";
+        const meetingDuration = Math.max(1, corporateDraft.meetingDurationHours || 1);
+        const hourlyRate = linkedRoom.hourlyRate;
+        const totalRoomPrice = hourlyRate * meetingDuration;
+
         try {
           const booked = cwBookSpace({
             guestName: corporateDraft.picName.trim() || "PIC Corporate",
@@ -961,21 +997,26 @@ export default function POSPage() {
             spaceName: linkedRoom.name,
             spaceType: linkedRoom.type,
             bookingType: "HOURLY",
-            date: new Date().toISOString().split("T")[0],
-            startTime: "09:00",
-            duration: 1,
-            price: linkedRoom.hourlyRate,
+            date: meetingDate,
+            startTime: meetingTime,
+            duration: meetingDuration,
+            price: hourlyRate,
             discount: 0,
-            totalAmount: linkedRoom.hourlyRate,
-            paidAmount: isInvoicePayment ? 0 : linkedRoom.hourlyRate,
-            remainingAmount: isInvoicePayment ? linkedRoom.hourlyRate : 0,
+            totalAmount: totalRoomPrice,
+            paidAmount: isInvoicePayment ? 0 : totalRoomPrice,
+            remainingAmount: isInvoicePayment ? totalRoomPrice : 0,
             outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
             paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
             paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
+            linkedOrderId: receiptNo,
+            billedViaPosOrder: true,
           });
           linkedBookingCode = booked?.bookingCode;
-        } catch (e) {
-          console.warn("[POS Corporate] Gagal memesan ruang coworking:", e);
+        } catch (e: any) {
+          const errMsg = e?.message || "Ruang pertemuan tidak tersedia pada jadwal yang dipilih.";
+          notify.error("Gagal memesan ruangan", errMsg);
+          isSubmittingOrderRef.current = false;
+          return;
         }
       }
 
@@ -1714,6 +1755,16 @@ export default function POSPage() {
       handleOpenShiftModal();
       return;
     }
+    if (corporateDraft.enabled) {
+      if (
+        !corporateDraft.companyName.trim() ||
+        !corporateDraft.picName.trim() ||
+        !corporateDraft.picPhone.trim()
+      ) {
+        notify.error("Data perusahaan belum lengkap", "Isi nama perusahaan dan kontak PIC.");
+        return;
+      }
+    }
     setIsPaymentModalOpen(true);
   };
 
@@ -1838,9 +1889,11 @@ export default function POSPage() {
                 orderNotes={orderNotes}
                 onOrderNotesChange={setOrderNotes}
                 corporateDraft={corporateDraft}
-                onCorporateDraftChange={setCorporateDraft}
+                onCorporateDraftChange={handleCorporateDraftChange}
                 meetingRooms={meetingRoomsList}
                 onSelectedMeetingRoomChange={handleCorporateMeetingRoomChange}
+                coworkingBookings={cwBookings}
+                coworkingSpaces={cwSpaces}
               />
               <Separator />
               <div className="max-h-80 overflow-y-auto">
@@ -1905,6 +1958,7 @@ export default function POSPage() {
                                 size="icon-sm"
                                 onClick={() => handleUpdateQuantity(item.cartItemId, -1)}
                                 aria-label="Kurangi jumlah"
+                                disabled={item.cartItemId.startsWith("bundle-meeting-")}
                               >
                                 <Minus />
                               </Button>
@@ -1916,6 +1970,7 @@ export default function POSPage() {
                                 size="icon-sm"
                                 onClick={() => handleUpdateQuantity(item.cartItemId, 1)}
                                 aria-label="Tambah jumlah"
+                                disabled={item.cartItemId.startsWith("bundle-meeting-")}
                               >
                                 <Plus />
                               </Button>

@@ -10,6 +10,7 @@ import {
   Clock,
   CreditCard,
   KeyRound,
+  Landmark,
   Lock,
   QrCode,
   RefreshCw,
@@ -115,6 +116,10 @@ export function PaymentModal({
   const [selectedBank, setSelectedBank] = useState<string>("BCA");
   const [approvalCode, setApprovalCode] = useState<string>("");
 
+  // Transfer tab state
+  const [transferBank, setTransferBank] = useState<string>("BCA");
+  const [transferReference, setTransferReference] = useState<string>("");
+
   // Split bill tab state
   const [splitGuestCount, setSplitGuestCount] = useState<number>(2);
   const [splitGuests, setSplitGuests] = useState<SplitGuestBill[]>([]);
@@ -144,6 +149,7 @@ export function PaymentModal({
       setSupervisorAuthError(null);
       setSupervisorOverrideData(null);
       setApprovalCode(`APP-${Math.floor(100000 + Math.random() * 900000)}`);
+      setTransferReference("");
       isSubmittingRef.current = false;
       setIsSubmitting(false);
 
@@ -165,7 +171,7 @@ export function PaymentModal({
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
-  }, [isOpen, grandTotal]);
+  }, [isOpen, grandTotal, isCorporateOrder, corporateBillingType]);
 
   // QRIS countdown timer
   const hasSplitQris = useMemo(
@@ -374,6 +380,21 @@ export function PaymentModal({
       setIsSubmitting(true);
       onPaymentSuccess({
         method: "EDC",
+        amountPaid: grandTotal,
+        changeDue: 0,
+      });
+    } else if (activeTab === "TRANSFER") {
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      logActivity({
+        module: "POS",
+        action: "TRANSFER_PAYMENT",
+        description: `Pembayaran transfer bank ${transferBank} ref ${transferReference || "-"}: ${formatCurrencyIDR(grandTotal)}`,
+        recordId: transferReference || corporateCompany || customerName,
+        newValue: `Lunas transfer: ${formatCurrencyIDR(grandTotal)}`,
+      });
+      onPaymentSuccess({
+        method: "TRANSFER",
         amountPaid: grandTotal,
         changeDue: 0,
       });
@@ -641,7 +662,7 @@ export function PaymentModal({
             onValueChange={(val) => setActiveTab(val as POSPaymentMethod)}
             className="w-full"
           >
-            <TabsList aria-label="Metode pembayaran" className={`w-full grid ${isCorporateOrder ? "grid-cols-5" : "grid-cols-4"} h-10`}>
+            <TabsList aria-label="Metode pembayaran" className={`w-full grid ${isCorporateOrder ? "grid-cols-6" : "grid-cols-5"} h-10`}>
               <TabsTrigger value="QRIS" className="gap-1.5 text-xs">
                 <QrCode />
                 <span>QRIS</span>
@@ -653,6 +674,10 @@ export function PaymentModal({
               <TabsTrigger value="EDC" className="gap-1.5 text-xs">
                 <CreditCard />
                 <span>Debit / EDC</span>
+              </TabsTrigger>
+              <TabsTrigger value="TRANSFER" className="gap-1.5 text-xs">
+                <Landmark />
+                <span>Transfer</span>
               </TabsTrigger>
               <TabsTrigger value="SPLIT" className="gap-1.5 text-xs">
                 <Users />
@@ -795,6 +820,46 @@ export function PaymentModal({
             </div>
           )}
 
+          {/* TAB 3.5: TRANSFER BANK */}
+          {activeTab === "TRANSFER" && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-3.5 space-y-2">
+                <span className="block font-semibold text-foreground">
+                  Rekening resmi tujuan transfer
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="rounded border bg-background p-2.5 space-y-0.5">
+                    <span className="font-semibold text-foreground block">BCA (Dago Creative Hub)</span>
+                    <span className="font-mono text-sm block">782-019-2819</span>
+                    <span className="text-muted-foreground text-xs block">a.n. PT Dago Eng Solusindo</span>
+                  </div>
+                  <div className="rounded border bg-background p-2.5 space-y-0.5">
+                    <span className="font-semibold text-foreground block">Mandiri (Operasional POS)</span>
+                    <span className="font-mono text-sm block">137-00-1928-112</span>
+                    <span className="text-muted-foreground text-xs block">a.n. PT Dago Eng Solusindo</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="transfer-ref" className="text-xs font-medium text-foreground">
+                  Nomor referensi atau bukti transfer
+                </Label>
+                <Input
+                  id="transfer-ref"
+                  type="text"
+                  value={transferReference}
+                  onChange={(e) => setTransferReference(e.target.value)}
+                  placeholder="Contoh: TRF-20261124-001"
+                  className="font-mono text-xs font-medium"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pastikan dana sudah masuk ke rekening bank resmi sebelum menyelesaikan pembayaran.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: SPLIT BILL */}
           {activeTab === "SPLIT" && (
             <PaymentTabSplit
@@ -860,10 +925,18 @@ export function PaymentModal({
                 <CheckCircle2 className="size-4 shrink-0" />
                 <span className="truncate">
                   {activeTab === "INVOICE"
-                    ? "Terbitkan Invoice Perusahaan"
+                    ? "Terbitkan invoice perusahaan"
+                    : activeTab === "CASH"
+                    ? "Konfirmasi pembayaran tunai"
                     : activeTab === "QRIS"
-                    ? "Selesaikan pembayaran QRIS"
-                    : `Konfirmasi pembayaran (${activeTab})`}
+                    ? "Konfirmasi pembayaran QRIS"
+                    : activeTab === "EDC"
+                    ? "Konfirmasi pembayaran EDC"
+                    : activeTab === "TRANSFER"
+                    ? "Konfirmasi pembayaran transfer"
+                    : activeTab === "SPLIT"
+                    ? "Konfirmasi bagi tagihan"
+                    : "Konfirmasi pembayaran"}
                 </span>
               </span>
             )}

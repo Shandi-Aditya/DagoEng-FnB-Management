@@ -530,7 +530,11 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     case "SALES": {
       const paidOrders = orders.filter(isSettledPaidOrder);
       const paidCoworking = effectiveCoworking.filter(
-        (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
+        (b) =>
+          b.paymentStatus === "PAID" &&
+          b.checkInStatus !== "CANCELLED" &&
+          !b.linkedOrderId &&
+          !b.billedViaPosOrder
       );
 
       const aggregatedTax = aggregateOrdersTaxAndRevenue(paidOrders);
@@ -815,32 +819,40 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         }
       }
 
-      const tableRows = products.map((p) => {
-        const hpp =
-          p.cogsEstimate !== undefined && p.cogsEstimate > 0
-            ? p.cogsEstimate
-            : Math.round(p.basePrice * 0.28);
-        const marginRp = p.basePrice - hpp;
-        const marginPct = p.basePrice > 0 ? (marginRp / p.basePrice) * 100 : 0;
-        totalMarginPctSum += marginPct;
+      const tableRows = products
+        .filter((p) => {
+          if (companyName && companyName !== "ALL") {
+            const pSales = salesByProductId.get(p.id);
+            return Boolean(pSales && pSales.qty > 0);
+          }
+          return true;
+        })
+        .map((p) => {
+          const hpp =
+            p.cogsEstimate !== undefined && p.cogsEstimate > 0
+              ? p.cogsEstimate
+              : Math.round(p.basePrice * 0.28);
+          const marginRp = p.basePrice - hpp;
+          const marginPct = p.basePrice > 0 ? (marginRp / p.basePrice) * 100 : 0;
+          totalMarginPctSum += marginPct;
 
-        const pSales = salesByProductId.get(p.id) || {
-          qty: 0,
-          revenue: 0,
-        };
+          const pSales = salesByProductId.get(p.id) || {
+            qty: 0,
+            revenue: 0,
+          };
 
-        return [
-          p.id,
-          p.name,
-          p.category,
-          `Rp ${p.basePrice.toLocaleString("id-ID")}`,
-          `Rp ${hpp.toLocaleString("id-ID")}`,
-          `Rp ${marginRp.toLocaleString("id-ID")}`,
-          `${marginPct.toFixed(1)}%`,
-          `${pSales.qty} pcs`,
-          `Rp ${pSales.revenue.toLocaleString("id-ID")}`,
-        ];
-      });
+          return [
+            p.id,
+            p.name,
+            p.category,
+            `Rp ${p.basePrice.toLocaleString("id-ID")}`,
+            `Rp ${hpp.toLocaleString("id-ID")}`,
+            `Rp ${marginRp.toLocaleString("id-ID")}`,
+            `${marginPct.toFixed(1)}%`,
+            `${pSales.qty} pcs`,
+            `Rp ${pSales.revenue.toLocaleString("id-ID")}`,
+          ];
+        });
 
       const avgMarginPct =
         products.length > 0 ? (totalMarginPctSum / products.length).toFixed(1) : "0.0";
@@ -848,7 +860,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
       return {
         title: "Laporan produk dan margin",
-        subtitle: `Harga jual, estimasi HPP, dan margin kotor menu di ${scopeName}`,
+        subtitle:
+          companyName && companyName !== "ALL"
+            ? `Filter perusahaan: ${companyName} di ${scopeName}`
+            : `Harga jual, estimasi HPP, dan margin kotor menu di ${scopeName}`,
         summaryCards: [
           { label: "Menu terdaftar", value: `${products.length} menu` },
           { label: "Rata-rata margin kotor", value: `${avgMarginPct}%` },
@@ -1077,13 +1092,19 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       const { summary, discrepancies } = reconResult;
 
       const paidCoworking = effectiveCoworking.filter(
-        (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
+        (b) =>
+          b.paymentStatus === "PAID" &&
+          b.checkInStatus !== "CANCELLED" &&
+          !b.linkedOrderId &&
+          !b.billedViaPosOrder
       );
       const pendingCoworkingQris = effectiveCoworking.filter(
         (b) =>
           b.paymentMethod === "QRIS" &&
           b.paymentStatus === "PENDING" &&
-          b.checkInStatus !== "CANCELLED"
+          b.checkInStatus !== "CANCELLED" &&
+          !b.linkedOrderId &&
+          !b.billedViaPosOrder
       );
       const discountedCoworking = paidCoworking.filter((b) => (b.discount || 0) > 0);
 

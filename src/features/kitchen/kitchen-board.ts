@@ -130,9 +130,12 @@ function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
 }
 
 export function isOrderEligibleForKds(
-  order: Pick<OrderRecord, "paymentStatus" | "status">
+  order: Pick<OrderRecord, "paymentStatus" | "paymentMethod" | "status" | "corporateInfo">
 ): boolean {
-  return order.paymentStatus === "PAID" && order.status !== "CANCELLED";
+  if (order.status === "CANCELLED") return false;
+  const isCorporateInvoice =
+    order.paymentMethod === "INVOICE" || order.corporateInfo?.billingType === "INVOICE";
+  return order.paymentStatus === "PAID" || isCorporateInvoice;
 }
 
 /** Active tickets for the board, oldest first so the queue is served FIFO. */

@@ -53,7 +53,7 @@ export interface POSCartItem {
   coworkingMeta?: CoworkingOrderItemMeta;
 }
 
-export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "SPLIT" | "INVOICE";
+export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "TRANSFER" | "SPLIT" | "INVOICE";
 
 export interface SplitGuestBill {
   id: string;
@@ -123,6 +123,7 @@ export interface POSReceiptData {
   coworkingDiscount?: number;
   grandTotal: number;
   paymentMethod: POSPaymentMethod;
+  paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
   amountPaid: number;
   changeDue: number;
   splitDetails?: SplitGuestBill[];

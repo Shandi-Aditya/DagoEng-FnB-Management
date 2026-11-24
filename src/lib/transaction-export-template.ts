@@ -6,6 +6,7 @@ import {
 } from "@/contexts/DateFilterContext";
 import type { OrderRecord } from "@/types/order";
 import type { MasterProduct } from "@/types/product";
+import type { CoworkingBooking } from "@/types/coworking";
 import {
   resolveItemTenantId,
   getAllTenantRevenueSplits,
@@ -29,6 +30,7 @@ export interface TransactionExportParams {
   outletName?: string;
   tenantId?: string;
   tenantSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
+  coworkingBookings?: CoworkingBooking[];
 }
 
 export interface DetailedTransactionRow {

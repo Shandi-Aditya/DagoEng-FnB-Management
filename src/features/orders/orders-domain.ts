@@ -421,6 +421,7 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
     coworkingDiscount: order.coworkingDiscount,
     grandTotal: order.total,
     paymentMethod: (order.paymentMethod as POSReceiptData["paymentMethod"]) || "QRIS",
+    paymentStatus: order.paymentStatus,
     amountPaid: order.total,
     changeDue: 0,
     splitDetails,
