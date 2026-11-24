@@ -371,7 +371,12 @@ export async function syncWithOutbox<T = any>(
     if (!res.ok) {
       const errMsg =
         data?.error || `HTTP_${res.status}: Sinkronisasi ke ${params.endpoint} gagal.`;
-      if (res.status >= 500 || res.status === 401 || res.status === 408 || res.status === 429) {
+      if (
+        res.status >= 500 ||
+        res.status === 408 ||
+        res.status === 429 ||
+        (res.status === 401 && params.endpoint === "/api/orders")
+      ) {
         const queued = enqueueOutboxItem({
           id: params.id,
           endpoint: params.endpoint,

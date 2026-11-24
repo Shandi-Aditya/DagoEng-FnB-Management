@@ -259,6 +259,11 @@ function CustomerApp() {
   // Room bookings
   const [isBooking, setIsBooking] = useState(false);
   const submitBooking = (request: SpaceBookingRequest) => {
+    if (!user) {
+      notify.error("Masuk diperlukan", "Silakan login atau daftar akun untuk memesan ruang kerja.");
+      setView("account");
+      return;
+    }
     setIsBooking(true);
     try {
       const effectivePayment = qrisOnly ? "QRIS" : request.payment;

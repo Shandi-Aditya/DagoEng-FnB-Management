@@ -22,8 +22,9 @@ import { getRequestAuthUser, type ServerAuthResult } from "@/lib/server-auth";
 import { coworkingMasterDomainSpec } from "@/lib/sync-domains/spaces-spec";
 import type { RoleSlug } from "@/types/auth";
 import { INITIAL_SPACES } from "@/lib/sync-domains/spaces-spec";
-import type { CoworkingSpaceItem } from "@/types/coworking";
-import { calculateEndTime } from "@/features/pos/pos-coworking";
+import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
+import { calculateEndTime, isSlotPast } from "@/features/pos/pos-coworking";
+import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
 import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from "@/types/settings";
 
 const FILE_COWORKING_BOOKINGS = "coworking_bookings.json";
@@ -61,7 +62,7 @@ function isNonTenantOwner(auth: ServerAuthResult): boolean {
 }
 
 function isCallerOwnedBooking(
-  booking: Record<string, unknown>,
+  booking: CoworkingBooking | Record<string, unknown>,
   auth: ServerAuthResult
 ): boolean {
   if (auth.userId && booking.userId === auth.userId) {
@@ -79,16 +80,21 @@ function isCallerOwnedBooking(
 
 function validateBookingScheduleOrError(
   booking: Record<string, unknown>,
-  platformSettings: PlatformSettings
+  platformSettings: PlatformSettings,
+  isNewBooking: boolean = false
 ): NextResponse | null {
+  const bookingType =
+    typeof booking.bookingType === "string" ? booking.bookingType : "HOURLY";
+  const bookingDate = String(booking.date);
+  const startTime =
+    typeof booking.startTime === "string" ? booking.startTime : undefined;
+
   const scheduleCheck = validateCoworkingBookingSchedule(
     {
-      bookingType:
-        typeof booking.bookingType === "string" ? booking.bookingType : "HOURLY",
-      date: String(booking.date),
+      bookingType,
+      date: bookingDate,
       endDate: typeof booking.endDate === "string" ? booking.endDate : undefined,
-      startTime:
-        typeof booking.startTime === "string" ? booking.startTime : undefined,
+      startTime,
       endTime: typeof booking.endTime === "string" ? booking.endTime : undefined,
       duration:
         typeof booking.duration === "number" ? booking.duration : undefined,
@@ -101,11 +107,24 @@ function validateBookingScheduleOrError(
       { status: 400 }
     );
   }
+
+  // S-35: Tolak slot jam yang sudah lewat pada hari ini WITA untuk pemesanan baru
+  if (isNewBooking && bookingType === "HOURLY" && startTime) {
+    const todayWita = getTodayWitaDateString();
+    const targetYmd = normalizeDateToYMD(bookingDate);
+    if (targetYmd === todayWita && isSlotPast(bookingDate, startTime)) {
+      return NextResponse.json(
+        { error: "Slot jam yang dipilih sudah lewat." },
+        { status: 400 }
+      );
+    }
+  }
+
   return null;
 }
 
 async function generateUniqueBookingCode(
-  existingBookings: Record<string, unknown>[]
+  existingBookings: (CoworkingBooking | Record<string, unknown>)[]
 ): Promise<string> {
   const qrisSessions = await getPersistentQrisSessions();
   const takenCodes = new Set(
@@ -135,7 +154,7 @@ async function generateUniqueBookingCode(
 
 async function resolveBookingIdentityDefaults(params: {
   booking: Record<string, unknown>;
-  existingBookings: Record<string, unknown>[];
+  existingBookings: (CoworkingBooking | Record<string, unknown>)[];
   enforceUniqueCode?: boolean;
 }): Promise<{ id: string; bookingCode: string; createdAt: string }> {
   const { booking, existingBookings, enforceUniqueCode = false } = params;
@@ -178,17 +197,9 @@ async function resolveBookingIdentityDefaults(params: {
 export async function GET(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
-    if (!auth.isAuthenticated || !auth.role) {
-      return NextResponse.json(
-        {
-          error:
-            auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan.",
-        },
-        { status: 401 }
-      );
-    }
+    const isAnonymous = !auth.isAuthenticated || !auth.role;
 
-    if (!COWORKING_READ_ROLES.includes(auth.role)) {
+    if (!isAnonymous && auth.role && !COWORKING_READ_ROLES.includes(auth.role)) {
       return NextResponse.json(
         {
           error: `FORBIDDEN: Role [${auth.role}] tidak memiliki akses data booking coworking.`,
@@ -201,11 +212,11 @@ export async function GET(req: NextRequest) {
     const date = searchParams.get("date");
     const status = searchParams.get("status");
 
-    let bookings = await getCoworkingBookings();
+    let bookings: CoworkingBooking[] = await getCoworkingBookings();
 
     if (date) {
       const targetYmd = normalizeDateToYMD(date);
-      bookings = bookings.filter((b: Record<string, unknown>) => {
+      bookings = bookings.filter((b: CoworkingBooking) => {
         const rawStart = typeof b.date === "string" ? b.date : "";
         const rawEnd = typeof b.endDate === "string" ? b.endDate : rawStart;
         const startYmd = normalizeDateToYMD(rawStart);
@@ -216,15 +227,41 @@ export async function GET(req: NextRequest) {
     }
     if (status) {
       bookings = bookings.filter(
-        (b: Record<string, unknown>) =>
+        (b: CoworkingBooking) =>
           b.checkInStatus === status ||
-          b.paymentStatus === status ||
-          b.status === status
+          b.paymentStatus === status
       );
     }
 
+    if (isAnonymous) {
+      const sanitized = bookings
+        .filter(
+          (b: CoworkingBooking) =>
+            b.checkInStatus !== "CANCELLED" &&
+            b.checkInStatus !== "COMPLETED"
+        )
+        .map((b: CoworkingBooking) => ({
+          id: b.id,
+          spaceId: b.spaceId,
+          spaceName: b.spaceName,
+          spaceType: b.spaceType,
+          bookingType: b.bookingType,
+          date: b.date,
+          endDate: b.endDate,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          duration: b.duration,
+          checkInStatus: b.checkInStatus,
+          paymentStatus: b.paymentStatus,
+          guestName: "Terisi",
+          guestPhone: "",
+          guestEmail: "",
+        }));
+      return NextResponse.json({ bookings: sanitized });
+    }
+
     if (auth.role === "CUSTOMER") {
-      bookings = bookings.flatMap((b: Record<string, unknown>) => {
+      const customerVisible = bookings.flatMap((b: CoworkingBooking): CoworkingBooking[] => {
         if (isCallerOwnedBooking(b, auth)) {
           return [b];
         }
@@ -249,6 +286,7 @@ export async function GET(req: NextRequest) {
           },
         ];
       });
+      return NextResponse.json({ bookings: customerVisible });
     }
 
     return NextResponse.json({ bookings });
@@ -312,9 +350,8 @@ export async function POST(req: NextRequest) {
     }
 
     const maxCapacity: number =
-      typeof booking.maxCapacity === "number"
-        ? booking.maxCapacity
-        : (space.type === "HOT_DESK" ? space.capacity || 8 : 1);
+      space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
+    booking.maxCapacity = maxCapacity;
 
     if (!booking.endTime && typeof booking.startTime === "string") {
       booking.endTime = calculateEndTime(
@@ -331,10 +368,10 @@ export async function POST(req: NextRequest) {
       ),
     ]);
     const matchedExisting = existingBookings.find(
-      (b: Record<string, unknown>) =>
+      (b: CoworkingBooking) =>
         (booking.id && b.id === booking.id) ||
         (booking.bookingCode && b.bookingCode === booking.bookingCode)
-    ) as Record<string, unknown> | undefined;
+    );
 
     if (auth.role === "CUSTOMER") {
       if (booking.paymentStatus !== undefined && booking.paymentStatus !== "PENDING") {
@@ -421,12 +458,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const scheduleError = validateBookingScheduleOrError(
-        { ...booking, date: bookingDate },
-        platformSettings
-      );
-      if (scheduleError) return scheduleError;
-
       const methodResolution = resolveSelfOrderPaymentMethod(
         booking.paymentMethod,
         platformSettings
@@ -437,6 +468,13 @@ export async function POST(req: NextRequest) {
           { status: methodResolution.status }
         );
       }
+
+      const scheduleError = validateBookingScheduleOrError(
+        { ...booking, date: bookingDate },
+        platformSettings,
+        !matchedExisting
+      );
+      if (scheduleError) return scheduleError;
 
       const coworkingState = await readPersistentDomainState(coworkingMasterDomainSpec);
       const matchedSpace = coworkingState.spaces.find((s) => s.id === booking.spaceId);
@@ -533,7 +571,27 @@ export async function POST(req: NextRequest) {
         createdAt: identity.createdAt,
       };
 
-      await saveCoworkingBooking(customerBooking);
+      try {
+        await saveCoworkingBooking(customerBooking as unknown as CoworkingBooking, {
+          maxCapacity,
+          spaceName: matchedSpace.name,
+        });
+      } catch (saveErr: unknown) {
+        const isConflict =
+          (saveErr as { code?: string })?.code === "OVERBOOKING_CONFLICT" ||
+          (saveErr as { status?: number })?.status === 409;
+        if (isConflict) {
+          const message =
+            saveErr instanceof Error
+              ? saveErr.message
+              : "Kapasitas slot tidak mencukupi atau sudah penuh. Pemesanan ditolak untuk mencegah overbooking.";
+          return NextResponse.json(
+            { error: message, code: "OVERBOOKING_CONFLICT" },
+            { status: 409 }
+          );
+        }
+        throw saveErr;
+      }
 
       if (customerBooking.paymentMethod === "QRIS" && authoritativeTotal > 0) {
         const existingSession = await getPersistentQrisSession(identity.bookingCode);
@@ -552,12 +610,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      !matchedExisting &&
       booking.date &&
       booking.checkInStatus !== "CANCELLED" &&
       booking.checkInStatus !== "COMPLETED"
     ) {
-      const scheduleError = validateBookingScheduleOrError(booking, platformSettings);
+      const scheduleError = validateBookingScheduleOrError(booking, platformSettings, !matchedExisting);
       if (scheduleError) return scheduleError;
     }
 

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import {
   checkSlotAvailability,
   isSlotPast,
@@ -47,8 +50,10 @@ function createMockBooking(
     bookingCode: `CWK-${Math.floor(1000 + Math.random() * 9000)}`,
     spaceId,
     spaceName: "Test Space",
+    spaceType: "HOT_DESK",
     guestName: "Budi Santoso",
     guestPhone: "08123456789",
+    guestEmail: extra.guestEmail ?? "budi.s35@example.com",
     date: "2026-12-01",
     bookingType: "HOURLY",
     startTime: start,
@@ -64,6 +69,23 @@ function createMockBooking(
 }
 
 describe("S-35: Coworking Quota Display and Overbooking Prevention", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "s35-coworking-"));
+    process.env.DATA_DIR_OVERRIDE = tempDir;
+  });
+
+  afterEach(() => {
+    delete process.env.DATA_DIR_OVERRIDE;
+    if (tempDir && fs.existsSync(tempDir)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+  });
   describe("1. Remaining Seats Calculation", () => {
     it("displays correct remaining seats for Hot Desk (e.g. 5/8 tersisa when 3 booked)", () => {
       const bookings: CoworkingBooking[] = [
@@ -223,26 +245,34 @@ describe("S-35: Coworking Quota Display and Overbooking Prevention", () => {
       expect(conflictCheck.hasConflict).toBe(false);
     });
 
-    it("rejects overbooking atomically in saveCoworkingBooking", async () => {
+    it("rejects overbooking atomically in parallel saveCoworkingBooking", async () => {
       const uniqueSpaceId = `sp-test-atomic-${Date.now()}`;
       const targetDate = "2026-12-15";
 
-      // Book capacity 1 space with first booking
+      // Book capacity 1 space with two parallel bookings
       const booking1 = createMockBooking(uniqueSpaceId, "14:00", "15:00", {
         id: `bk-atomic-1-${Date.now()}`,
         date: targetDate,
       });
-      await saveCoworkingBooking(booking1, { maxCapacity: 1, spaceName: "Atomic Space" });
 
-      // Second booking on same space & slot must be rejected
       const booking2 = createMockBooking(uniqueSpaceId, "14:00", "15:00", {
         id: `bk-atomic-2-${Date.now()}`,
         date: targetDate,
       });
 
-      await expect(
-        saveCoworkingBooking(booking2, { maxCapacity: 1, spaceName: "Atomic Space" })
-      ).rejects.toThrow(/Kapasitas|bentrok/i);
+      const results = await Promise.allSettled([
+        saveCoworkingBooking(booking1, { maxCapacity: 1, spaceName: "Atomic Space" }),
+        saveCoworkingBooking(booking2, { maxCapacity: 1, spaceName: "Atomic Space" }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+      if (rejected[0].status === "rejected") {
+        expect((rejected[0].reason as any).code).toBe("OVERBOOKING_CONFLICT");
+      }
     });
   });
 });

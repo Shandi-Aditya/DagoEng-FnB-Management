@@ -92,9 +92,16 @@ export function isSlotPast(
     hour: "numeric",
     hour12: false,
   }).format(now);
+  const witaMinuteStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Makassar",
+    minute: "numeric",
+  }).format(now);
   const curH = parseInt(witaHourStr, 10);
+  const curM = parseInt(witaMinuteStr, 10);
   const slotH = parseHour(slotTime);
-  return slotH < curH;
+  if (slotH < curH) return true;
+  if (slotH === curH && curM > 15) return true;
+  return false;
 }
 
 export interface SlotAvailabilityResult {

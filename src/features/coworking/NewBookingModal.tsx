@@ -32,6 +32,7 @@ import {
   formatCoworkingTaxLabel,
   type DailyPreset,
 } from "./coworking-domain";
+import { checkSlotAvailability } from "@/features/pos/pos-coworking";
 
 export interface NewBookingModalProps {
   isOpen: boolean;
@@ -176,6 +177,11 @@ export function NewBookingModal({
       return;
     }
 
+    const maxCapacity =
+      selectedSpace.type === "HOT_DESK"
+        ? Math.max(1, selectedSpace.capacity || 8)
+        : 1;
+
     const conflict = checkCoworkingBookingConflict(bookings, {
       spaceId: selectedSpace.id,
       spaceName: selectedSpace.name,
@@ -184,6 +190,7 @@ export function NewBookingModal({
       endDate: pricing.computedEndDate,
       startTime: bookType === "HOURLY" ? `${bookStartTime} WITA` : "09:00 WITA",
       endTime: pricing.computedEndTime,
+      maxCapacity,
     });
     if (conflict.hasConflict) {
       setErrorMessage(`Booking ditolak: ${conflict.message}`);
@@ -389,18 +396,47 @@ export function NewBookingModal({
                   </span>
                 </div>
                 <div className="grid grid-cols-5 gap-1.5">
-                  {OPERATIONAL_TIME_SLOTS.map((slot) => (
-                    <Button
-                      key={slot}
-                      type="button"
-                      size="sm"
-                      variant={bookStartTime === slot ? "default" : "outline"}
-                      onClick={() => setBookStartTime(slot)}
-                      className="font-mono"
-                    >
-                      {slot}
-                    </Button>
-                  ))}
+                  {OPERATIONAL_TIME_SLOTS.map((slot) => {
+                    const startH = parseInt(slot.split(":")[0], 10);
+                    const availability = checkSlotAvailability({
+                      spaceId: selectedSpace.id,
+                      spaces,
+                      bookings,
+                      targetDate: bookStartDate,
+                      startHour: startH,
+                      durationHours: bookDurationHours,
+                      checkPast: true,
+                    });
+                    const isSelected = bookStartTime === slot;
+                    const isDisabled = !availability.isAvailable;
+
+                    return (
+                      <Button
+                        key={slot}
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? "default" : "outline"}
+                        disabled={isDisabled}
+                        onClick={() => setBookStartTime(slot)}
+                        className="font-mono flex flex-col h-auto py-1.5 px-1 items-center justify-center text-center gap-0.5"
+                      >
+                        <span className="font-semibold text-xs leading-none">{slot}</span>
+                        <span
+                          className={`text-xs leading-tight ${
+                            availability.isPast
+                              ? "text-muted-foreground font-normal"
+                              : !availability.isAvailable
+                              ? "text-destructive font-medium"
+                              : isSelected
+                              ? "text-primary-foreground/90 font-medium"
+                              : "text-muted-foreground font-normal"
+                          }`}
+                        >
+                          {availability.label}
+                        </span>
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

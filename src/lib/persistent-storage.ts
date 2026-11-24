@@ -320,19 +320,29 @@ export async function savePersistentShift(shift: ShiftRecord): Promise<boolean> 
 // 3. COWORKING BOOKINGS PERSISTENCE
 // ==========================================
 
-export async function getCoworkingBookings(): Promise<any[]> {
-  return readPersistentData<any[]>(FILE_COWORKING_BOOKINGS, []);
+export class CoworkingConflictError extends Error {
+  readonly code = "OVERBOOKING_CONFLICT";
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CoworkingConflictError";
+  }
+}
+
+export async function getCoworkingBookings(): Promise<CoworkingBooking[]> {
+  return readPersistentData<CoworkingBooking[]>(FILE_COWORKING_BOOKINGS, []);
 }
 
 export async function saveCoworkingBooking(
-  booking: any,
+  booking: CoworkingBooking | Record<string, unknown>,
   options?: {
     maxCapacity?: number;
     spaceName?: string;
     checkConflict?: boolean;
   }
 ): Promise<boolean> {
-  await mutatePersistentData<any[]>(FILE_COWORKING_BOOKINGS, [], (existing) => {
+  await mutatePersistentData<CoworkingBooking[]>(FILE_COWORKING_BOOKINGS, [], (existing) => {
     const isNonActiveStatus =
       booking.checkInStatus === "CANCELLED" ||
       booking.checkInStatus === "COMPLETED" ||
@@ -345,27 +355,24 @@ export async function saveCoworkingBooking(
       booking.spaceId
     ) {
       const conflict = checkCoworkingBookingConflict(
-        existing as CoworkingBooking[],
+        existing,
         {
-          id: booking.id,
-          spaceId: booking.spaceId,
-          spaceName: options?.spaceName || booking.spaceName,
-          bookingType: booking.bookingType || "HOURLY",
-          date: booking.date,
-          endDate: booking.endDate,
-          startTime: booking.startTime,
-          endTime: booking.endTime,
+          id: typeof booking.id === "string" ? booking.id : undefined,
+          spaceId: String(booking.spaceId),
+          spaceName: options?.spaceName || (typeof booking.spaceName === "string" ? booking.spaceName : undefined),
+          bookingType: typeof booking.bookingType === "string" ? (booking.bookingType as any) : "HOURLY",
+          date: String(booking.date),
+          endDate: typeof booking.endDate === "string" ? booking.endDate : undefined,
+          startTime: String(booking.startTime || "09:00"),
+          endTime: typeof booking.endTime === "string" ? booking.endTime : undefined,
           maxCapacity: options?.maxCapacity,
         }
       );
 
       if (conflict.hasConflict) {
-        const err = new Error(
+        throw new CoworkingConflictError(
           conflict.message || "Kapasitas slot tidak mencukupi atau sudah penuh."
         );
-        (err as any).code = "OVERBOOKING_CONFLICT";
-        (err as any).status = 409;
-        throw err;
       }
     }
 
@@ -376,10 +383,10 @@ export async function saveCoworkingBooking(
     );
     if (index >= 0) {
       const updated = [...existing];
-      updated[index] = booking;
+      updated[index] = booking as CoworkingBooking;
       return updated;
     }
-    return [booking, ...existing];
+    return [booking as CoworkingBooking, ...existing];
   });
   return true;
 }
