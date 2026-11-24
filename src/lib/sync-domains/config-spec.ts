@@ -1234,7 +1234,8 @@ export function maskTenantBankAccountNumber(raw?: string): string {
 
 export function applyTenantsCommand(
   current: TenantsDomainState,
-  command: TenantsCommand
+  command: TenantsCommand,
+  auth?: ServerAuthResult
 ): TenantsDomainState {
   switch (command.op) {
     case "UPSERT_CUSTOM_TENANT": {
@@ -1261,11 +1262,26 @@ export function applyTenantsCommand(
           ? existing.bankAccountNumber
           : command.profile.bankAccountNumber;
 
+      const isAdmin = auth ? isSuperAdminOrOrgOwner(auth) : true;
+      const safeProfile = isAdmin
+        ? command.profile
+        : {
+            ...command.profile,
+            status: existing?.status || "ACTIVE",
+            suspendedReason: existing?.suspendedReason,
+            lastSettlementDepositDate: existing?.lastSettlementDepositDate,
+            partnerType: existing?.partnerType || "EXTERNAL",
+            contractStartDate: existing?.contractStartDate,
+            contractEndDate: existing?.contractEndDate,
+            contractPksNumber: existing?.contractPksNumber,
+            contractPksFile: existing?.contractPksFile,
+          };
+
       const merged = buildTenantProfileWithDefaults(
         tid,
         {
           ...(existing || {}),
-          ...command.profile,
+          ...safeProfile,
           bankAccountNumber: preservedBankNumber,
         },
         current.customTenants
@@ -1333,21 +1349,29 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
         }
         const maskedProfiles: Record<string, TenantProfileData> = {};
         for (const [tenantId, profile] of Object.entries(state.profiles || {})) {
-          const canReadRawBank =
+          const isOwnTenant =
             isTenantOwner(auth) && Boolean(auth.tenantId) && auth.tenantId === tenantId;
-          maskedProfiles[tenantId] = canReadRawBank
+          maskedProfiles[tenantId] = isOwnTenant
             ? { ...profile }
             : {
                 ...profile,
                 bankAccountNumber: maskTenantBankAccountNumber(
                   profile.bankAccountNumber
                 ),
+                npwp: undefined,
+                contactPhone: profile.contactPhone ? "••••••••" : "",
+                contactEmail: undefined,
+                contactPerson: undefined,
+                contractPksNumber: undefined,
               };
         }
         return {
           customTenants: (state.customTenants || []).map((t) => ({ ...t })),
           profiles: maskedProfiles,
-          revenueSplits: state.revenueSplits ? { ...state.revenueSplits } : {},
+          revenueSplits:
+            isTenantOwner(auth) && auth.tenantId && state.revenueSplits?.[auth.tenantId]
+              ? { [auth.tenantId]: state.revenueSplits[auth.tenantId] }
+              : {},
         };
       },
     };
@@ -1425,8 +1449,8 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
       }
     }
   },
-  applyCommand(current, command) {
-    return applyTenantsCommand(current, command);
+  applyCommand(current, command, auth) {
+    return applyTenantsCommand(current, command, auth);
   },
 };
 

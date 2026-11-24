@@ -4583,7 +4583,9 @@ export async function createEventBooking(
       let confirmedSeats: string[] | undefined = undefined;
       if (event.hasSeatingChart) {
         const occupiedSeats = getEventOccupiedSeats(event.id, allBookings);
-        const tierSeats = selectedTier ? generateTierSeats(selectedTier) : undefined;
+        const tierSeats = selectedTier
+          ? generateTierSeats(selectedTier)
+          : generateTierSeats({ quota: getEventCapacity(event) });
         const seatValidation = validateSeatSelection({
           hasSeatingChart: true,
           selectedSeats: payload.selectedSeats,
@@ -6146,6 +6148,8 @@ export async function organizerResubmitEvent(
         collaborationPromotion: updates.collaborationPromotion !== undefined ? updates.collaborationPromotion : existing.collaborationPromotion,
         collaborationNotes: typeof updates.collaborationNotes === "string" ? sanitizeHtmlText(updates.collaborationNotes) : existing.collaborationNotes,
         proposedRevenueSplit: updatedProposedRevenueSplit,
+        hasSeatingChart: updates.hasSeatingChart !== undefined ? updates.hasSeatingChart : existing.hasSeatingChart,
+        seatingConfig: updates.seatingConfig !== undefined ? updates.seatingConfig : existing.seatingConfig,
         status: "PENDING", // Back to review queue
         revisionNotes: null, // Cleared on resubmission
         updatedAt: new Date().toISOString(),

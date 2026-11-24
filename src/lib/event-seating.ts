@@ -76,7 +76,7 @@ export function getEventOccupiedSeats(
 
   for (const b of bookings) {
     if (b.eventId !== eventId) continue;
-    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED") continue;
+    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED" || b.paymentStatus === "REFUNDED") continue;
     if (b.refundStatus === "APPROVED") continue;
 
     if (Array.isArray(b.selectedSeats)) {

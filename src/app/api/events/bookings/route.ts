@@ -67,6 +67,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (authRole === "CHECKIN_STAFF" && !eventId) {
+      return NextResponse.json(
+        { success: false, error: "Parameter eventId wajib disertakan untuk peran staf check-in." },
+        { status: 400 }
+      );
+    }
+
     const canViewUnmasked =
       allowUnmasked &&
       (authRole === "SUPER_ADMIN" || authRole === "OWNER" || authRole === "MANAGER");

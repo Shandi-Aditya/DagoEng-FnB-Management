@@ -285,4 +285,65 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
       expect(bakerySummary?.grossRevenue).toBe(50000);
     });
   });
+
+  describe("6. Keamanan RBAC Profil Mitra & Masking Sensitif (SEC-01 & SEC-02)", () => {
+    it("mencegah Tenant Owner membatalkan penangguhan (self-unsuspend) atau mengubah partnerType", () => {
+      const state = defaultTenantsState();
+      state.profiles["tenant-ks"] = {
+        ...state.profiles["tenant-ks"],
+        status: "SUSPENDED",
+        suspendedReason: "Menunggak setoran kas > 14 hari",
+        partnerType: "EXTERNAL",
+      };
+
+      const tenantOwnerAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        userId: "usr-ks-owner",
+        email: "owner@kopisenja.com",
+        name: "Owner Kopi Senja",
+        role: "OWNER",
+        scopeLevel: "TENANT",
+        tenantId: "tenant-ks",
+      };
+
+      const maliciousProfile: TenantProfileData = {
+        ...state.profiles["tenant-ks"],
+        status: "ACTIVE",
+        suspendedReason: undefined,
+        partnerType: "INTERNAL",
+      };
+
+      const updatedState = tenantsDomainSpec.applyCommand(
+        state,
+        {
+          op: "UPSERT_PROFILE",
+          profile: maliciousProfile,
+        },
+        tenantOwnerAuth
+      );
+
+      expect(updatedState.profiles["tenant-ks"].status).toBe("SUSPENDED");
+      expect(updatedState.profiles["tenant-ks"].suspendedReason).toBe("Menunggak setoran kas > 14 hari");
+      expect(updatedState.profiles["tenant-ks"].partnerType).toBe("EXTERNAL");
+    });
+
+    it("menyembunyikan NPWP, telepon PIC, dan revenue splits milik tenant lain dari publik/tenant non-admin", () => {
+      const state = defaultTenantsState();
+      state.profiles["tenant-ks"].npwp = "12.345.678.9-012.000";
+      state.profiles["tenant-ks"].contactPhone = "08123456789";
+
+      const unauthenticatedAuth: ServerAuthResult = {
+        isAuthenticated: false,
+        error: "Unauthenticated",
+      };
+
+      const decision = tenantsDomainSpec.authorizeRead(unauthenticatedAuth);
+      expect(decision.allowed).toBe(true);
+      const transformed = decision.transform!(state);
+
+      expect(transformed.profiles["tenant-ks"].npwp).toBeUndefined();
+      expect(transformed.profiles["tenant-ks"].contactPhone).toBe("••••••••");
+      expect(transformed.revenueSplits).toEqual({});
+    });
+  });
 });

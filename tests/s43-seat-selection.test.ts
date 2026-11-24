@@ -410,5 +410,36 @@ describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
       });
       expect(val.valid).toBe(true);
     });
+
+    it("tiket dengan status REFUNDED otomatis membebaskan kursi untuk pembeli lain", () => {
+      const eventId = "evt-refund-test";
+      const activeBookings: EventTicketOrder[] = [
+        {
+          id: "tkt-c1",
+          ticketCode: "DAGO-EVT-C1",
+          eventId,
+          eventTitle: "Event Refund Test",
+          eventDate: "2026-12-25T10:00:00Z",
+          eventLocation: "Main Hall",
+          guestName: "Pembeli Refund",
+          guestEmail: "refund@example.com",
+          guestPhone: "08123456789",
+          ticketCount: 1,
+          selectedSeats: ["C1"],
+          unitPrice: 50000,
+          totalPrice: 50000,
+          platformFeePercent: 20,
+          platformFeeAmount: 10000,
+          organizerRevenueAmount: 40000,
+          paymentMethod: "QRIS",
+          paymentStatus: "REFUNDED",
+          checkInStatus: "REGISTERED",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      expect(getEventOccupiedSeats(eventId, activeBookings).has("C1")).toBe(false);
+    });
   });
 });
