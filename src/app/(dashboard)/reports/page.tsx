@@ -21,6 +21,7 @@ import { ReportsPreviewTable } from "@/features/reports/ReportsPreviewTable";
 import { ReportsToolbar } from "@/features/reports/ReportsToolbar";
 import {
   buildReportData,
+  countVoidRefundDiscountEntries,
   extractAvailableReportCompanies,
   filterReportRows,
   getReportCategories,
@@ -103,7 +104,9 @@ export default function ReportsPage() {
     const outletAndDateOrRefundOrders = orders.filter(
       (o) =>
         (activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId) &&
-        (isDateInRange(o.createdAt) || (Boolean(o.refundedAt) && isDateInRange(o.refundedAt!)))
+        (isDateInRange(o.createdAt) ||
+          (Boolean(o.refundedAt) && isDateInRange(o.refundedAt!)) ||
+          (Boolean(o.voidedAt) && isDateInRange(o.voidedAt!)))
     );
     return tenantId
       ? projectOrdersForTenant(outletAndDateOrRefundOrders, tenantId)
@@ -203,6 +206,17 @@ export default function ReportsPage() {
     return tenantId ? rows.filter((s) => s.tenantId === tenantId).length : rows.length;
   }, [filteredOrders, tenantId]);
 
+  const voidRefundDiscountCount = useMemo(
+    () =>
+      countVoidRefundDiscountEntries({
+        orders: reconciliationOrders,
+        logs,
+        tenantId,
+        isTimestampInRange: isDateInRange,
+      }),
+    [reconciliationOrders, logs, tenantId, isDateInRange]
+  );
+
   const categories = getReportCategories({
     ordersCount: paidOrdersCount + paidCoworkingCount,
     tenantsCount: settlementRowsCount,
@@ -214,6 +228,7 @@ export default function ReportsPage() {
     canAccessEvents,
     discrepanciesCount:
       reconAnalysis.discrepancies.length + pendingCoworkingQrisCount + discountedCoworkingCount,
+    voidRefundDiscountCount,
     isTenantScope,
   });
 
@@ -237,16 +252,20 @@ export default function ReportsPage() {
   const currentReport = buildReportData({
     type: effectiveReportType,
     scopeName,
-    orders: effectiveReportType === "RECONCILIATION" ? reconciliationOrders : filteredOrders,
+    orders:
+      effectiveReportType === "RECONCILIATION" || effectiveReportType === "VOID_REFUND_DISCOUNT"
+        ? reconciliationOrders
+        : filteredOrders,
     products: filteredProducts,
     shifts: filteredShifts,
     ingredients: filteredMaterials,
-    logs: filteredFinanceLogs,
+    logs: effectiveReportType === "VOID_REFUND_DISCOUNT" ? logs : filteredFinanceLogs,
     promos: settings.promos,
     eventBookings: filteredEventBookings,
     coworkingBookings: filteredCoworkingBookings,
     tenantId,
     operatorName: user?.name,
+    isTimestampInRange: isDateInRange,
     companyName: selectedCompany,
   });
 
@@ -366,6 +385,7 @@ export default function ReportsPage() {
 
       <ReportsPreviewTable
         report={currentReport}
+        reportType={effectiveReportType}
         scopeName={scopeName}
         periodLabel={formattedRangeLabel}
         searchQuery={searchQuery}

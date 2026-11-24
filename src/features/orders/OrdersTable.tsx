@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList, CreditCard, FileText } from "lucide-react";
+import { ClipboardList, CreditCard, FileText, Undo2 } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
 import { EmptyState } from "@/components/app/empty-state";
@@ -38,6 +38,7 @@ interface OrdersTableProps {
   emptyMessage: { title: string; description: string };
   onViewInvoice?: (order: OrderRecord) => void;
   onOpenPayment: (order: OrderRecord) => void;
+  onOpenRefund?: (order: OrderRecord) => void;
   onSelectOrder: (order: OrderRecord) => void;
 }
 
@@ -68,6 +69,7 @@ export function OrdersTable({
   emptyMessage,
   onViewInvoice,
   onOpenPayment,
+  onOpenRefund,
   onSelectOrder,
 }: OrdersTableProps) {
   if (orders.length === 0) {
@@ -166,6 +168,18 @@ export function OrdersTable({
                         >
                           <CreditCard />
                           Bayar
+                        </Button>
+                      ) : o.paymentStatus === "PAID" && o.status !== "CANCELLED" && onOpenRefund ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenRefund(o);
+                          }}
+                        >
+                          <Undo2 />
+                          Refund
                         </Button>
                       ) : null}
                       {Boolean(o.corporateInfo) && onViewInvoice ? (

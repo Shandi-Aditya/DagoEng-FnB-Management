@@ -54,7 +54,12 @@ export async function GET(req: NextRequest) {
     const dagoShare = Number(searchParams.get("dago")) || (net - mitraShare);
 
     const initialCash = Number(searchParams.get("initialCash")) || 0;
-    const expectedCash = searchParams.get("expectedCash") !== null ? Number(searchParams.get("expectedCash")) : (initialCash + cash);
+    const refundAmount =
+      Number(searchParams.get("refundAmount") ?? searchParams.get("refund")) || 0;
+    const expectedCash =
+      searchParams.get("expectedCash") !== null
+        ? Number(searchParams.get("expectedCash"))
+        : initialCash + cash - refundAmount;
     const actualCash = searchParams.get("actualCash") !== null ? Number(searchParams.get("actualCash")) : expectedCash;
     const variance = searchParams.get("variance") !== null ? Number(searchParams.get("variance")) : (actualCash - expectedCash);
     const notes = escapeHtml(searchParams.get("notes") || "");
@@ -216,6 +221,10 @@ export async function GET(req: NextRequest) {
           <td>Penjualan Kas Tunai</td>
           <td class="text-right font-mono">${formatIDR(cash)}</td>
         </tr>
+        ${refundAmount > 0 ? `<tr>
+          <td>Refund tunai</td>
+          <td class="text-right font-mono" style="color: #dc2626;">-${formatIDR(refundAmount)}</td>
+        </tr>` : ""}
         <tr style="background: #f8fafc; font-weight: 600;">
           <td>Total Kas Seharusnya di Laci</td>
           <td class="text-right font-mono">${formatIDR(expectedCash)}</td>

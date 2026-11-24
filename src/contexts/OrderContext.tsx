@@ -48,6 +48,7 @@ function hasOrderStateChanged(prev: OrderRecord, next: OrderRecord): boolean {
     prev.total !== next.total ||
     Boolean(prev.bomDeducted) !== Boolean(next.bomDeducted) ||
     Boolean(prev.bomRestored) !== Boolean(next.bomRestored) ||
+    Boolean(prev.loyaltyPointsReversed) !== Boolean(next.loyaltyPointsReversed) ||
     (prev.statusHistory?.length ?? 0) !== (next.statusHistory?.length ?? 0) ||
     JSON.stringify(prev.tenantStatuses) !== JSON.stringify(next.tenantStatuses)
   );
@@ -107,7 +108,7 @@ export function resolvePostPaymentOrderStatus(currentStatus: OrderStatus): Order
 
 function preserveBomFlags(
   serverOrder: OrderRecord,
-  localOrder?: Pick<OrderRecord, "bomDeducted" | "bomRestored">
+  localOrder?: Pick<OrderRecord, "bomDeducted" | "bomRestored" | "loyaltyPointsReversed">
 ): OrderRecord {
   if (!localOrder) return serverOrder;
   return {
@@ -117,6 +118,9 @@ function preserveBomFlags(
       : {}),
     ...(serverOrder.bomRestored === undefined && localOrder.bomRestored
       ? { bomRestored: true }
+      : {}),
+    ...(serverOrder.loyaltyPointsReversed === undefined && localOrder.loyaltyPointsReversed
+      ? { loyaltyPointsReversed: true }
       : {}),
   };
 }
@@ -264,7 +268,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   const syncOrderToServer = async (
     order: OrderRecord,
     extraPayload: Record<string, unknown> = {},
-    rollbackSnapshot?: OrderRecord
+    rollbackSnapshot?: OrderRecord,
+    options?: { headers?: Record<string, string> }
   ): Promise<OrderActionServerSyncResult> => {
     if (typeof window === "undefined") return { synced: true, rejected: false };
 
@@ -279,6 +284,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         endpoint: targetEndpoint,
         method: "POST",
         payload: { id: order.id, order, ...extraPayload },
+        headers: options?.headers,
       });
 
       if (result.synced) {
@@ -863,14 +869,27 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     const syncRes = await syncOrderToServer(
       updatedOrder,
       params.supervisorPin ? { supervisorPin: params.supervisorPin } : {},
-      target
+      target,
+      { headers: { "x-require-supervisor-pin": "1" } }
     );
 
     if (syncRes.rejected) {
       return syncRes;
     }
 
-    const resolvedOrder = syncRes.order ?? updatedOrder;
+    const resolvedOrder: OrderRecord = syncRes.order
+      ? {
+          ...syncRes.order,
+          ...(syncRes.order.loyaltyPointsReversed ? { loyaltyPointsReversed: true } : {}),
+        }
+      : updatedOrder;
+    if (syncRes.order?.loyaltyPointsReversed) {
+      updateOrdersState((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, loyaltyPointsReversed: true } : o
+        )
+      );
+    }
     const shouldRestoreLocally = syncRes.order
       ? syncRes.order.bomRestored === true
       : shouldRestoreClientOrderBOM(target);
@@ -1114,6 +1133,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       outletName: targetOutletName,
       tableNumber: newOrderData.tableNumber || (newOrderData.orderType === "TAKEAWAY" ? "TAKEAWAY" : "-"),
       customerName: newOrderData.customerName || "Pelanggan Kasir",
+      loyaltyMemberId: newOrderData.loyaltyMemberId,
       orderType: newOrderData.orderType || "DINE_IN",
       status: "CONFIRMED",
       targetServiceMinutes: 10,
@@ -1121,6 +1141,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       subtotal: newOrderData.subtotal || 0,
       discount: newOrderData.discount,
       promoId: newOrderData.promoId,
+      discountSource: newOrderData.discountSource,
+      manualDiscountReason: newOrderData.manualDiscountReason,
+      manualDiscountApprovedBy: newOrderData.manualDiscountApprovedBy,
+      voucherTitle: newOrderData.voucherTitle,
       tax: finalTax,
       serviceCharge: finalService,
       taxRatePercent: newOrderData.taxRatePercent,

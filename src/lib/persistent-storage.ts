@@ -317,6 +317,22 @@ export async function savePersistentShift(shift: ShiftRecord): Promise<boolean> 
   return true;
 }
 
+export async function mutatePersistentShifts<R>(
+  mutator: (
+    current: ShiftRecord[]
+  ) => Promise<{ nextShifts: ShiftRecord[]; result: R }> | { nextShifts: ShiftRecord[]; result: R }
+): Promise<R> {
+  return withFileLock(FILE_SHIFTS, async () => {
+    const raw = await readUnlocked<ShiftRecord[]>(FILE_SHIFTS, []);
+    const current = Array.isArray(raw) ? raw : [];
+    const { nextShifts, result } = await mutator(current);
+    if (nextShifts !== current) {
+      await writeUnlocked(FILE_SHIFTS, nextShifts);
+    }
+    return result;
+  });
+}
+
 // ==========================================
 // 3. COWORKING BOOKINGS PERSISTENCE
 // ==========================================
@@ -511,6 +527,7 @@ export function upsertOrderInList(
       ...order,
       orderNumber: resolvedOrderNumber,
       ...(prev.loyaltyPointsCredited ? { loyaltyPointsCredited: true } : {}),
+      ...(prev.loyaltyPointsReversed ? { loyaltyPointsReversed: true } : {}),
       ...(prev.bomDeducted ? { bomDeducted: true } : {}),
       ...(prev.bomRestored ? { bomRestored: true } : {}),
     };
@@ -1063,6 +1080,36 @@ export async function savePersistentLoyaltyMember(
     }
   );
   return saved;
+}
+
+export async function mutatePersistentLoyaltyMembers<R>(
+  tierConfig: PlatformSettings["loyaltyTiers"] | undefined,
+  mutator: (
+    current: LoyaltyMember[]
+  ) =>
+    | Promise<{ nextMembers: LoyaltyMember[]; result: R }>
+    | { nextMembers: LoyaltyMember[]; result: R }
+): Promise<R> {
+  const effectiveTierConfig = tierConfig ?? DEFAULT_PLATFORM_SETTINGS.loyaltyTiers;
+  return withFileLock(FILE_LOYALTY_MEMBERS, async () => {
+    const raw = await readUnlockedOrSeed<LoyaltyMember[]>(
+      FILE_LOYALTY_MEMBERS,
+      () => [...INITIAL_MEMBERS]
+    );
+    const current = (Array.isArray(raw) ? raw : [...INITIAL_MEMBERS]).map((m) => ({
+      ...m,
+      tier: resolveAuthoritativeMemberTier(m, effectiveTierConfig),
+    }));
+    const { nextMembers, result } = await mutator(current);
+    if (nextMembers !== current) {
+      const normalizedNext = nextMembers.map((m) => ({
+        ...m,
+        tier: resolveAuthoritativeMemberTier(m, effectiveTierConfig),
+      }));
+      await writeUnlocked(FILE_LOYALTY_MEMBERS, normalizedNext);
+    }
+    return result;
+  });
 }
 
 export async function deletePersistentLoyaltyMember(id: string): Promise<boolean> {

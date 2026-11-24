@@ -62,6 +62,8 @@ export function formatReportHeaderBadge(type: ReportType): string {
       return "Laporan Acara";
     case "RECONCILIATION":
       return "Laporan Rekonsiliasi";
+    case "VOID_REFUND_DISCOUNT":
+      return "Laporan void & refund";
     default:
       return "Laporan Sistem";
   }

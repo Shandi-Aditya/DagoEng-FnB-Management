@@ -40,6 +40,12 @@ import type { OrderItemRecord, OrderRecord } from "@/types/order";
 import type { MasterProduct } from "@/types/product";
 import type { ShiftRecord } from "@/types/shift";
 import { analyzeTransactionDiscrepancies } from "./reconciliation-domain";
+import {
+  buildVoidRefundDiscountReport,
+  countVoidRefundDiscountEntries,
+} from "./void-refund-discount-domain";
+
+export { buildVoidRefundDiscountReport, countVoidRefundDiscountEntries };
 
 export type ReportType =
   | "SALES"
@@ -49,7 +55,8 @@ export type ReportType =
   | "FINANCE_AUDIT"
   | "SETTLEMENT"
   | "EVENTS"
-  | "RECONCILIATION";
+  | "RECONCILIATION"
+  | "VOID_REFUND_DISCOUNT";
 
 export function getReportTypeBadgeTone(type: ReportType): StatusTone {
   switch (type) {
@@ -61,6 +68,7 @@ export function getReportTypeBadgeTone(type: ReportType): StatusTone {
     case "EVENTS":
     case "INVENTORY":
     case "RECONCILIATION":
+    case "VOID_REFUND_DISCOUNT":
       return "warning";
     case "CLOSING":
     case "FINANCE_AUDIT":
@@ -142,7 +150,8 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   ORDER_CREATED: "Pesanan dibuat",
   ORDER_CANCELLED: "Pesanan dibatalkan",
   VOID_ORDER: "Pembatalan pesanan",
-  REFUND_ORDER: "Pengembalian dana",
+  REFUND_ORDER: "Refund pesanan",
+  APPLY_DISCOUNT: "Diskon manual",
   LEASE_CREATED: "Kontrak dibuat",
   LEASE_PAYMENT: "Pembayaran sewa",
   LEASE_STATUS_CHANGED: "Ubah status kontrak",
@@ -322,6 +331,7 @@ export interface BuildReportParams {
   operatorName?: string;
   settlementBasis?: SettlementBasisMode;
   customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
+  isTimestampInRange?: (isoTimestamp: string) => boolean;
   companyName?: string;
 }
 
@@ -345,8 +355,11 @@ export function getReportCategories(params: {
   paidEventsCount?: number;
   canAccessEvents?: boolean;
   discrepanciesCount?: number;
+  voidRefundDiscountCount?: number;
   isTenantScope?: boolean;
 }): ReportCategoryMeta[] {
+  const adjustmentCount = params.voidRefundDiscountCount ?? 0;
+
   if (params.isTenantScope) {
     return [
       {
@@ -367,6 +380,12 @@ export function getReportCategories(params: {
         count: `${params.productsCount} Menu`,
         rawCount: params.productsCount,
       },
+      {
+        id: "VOID_REFUND_DISCOUNT",
+        label: "Void, refund & diskon",
+        count: `${adjustmentCount} Kejadian`,
+        rawCount: adjustmentCount,
+      },
     ];
   }
 
@@ -382,6 +401,12 @@ export function getReportCategories(params: {
       label: "Rekonsiliasi & selisih",
       count: `${params.discrepanciesCount ?? 0} Selisih`,
       rawCount: params.discrepanciesCount ?? 0,
+    },
+    {
+      id: "VOID_REFUND_DISCOUNT",
+      label: "Void, refund & diskon",
+      count: `${adjustmentCount} Kejadian`,
+      rawCount: adjustmentCount,
     },
     {
       id: "SETTLEMENT",
@@ -506,6 +531,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     operatorName,
     settlementBasis,
     customSplits,
+    isTimestampInRange,
     companyName,
   } = params;
 
@@ -1276,6 +1302,16 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           },
         ],
       };
+    }
+
+    case "VOID_REFUND_DISCOUNT": {
+      return buildVoidRefundDiscountReport({
+        orders,
+        logs,
+        scopeName,
+        tenantId,
+        isTimestampInRange,
+      });
     }
   }
 }

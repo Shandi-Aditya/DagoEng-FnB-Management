@@ -5,6 +5,7 @@ import { FileText, Search, ShieldCheck } from "lucide-react";
 import { DataPagination } from "@/components/app/data-pagination";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatCard } from "@/components/app/stat-card";
+import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -22,11 +23,19 @@ import {
   filterReportRows,
   isNumericReportCell,
   type ReportDataset,
+  type ReportType,
 } from "@/features/reports/reports-domain";
 import { cn } from "@/lib/utils";
 
+function adjustmentKindTone(value: string): StatusTone {
+  if (value === "Refund") return "destructive";
+  if (value === "Diskon manual") return "warning";
+  return "neutral";
+}
+
 export interface ReportsPreviewTableProps {
   report: ReportDataset;
+  reportType?: ReportType;
   scopeName: string;
   periodLabel: string;
   searchQuery: string;
@@ -44,6 +53,7 @@ export interface ReportsPreviewTableProps {
 
 export function ReportsPreviewTable({
   report,
+  reportType,
   scopeName,
   periodLabel,
   searchQuery,
@@ -172,6 +182,10 @@ export function ReportsPreviewTable({
                         const cellStr = String(cell);
                         const isNegative = isNumeric && (cellStr.startsWith("-Rp") || (cellStr.startsWith("-") && cellStr !== "-"));
                         const isPositiveVariance = isNumeric && (cellStr.startsWith("+Rp") || cellStr.startsWith("+"));
+                        const isAdjustmentBadgeCol =
+                          (reportType === "VOID_REFUND_DISCOUNT" ||
+                            report.tableHeaders[2] === "Jenis koreksi") &&
+                          cIdx === 2;
                         return (
                           <TableCell
                             key={cIdx}
@@ -188,7 +202,13 @@ export function ReportsPreviewTable({
                                 : "max-w-56 whitespace-normal text-muted-foreground"
                             )}
                           >
-                            {cell}
+                            {isAdjustmentBadgeCol ? (
+                              <StatusBadge status={adjustmentKindTone(cellStr)}>
+                                {cellStr}
+                              </StatusBadge>
+                            ) : (
+                              cell
+                            )}
                           </TableCell>
                         );
                       })}

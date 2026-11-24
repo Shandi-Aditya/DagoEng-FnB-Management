@@ -1,4 +1,5 @@
 import type { EmployeeProfile, ShiftRecord, ShiftStatus } from "@/types/shift";
+import type { OrderRecord } from "@/types/order";
 import { formatWitaDateTime, toWitaDateKey } from "@/contexts/DateFilterContext";
 import type { StatusTone } from "@/components/app/status-badge";
 import type { ClosingReportData, TenantBreakdownItem } from "@/features/pos/DailyClosingPDFModal";
@@ -385,11 +386,12 @@ export function buildEmployeeExportData(
 
 export function buildClosingReportData(
   shift: ShiftRecord | null,
-  orders: any[],
+  orders: readonly OrderRecord[],
   outletName: string,
   cashierName: string
 ): ClosingReportData {
-  const closingTaxAgg = aggregateShiftOrdersTaxAndRevenue(orders, shift);
+  const mutableOrders = [...orders];
+  const closingTaxAgg = aggregateShiftOrdersTaxAndRevenue(mutableOrders, shift);
   const shiftGrossSales =
     (shift?.cashSales || 0) + (shift?.nonCashSales || 0) ||
     closingTaxAgg.totalRevenue;
@@ -406,7 +408,7 @@ export function buildClosingReportData(
   const parsedEndMs = rawEnd ? Date.parse(rawEnd) : NaN;
   const endMs = !isNaN(parsedEndMs) && parsedEndMs > 0 ? parsedEndMs : Infinity;
 
-  const shiftOrders = orders.filter((order) => {
+  const shiftOrders = mutableOrders.filter((order) => {
     if (shift?.outletId && shift.outletId !== "ALL" && order.outletId && order.outletId !== shift.outletId) {
       return false;
     }
@@ -419,7 +421,7 @@ export function buildClosingReportData(
     return true;
   });
 
-  const settlements = calculateSettlement(shift ? shiftOrders : orders);
+  const settlements = calculateSettlement(shift ? shiftOrders : mutableOrders);
   const tenantBreakdowns: TenantBreakdownItem[] = settlements
     .filter((s) => s.tenantId !== "DAGO_HUB")
     .map((s) => ({
@@ -493,6 +495,7 @@ export function buildClosingReportData(
     dagoQrisShare,
     tenantCashShare,
     dagoCashShare,
+    refundAmount: shift?.refundAmount ?? 0,
     expectedCash,
     actualCashEnding,
     cashDifference,

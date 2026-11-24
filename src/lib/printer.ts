@@ -930,8 +930,14 @@ export async function dispatchPrintJob(
 
       setTimeout(() => {
         try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
+          const isAutomatedOrSilent =
+            Boolean(options?.isSilent) ||
+            (typeof navigator !== "undefined" && Boolean(navigator.webdriver));
+
+          if (!isAutomatedOrSilent) {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }
           // Catat sebagai SENT_TO_SPOOLER (jujur, tidak mengklaim fisik sudah keluar)
           resolve({ status: "SENT_TO_SPOOLER" });
         } catch (printErr: any) {

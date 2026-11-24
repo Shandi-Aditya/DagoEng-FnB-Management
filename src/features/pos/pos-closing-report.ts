@@ -81,7 +81,8 @@ export function formatClosingVerificationShortHash(hash?: string): string {
 export function buildClosingReportPdfUrl(report: ClosingReportData): string {
   const initialCash = report.initialCash ?? 0;
   const cashSales = report.totalCashSales ?? 0;
-  const expectedCash = report.expectedCash ?? (initialCash + cashSales);
+  const refundAmount = report.refundAmount ?? 0;
+  const expectedCash = report.expectedCash ?? (initialCash + cashSales - refundAmount);
   const actualCash = report.actualCashEnding ?? 0;
   const variance = report.cashDifference ?? (actualCash - expectedCash);
 
@@ -101,6 +102,7 @@ export function buildClosingReportPdfUrl(report: ClosingReportData): string {
     mitra: String(report.tenantTotalShare),
     dago: String(report.dagoTotalShare),
     initialCash: String(initialCash),
+    refundAmount: String(refundAmount),
     expectedCash: String(expectedCash),
     actualCash: String(actualCash),
     variance: String(variance),

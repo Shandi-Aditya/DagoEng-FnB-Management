@@ -70,6 +70,7 @@ interface LoyaltyContextType {
     relatedTransactionId?: string
   ) => boolean;
   manualOverrideTier: (memberId: string, newTier: LoyaltyTier, reason: string) => void;
+  refreshMembers: () => Promise<void>;
   resetLoyaltyData: () => void;
 }
 
@@ -145,6 +146,30 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         identityNo: "",
       };
     });
+  };
+
+  const refreshMembers = async (): Promise<void> => {
+    if (typeof window === "undefined") return;
+    await flushOutbox().catch(() => {});
+    try {
+      const res = await fetch("/api/loyalty/members");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && Array.isArray(data.members)) {
+        commitMembers((prev) =>
+          normalizeLoadedMembers(
+            reconcileCollectionWithOutbox<LoyaltyMember>({
+              serverItems: data.members,
+              localItems: prev,
+              endpoint: "/api/loyalty/members",
+              getId: (m) => m.id,
+            })
+          )
+        );
+      }
+    } catch {
+      commitMembers((prev) => normalizeLoadedMembers(prev));
+    }
   };
 
   useEffect(() => {
@@ -609,10 +634,10 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const revTxId = `rev-${transactionId}`;
     const revRedeemTxId = `rev-redeem-${transactionId}`;
     const alreadyReversedEarn = target.pointHistory.some(
-      (ptx) => ptx.relatedTransactionId === revTxId
+      (ptx) => ptx.id === revTxId || ptx.relatedTransactionId === revTxId
     );
     const alreadyReversedRedeem = target.pointHistory.some(
-      (ptx) => ptx.relatedTransactionId === revRedeemTxId
+      (ptx) => ptx.id === revRedeemTxId || ptx.relatedTransactionId === revRedeemTxId
     );
 
     const canReverseEarn = Boolean(earnTx && !alreadyReversedEarn);
@@ -629,7 +654,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const appendedEntries: LoyaltyPointTransaction[] = [];
     if (canReverseRedeem && redeemTx) {
       appendedEntries.push({
-        id: `ptx-${Date.now()}-redeem-rev`,
+        id: revRedeemTxId,
         memberId,
         type: "ADJUSTMENT",
         points: pointsToRestore,
@@ -643,7 +668,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     }
     if (canReverseEarn && earnTx) {
       appendedEntries.push({
-        id: `ptx-${Date.now()}-earn-rev`,
+        id: revTxId,
         memberId,
         type: "ADJUSTMENT",
         points: -pointsToDeduct,
@@ -899,6 +924,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         reverseTransactionPoints,
         redeemPoints,
         manualOverrideTier,
+        refreshMembers,
         resetLoyaltyData,
       }}
     >
