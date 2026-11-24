@@ -38,11 +38,13 @@ export const S34_TARGETS = {
     "evt-1794204831538-jjg02",
     "evt-1793515068148-7xazf",
     "evt-1793513163350-b87do",
+    "evt-1793810790340-73pia",
   ]),
   testTicketCodes: new Set([
     "DAGO-EVT-14704",
     "DAGO-EVT-91979",
     "DAGO-EVT-13394",
+    "DAGO-EVT-96354",
   ]),
   testTitleExact: new Set(["test", "tes cek"]),
   testTitleKeywords: [
@@ -52,6 +54,7 @@ export const S34_TARGETS = {
     "1234567890sdfgfg",
     "sdhghfdsdsghjhghfgd",
     "cek sans 1",
+    "sdfghjkl;;;;",
   ],
 };
 
@@ -140,12 +143,15 @@ export function transformOrders(
 /**
  * 3. Transform Events:
  * Arsipkan event uji coba dan selesaikan usulan bagi hasil pending dengan status legal REJECTED.
+ * Menjamin event riil non-uji tidak ikut tertolak usulan bagi hasilnya.
  */
 export function transformEvents(
   events: CommunityEvent[],
   now = new Date().toISOString()
-): { items: CommunityEvent[]; count: number } {
+): { items: CommunityEvent[]; count: number; archivedEventIds: Set<string> } {
   let count = 0;
+  const archivedEventIds = new Set<string>();
+
   const items = events.map((e) => {
     let updated = { ...e };
     let modified = false;
@@ -156,22 +162,48 @@ export function transformEvents(
       S34_TARGETS.testTitleExact.has(titleLower) ||
       S34_TARGETS.testTitleKeywords.some((kw) => titleLower.includes(kw));
 
-    if (isTargetTest && updated.status !== "ARCHIVED") {
-      updated.status = "ARCHIVED";
-      modified = true;
-    } else if (updated.status === "PENDING" && isTargetTest) {
-      updated.status = "ARCHIVED";
-      modified = true;
-    }
+    if (isTargetTest) {
+      archivedEventIds.add(e.id);
+      if (updated.status !== "ARCHIVED") {
+        updated.status = "ARCHIVED";
+        modified = true;
+      }
+      if (updated.isTestData !== true) {
+        updated.isTestData = true;
+        modified = true;
+      }
 
-    if (updated.proposedRevenueSplit && updated.proposedRevenueSplit.status === "PENDING") {
-      // Gunakan status legal REJECTED pada ProposedRevenueSplit
-      updated.proposedRevenueSplit = {
-        ...updated.proposedRevenueSplit,
-        status: "REJECTED",
-        reason: "Dibersihkan via Task S-34 (Usulan uji coba diabaikan)",
-      };
-      modified = true;
+      // Tolak usulan bagi hasil HANYA untuk event uji coba dengan status legal REJECTED
+      if (
+        updated.proposedRevenueSplit &&
+        (updated.proposedRevenueSplit.status === "PENDING" ||
+          (updated.proposedRevenueSplit.status as string) === "ARCHIVED")
+      ) {
+        updated.proposedRevenueSplit = {
+          ...updated.proposedRevenueSplit,
+          status: "REJECTED",
+          reason: "Dibersihkan via Task S-34 (Usulan uji coba diabaikan)",
+        };
+        modified = true;
+      }
+    } else {
+      // Pulihkan usulan bagi hasil event nyata jika pernah tertolak/terarsip keliru oleh skrip lama
+      if (
+        updated.proposedRevenueSplit &&
+        (updated.proposedRevenueSplit.status === "REJECTED" ||
+          (updated.proposedRevenueSplit.status as string) === "ARCHIVED") &&
+        (updated.proposedRevenueSplit.reason?.includes("Task S-34") ||
+          (updated.proposedRevenueSplit as any).resolutionNotes?.includes("Task S-34"))
+      ) {
+        const cleanedSplit = { ...updated.proposedRevenueSplit };
+        delete (cleanedSplit as any).resolutionNotes;
+        updated.proposedRevenueSplit = {
+          ...cleanedSplit,
+          status: "PENDING",
+          reason: "Usulan bagi hasil awal saat pengajuan event",
+        };
+        modified = true;
+      }
     }
 
     if (modified) {
@@ -181,20 +213,38 @@ export function transformEvents(
     }
     return e;
   });
-  return { items, count };
+  return { items, count, archivedEventIds };
 }
 
 /**
  * 4. Transform Bookings:
- * Batalkan tiket uji internal secara terarah.
+ * Batalkan tiket uji internal secara terarah berdasarkan kode tiket maupun event ID yang diarsipkan.
  */
 export function transformBookings(
   bookings: EventTicketOrder[],
-  now = new Date().toISOString()
+  archivedTestEventIds?: Set<string> | string,
+  now?: string
 ): { items: EventTicketOrder[]; count: number } {
   let count = 0;
+  const targetEventIds = new Set<string>(S34_TARGETS.testEventIds);
+  let timestamp = new Date().toISOString();
+
+  if (archivedTestEventIds instanceof Set) {
+    for (const id of archivedTestEventIds) {
+      targetEventIds.add(id);
+    }
+    if (typeof now === "string") {
+      timestamp = now;
+    }
+  } else if (typeof archivedTestEventIds === "string") {
+    timestamp = archivedTestEventIds;
+  }
+
   const items = bookings.map((b) => {
-    if (!S34_TARGETS.testTicketCodes.has(b.ticketCode) || b.paymentStatus === "CANCELLED") {
+    const isTargetTicket = S34_TARGETS.testTicketCodes.has(b.ticketCode);
+    const isBelongsToTestEvent = Boolean(b.eventId && targetEventIds.has(b.eventId));
+
+    if ((!isTargetTicket && !isBelongsToTestEvent) || b.paymentStatus === "CANCELLED") {
       return b;
     }
 
@@ -202,15 +252,25 @@ export function transformBookings(
     return {
       ...b,
       paymentStatus: "CANCELLED" as const,
-      paymentRejectionReason: "Tiket uji coba internal dibatalkan (Task S-34)",
-      updatedAt: now,
+      paymentRejectionReason: isBelongsToTestEvent
+        ? "Tiket pada event uji coba yang diarsipkan dibatalkan (Task S-34)"
+        : "Tiket uji coba internal dibatalkan (Task S-34)",
+      updatedAt: timestamp,
     };
   });
   return { items, count };
 }
 
-export async function runCleanup() {
+export async function runCleanup(options?: { apply?: boolean }) {
+  const isApply = options?.apply ?? process.argv.includes("--apply");
+  const isDryRun = !isApply;
+
   console.log("=== MEMULAI PEMBERSIHAN DATA UJI & REKONSILIASI SHIFT (S-34) ===");
+  if (isDryRun) {
+    console.log("[DRY-RUN] Mode simulasi aktif (tanpa --apply). Tidak ada penulisan ke Database maupun Disk.");
+  } else {
+    console.log("[APPLY] Mode eksekusi aktif (--apply). Perubahan akan disimpan ke Database dan Disk.");
+  }
 
   const [shiftRow, orderRow, eventRow, bookingRow] = await Promise.all([
     prisma.systemSetting.findUnique({ where: { key: "STORAGE_shifts.json" } }).catch(() => null),
@@ -246,12 +306,27 @@ export async function runCleanup() {
   const shiftsRes = transformShifts(shiftsInput);
   const ordersRes = transformOrders(ordersInput);
   const eventsRes = transformEvents(eventsInput);
-  const bookingsRes = transformBookings(bookingsInput);
+  const bookingsRes = transformBookings(bookingsInput, eventsRes.archivedEventIds);
 
   console.log(`[Shifts] Direkonsiliasi/ditutup: ${shiftsRes.count} shift.`);
   console.log(`[KDS Orders] Pesanan uji diselesaikan: ${ordersRes.count} pesanan.`);
   console.log(`[Events] Event/notifikasi uji dibersihkan: ${eventsRes.count} entri.`);
   console.log(`[Bookings] Tiket uji dibatalkan: ${bookingsRes.count} tiket.`);
+
+  if (isDryRun) {
+    console.log("[DRY-RUN] Ringkasan target yang akan diubah:");
+    console.log(`- Shift IDs: ${shiftsRes.items.filter((s) => s.status === "CLOSED" && (S34_TARGETS.shiftIds.has(s.id) || s.closingNotes?.includes("S-34"))).map((s) => s.id).join(", ")}`);
+    console.log(`- Event IDs diarsipkan: ${Array.from(eventsRes.archivedEventIds).join(", ")}`);
+    console.log(`- Tiket dibatalkan: ${bookingsRes.items.filter((b) => b.paymentStatus === "CANCELLED" && b.paymentRejectionReason?.includes("S-34")).map((b) => b.ticketCode).join(", ")}`);
+    console.log("[DRY-RUN] Selesai simulasi tanpa penulisan data. Berikan argumen --apply untuk menerapkan.");
+    return {
+      shiftsCount: shiftsRes.count,
+      ordersCount: ordersRes.count,
+      eventsCount: eventsRes.count,
+      bookingsCount: bookingsRes.count,
+      dryRun: true,
+    };
+  }
 
   const filesToWrite = [
     { key: "STORAGE_shifts.json", file: "shifts.json", data: shiftsRes.items },
@@ -260,27 +335,33 @@ export async function runCleanup() {
     { key: "STORAGE_event_bookings.json", file: "event_bookings.json", data: bookingsRes.items },
   ];
 
-  // Eksekusi atomik ke database via transaction
-  try {
-    await prisma.$transaction(
-      filesToWrite.map((f) =>
-        prisma.systemSetting.upsert({
-          where: { key: f.key },
-          create: {
-            key: f.key,
-            value: JSON.stringify(f.data, null, 2),
-            description: `Persistent storage for ${f.file}`,
-          },
-          update: {
-            value: JSON.stringify(f.data, null, 2),
-            updatedAt: new Date(),
-          },
-        })
-      )
-    );
-    console.log("[Database] Seluruh data berhasil di-upsert secara atomik ke Neon DB.");
-  } catch (dbErr) {
-    console.error("[Database] Gagal update transaksi DB (melanjutkan tulis ke file lokal):", dbErr);
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== "");
+  if (hasDatabaseUrl) {
+    try {
+      await prisma.$transaction(
+        filesToWrite.map((f) =>
+          prisma.systemSetting.upsert({
+            where: { key: f.key },
+            create: {
+              key: f.key,
+              value: JSON.stringify(f.data, null, 2),
+              description: `Persistent storage for ${f.file}`,
+            },
+            update: {
+              value: JSON.stringify(f.data, null, 2),
+              updatedAt: new Date(),
+            },
+          })
+        )
+      );
+      console.log("[Database] Seluruh data berhasil di-upsert secara atomik ke Neon DB.");
+    } catch (dbErr) {
+      console.error("[Database] Gagal update transaksi DB:", dbErr);
+      process.exitCode = 1;
+      throw dbErr;
+    }
+  } else {
+    console.log("[Database] DATABASE_URL tidak diatur / kosong, melewati upsert database.");
   }
 
   // Sinkronisasi ke disk
@@ -294,6 +375,13 @@ export async function runCleanup() {
   }
 
   console.log("=== PEMBERSIHAN DATA UJI SELESAI SECARA SUKSES & ATOMIK ===");
+  return {
+    shiftsCount: shiftsRes.count,
+    ordersCount: ordersRes.count,
+    eventsCount: eventsRes.count,
+    bookingsCount: bookingsRes.count,
+    dryRun: false,
+  };
 }
 
 if (process.env.NODE_ENV !== "test") {

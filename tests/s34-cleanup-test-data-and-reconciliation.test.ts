@@ -4,6 +4,7 @@ import {
   transformOrders,
   transformEvents,
   transformBookings,
+  runCleanup,
   S34_TARGETS,
 } from "../scripts/reconcile-and-cleanup-s34";
 import type { ShiftRecord } from "@/types/shift";
@@ -104,6 +105,7 @@ describe("TASK S-34 — Clean Test Data and Shift Reconciliation (Behavioral Uni
         paymentStatus: "PAID",
         targetServiceMinutes: 15,
         statusHistory: [],
+        createdAt: "2026-11-20T08:00:00.000Z",
       },
       {
         id: "ord-real-1",
@@ -122,6 +124,7 @@ describe("TASK S-34 — Clean Test Data and Shift Reconciliation (Behavioral Uni
         paymentStatus: "PAID",
         targetServiceMinutes: 15,
         statusHistory: [],
+        createdAt: "2026-11-20T08:00:00.000Z",
       },
     ];
 
@@ -138,7 +141,7 @@ describe("TASK S-34 — Clean Test Data and Shift Reconciliation (Behavioral Uni
     expect(realOrd?.status).toBe("COOKING");
   });
 
-  it("3. Event uji dan usulan bagi hasil pending dibersihkan dengan status legal REJECTED", () => {
+  it("3. Event uji dan usulan bagi hasil pending dibersihkan dengan status legal REJECTED, sementara event riil tetap PENDING", () => {
     const mockEvents: CommunityEvent[] = [
       {
         id: "evt-pilates-gift-voucher",
@@ -181,46 +184,90 @@ describe("TASK S-34 — Clean Test Data and Shift Reconciliation (Behavioral Uni
         organizerPhone: "08198765432",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        proposedRevenueSplit: {
+          organizerPercent: 80,
+          platformPercent: 20,
+          proposedBy: "ORGANIZER",
+          status: "PENDING",
+        },
       },
     ];
 
-    const { items, count } = transformEvents(mockEvents);
+    const { items, count, archivedEventIds } = transformEvents(mockEvents);
     expect(count).toBe(1);
+    expect(archivedEventIds.has("evt-pilates-gift-voucher")).toBe(true);
+    expect(archivedEventIds.has("evt-real-community")).toBe(false);
 
     const testEvt = items.find((e) => e.id === "evt-pilates-gift-voucher");
     expect(testEvt?.status).toBe("ARCHIVED");
+    expect(testEvt?.isTestData).toBe(true);
     // Status usulan adalah REJECTED (legal enum)
     expect(testEvt?.proposedRevenueSplit?.status).toBe("REJECTED");
 
-    // Event riil tidak diarsipkan
+    // Event riil tidak diarsipkan dan usulan bagi hasilnya tetap PENDING
     const realEvt = items.find((e) => e.id === "evt-real-community");
     expect(realEvt?.status).toBe("APPROVED");
+    expect(realEvt?.isTestData).toBeUndefined();
+    expect(realEvt?.proposedRevenueSplit?.status).toBe("PENDING");
   });
 
-  it("4. Tiket uji target dibatalkan dengan tepat", () => {
+  it("4. Tiket uji target dan tiket pada event yang diarsipkan dibatalkan dengan tepat", () => {
     const mockBookings: EventTicketOrder[] = [
       {
         id: "bkg-1",
         ticketCode: "DAGO-EVT-14704",
         paymentStatus: "PAID",
-      } as EventTicketOrder,
+      } as unknown as EventTicketOrder,
       {
         id: "bkg-2",
         ticketCode: "DAGO-EVT-VALID-999",
         paymentStatus: "PAID",
-      } as EventTicketOrder,
+      } as unknown as EventTicketOrder,
+      {
+        id: "bkg-3",
+        ticketCode: "DAGO-EVT-96354",
+        eventId: "evt-1793935470095-8vpsm",
+        paymentStatus: "PAID",
+      } as unknown as EventTicketOrder,
+      {
+        id: "bkg-4",
+        ticketCode: "DAGO-EVT-85611",
+        eventId: "evt-pilates-gift-voucher",
+        paymentStatus: "CHECKED_IN",
+      } as unknown as EventTicketOrder,
+      {
+        id: "bkg-5",
+        ticketCode: "DAGO-EVT-REAL-123",
+        eventId: "evt-real-community",
+        paymentStatus: "PAID",
+      } as unknown as EventTicketOrder,
     ];
 
-    const { items, count } = transformBookings(mockBookings);
-    expect(count).toBe(1);
+    const archivedEventIds = new Set(["evt-1793935470095-8vpsm", "evt-pilates-gift-voucher"]);
+    const { items, count } = transformBookings(mockBookings, archivedEventIds);
+    expect(count).toBe(3);
     expect(items.find((b) => b.ticketCode === "DAGO-EVT-14704")?.paymentStatus).toBe("CANCELLED");
+    expect(items.find((b) => b.ticketCode === "DAGO-EVT-96354")?.paymentStatus).toBe("CANCELLED");
+    expect(items.find((b) => b.ticketCode === "DAGO-EVT-85611")?.paymentStatus).toBe("CANCELLED");
     expect(items.find((b) => b.ticketCode === "DAGO-EVT-VALID-999")?.paymentStatus).toBe("PAID");
+    expect(items.find((b) => b.ticketCode === "DAGO-EVT-REAL-123")?.paymentStatus).toBe("PAID");
   });
 
   it("5. Target daftar shift dan tiket S-34 terkonfigurasi lengkap", () => {
     expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-14704")).toBe(true);
     expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-91979")).toBe(true);
     expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-13394")).toBe(true);
+    expect(S34_TARGETS.testTicketCodes.has("DAGO-EVT-96354")).toBe(true);
+    expect(S34_TARGETS.testEventIds.has("evt-1793810790340-73pia")).toBe(true);
     expect(S34_TARGETS.shiftIds.has("shf-1795155251970-qdso")).toBe(true);
+  });
+
+  it("6. runCleanup mode simulasi default (dry-run) mengembalikan dryRun true tanpa penulisan", async () => {
+    const res = await runCleanup({ apply: false });
+    expect(res.dryRun).toBe(true);
+    expect(typeof res.shiftsCount).toBe("number");
+    expect(typeof res.ordersCount).toBe("number");
+    expect(typeof res.eventsCount).toBe("number");
+    expect(typeof res.bookingsCount).toBe("number");
   });
 });
