@@ -898,12 +898,23 @@ export default function POSPage() {
         tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
         customerName: effectiveCustomerName,
         customerPhone: selectedMember?.phone,
+        loyaltyMemberId: selectedMember?.id,
         orderType,
         subtotal,
         discount: cartTaxBreakdown.discount,
         fnbDiscount: cartTaxBreakdown.fnbDiscount,
         coworkingDiscount: cartTaxBreakdown.coworkingDiscount,
         promoId: selectedPromoId || undefined,
+        discountSource: selectedPromoId
+          ? "PROMO"
+          : appliedVoucher
+          ? "VOUCHER"
+          : manualDiscount
+          ? "MANUAL"
+          : undefined,
+        manualDiscountReason: manualDiscount?.reason,
+        manualDiscountApprovedBy: manualDiscount ? user?.name || "Supervisor" : undefined,
+        voucherTitle: appliedVoucher?.title,
         tax: taxPB1,
         fnbTax: cartTaxBreakdown.fnbPb1,
         coworkingTax: cartTaxBreakdown.coworkingTax,

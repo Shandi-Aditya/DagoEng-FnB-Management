@@ -59,12 +59,12 @@ export function RefundOrderModal({
   useEffect(() => {
     if (isOpen) {
       setReason("");
-      setSupervisorName(canDirectAuthorize && currentUserName ? currentUserName : "");
+      setSupervisorName(isSupervisor && currentUserName ? currentUserName : "");
       setSupervisorPin("");
       setIsSubmitting(false);
       setValidationError(null);
     }
-  }, [isOpen, mode, canDirectAuthorize, currentUserName]);
+  }, [isOpen, mode, isSupervisor, currentUserName]);
 
   if (!order) return null;
 
@@ -160,7 +160,7 @@ export function RefundOrderModal({
                 </span>
                 <p className="text-muted-foreground">
                   {alreadyCooking
-                    ? "Karena dapur sudah mulai memasak, pembatalan akan mencatat bahan baku sebagai waste dan stok tidak dikembalikan ke etalase."
+                    ? "Karena dapur sudah mulai memasak, pembatalan akan mencatat bahan sebagai limbah dan stok tidak dikembalikan ke etalase."
                     : "Pesanan yang dibatalkan sebelum dimasak tidak mengubah saldo kas shift dan melepaskan status meja."}
                 </p>
               </div>

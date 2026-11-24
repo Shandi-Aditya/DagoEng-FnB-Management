@@ -65,6 +65,7 @@ export interface ClosingReportData {
   dagoQrisShare: number;
   tenantCashShare: number;
   dagoCashShare: number;
+  refundAmount?: number;
   expectedCash?: number;
   actualCashEnding: number;
   cashDifference: number;
@@ -548,10 +549,23 @@ export function DailyClosingPDFModal({
                           {formatCurrencyIDR(reportData.totalCashSales)}
                         </td>
                       </tr>
+                      {(reportData.refundAmount ?? 0) > 0 ? (
+                        <tr className="text-destructive">
+                          <td className="py-2 px-3">Refund tunai</td>
+                          <td className="py-2 px-3 text-right font-mono tabular-nums font-medium">
+                            -{formatCurrencyIDR(reportData.refundAmount ?? 0)}
+                          </td>
+                        </tr>
+                      ) : null}
                       <tr className="bg-muted/30 font-medium">
                         <td className="py-2 px-3 text-foreground">Total kas seharusnya di laci</td>
                         <td className="py-2 px-3 text-right font-mono tabular-nums font-semibold text-foreground">
-                          {formatCurrencyIDR(reportData.expectedCash ?? (reportData.initialCash + reportData.totalCashSales))}
+                          {formatCurrencyIDR(
+                            reportData.expectedCash ??
+                              reportData.initialCash +
+                                reportData.totalCashSales -
+                                (reportData.refundAmount ?? 0)
+                          )}
                         </td>
                       </tr>
                       <tr>

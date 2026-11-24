@@ -51,7 +51,7 @@ export default function OrdersPage() {
   const { activeOutletId, activeOutlet } = useOutlet();
   const { filteredOrders, advanceOrderStatus, refundOrder, voidOrder } = useOrders();
   const { recordOrderWasteBOM } = useInventory();
-  const { members, addPoints, reverseTransactionPoints } = useLoyalty();
+  const { members, addPoints, reverseTransactionPoints, refreshMembers } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
@@ -472,23 +472,31 @@ export default function OrdersPage() {
         );
       }
 
-      const targetNormPhone = resolvedOrder.customerPhone
-        ? normalizeLoyaltyPhone(resolvedOrder.customerPhone)
-        : "";
-      const matchingMember =
-        (targetNormPhone
-          ? members.find((m) => normalizeLoyaltyPhone(m.phone) === targetNormPhone)
-          : undefined) ??
-        members.find(
-          (m) => m.name.toLowerCase().trim() === resolvedOrder.customerName.toLowerCase().trim()
-        );
-      if (matchingMember) {
-        reverseTransactionPoints(
-          matchingMember.id,
-          resolvedOrder.id,
-          `${isVoid ? "Pembatalan" : "Refund"} pesanan #${resolvedOrder.orderNumber}: ${params.reason}`,
-          !isVoid ? resolvedOrder.total : 0
-        );
+      if (syncRes.synced) {
+        void refreshMembers();
+      } else {
+        const targetNormPhone =
+          resolvedOrder.customerPhone && !resolvedOrder.customerPhone.includes("*")
+            ? normalizeLoyaltyPhone(resolvedOrder.customerPhone)
+            : "";
+        const matchingMember =
+          (resolvedOrder.loyaltyMemberId
+            ? members.find((m) => m.id === resolvedOrder.loyaltyMemberId)
+            : undefined) ??
+          (targetNormPhone
+            ? members.find((m) => normalizeLoyaltyPhone(m.phone) === targetNormPhone)
+            : undefined) ??
+          members.find(
+            (m) => m.name.toLowerCase().trim() === resolvedOrder.customerName.toLowerCase().trim()
+          );
+        if (!resolvedOrder.loyaltyPointsReversed && matchingMember) {
+          reverseTransactionPoints(
+            matchingMember.id,
+            resolvedOrder.id,
+            `${isVoid ? "Pembatalan" : "Refund"} pesanan #${resolvedOrder.orderNumber}: ${params.reason}`,
+            !isVoid ? resolvedOrder.total : 0
+          );
+        }
       }
 
       if (
@@ -546,6 +554,7 @@ export default function OrdersPage() {
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}
         onOpenPayment={handleOpenPayment}
+        onOpenRefund={canVoidOrRefund ? handleOpenRefund : undefined}
         onSelectOrder={setSelectedOrder}
       />
 
@@ -610,7 +619,7 @@ export default function OrdersPage() {
         currentUserName={user?.name}
         currentUserRole={roleSlug}
         isSupervisor={isHubSupervisor}
-        requiresPin={requiresPinForVoidRefund}
+        requiresPin={refundModalMode === "REFUND" ? true : requiresPinForVoidRefund}
         onConfirmRefund={handleConfirmRefund}
       />
 
