@@ -23,8 +23,8 @@ describe("events-admin-domain", () => {
       title: "Workshop Barista Pemula",
       category: "WORKSHOP",
       status: "PENDING",
-      startDate: "2026-11-20T10:00:00Z",
-      endDate: "2026-11-20T14:00:00Z",
+      startDate: "2026-11-30T10:00:00Z",
+      endDate: "2026-11-30T14:00:00Z",
       location: "Dago Creative Hub",
       organizerName: "Komunitas Kopi Singaraja",
       organizerEmail: "kopi@example.com",
@@ -87,7 +87,7 @@ describe("events-admin-domain", () => {
 function mockAdminTicket(override: any): EventTicketOrder {
   return {
     eventTitle: "Workshop Melukis",
-    eventDate: "2026-11-20T10:00:00Z",
+    eventDate: "2026-11-30T10:00:00Z",
     eventLocation: "Singaraja",
     ticketCount: 1,
     unitPrice: override.totalPrice ?? 50000,
