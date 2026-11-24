@@ -32,6 +32,11 @@ import {
   formatCoworkingTaxLabel,
   type DailyPreset,
 } from "./coworking-domain";
+import {
+  checkSlotAvailability,
+  getValidOperationalTime,
+  isSlotPast,
+} from "@/features/pos/pos-coworking";
 
 export interface NewBookingModalProps {
   isOpen: boolean;
@@ -86,7 +91,9 @@ export function NewBookingModal({
   const [bookDailyPreset, setBookDailyPreset] = useState<DailyPreset>("1_DAY");
   const [bookStartDate, setBookStartDate] = useState(todayStr);
   const [bookEndDate, setBookEndDate] = useState(todayStr);
-  const [bookStartTime, setBookStartTime] = useState("09:00");
+  const [bookStartTime, setBookStartTime] = useState(() =>
+    getValidOperationalTime(bookStartDate)
+  );
   const [bookGuestName, setBookGuestName] = useState("");
   const [bookPhone, setBookPhone] = useState("");
   const [bookEmail, setBookEmail] = useState("");
@@ -94,6 +101,10 @@ export function NewBookingModal({
   const [bookPaymentMethod, setBookPaymentMethod] = useState("QRIS");
   const [bookIsImmediateCheckIn, setBookIsImmediateCheckIn] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    setBookStartTime(getValidOperationalTime(bookStartDate));
+  }, [bookStartDate, isOpen]);
 
   useEffect(() => {
     if (defaultSpaceId) {
@@ -158,6 +169,11 @@ export function NewBookingModal({
       return;
     }
 
+    if (bookType === "HOURLY" && isSlotPast(bookStartDate, bookStartTime)) {
+      setErrorMessage("Slot jam yang dipilih sudah lewat.");
+      return;
+    }
+
     const scheduleCheck = validateCoworkingBookingSchedule(
       {
         bookingType: bookType,
@@ -176,6 +192,11 @@ export function NewBookingModal({
       return;
     }
 
+    const maxCapacity =
+      selectedSpace.type === "HOT_DESK"
+        ? Math.max(1, selectedSpace.capacity || 8)
+        : 1;
+
     const conflict = checkCoworkingBookingConflict(bookings, {
       spaceId: selectedSpace.id,
       spaceName: selectedSpace.name,
@@ -184,6 +205,7 @@ export function NewBookingModal({
       endDate: pricing.computedEndDate,
       startTime: bookType === "HOURLY" ? `${bookStartTime} WITA` : "09:00 WITA",
       endTime: pricing.computedEndTime,
+      maxCapacity,
     });
     if (conflict.hasConflict) {
       setErrorMessage(`Booking ditolak: ${conflict.message}`);
@@ -389,18 +411,47 @@ export function NewBookingModal({
                   </span>
                 </div>
                 <div className="grid grid-cols-5 gap-1.5">
-                  {OPERATIONAL_TIME_SLOTS.map((slot) => (
-                    <Button
-                      key={slot}
-                      type="button"
-                      size="sm"
-                      variant={bookStartTime === slot ? "default" : "outline"}
-                      onClick={() => setBookStartTime(slot)}
-                      className="font-mono"
-                    >
-                      {slot}
-                    </Button>
-                  ))}
+                  {OPERATIONAL_TIME_SLOTS.map((slot) => {
+                    const startH = parseInt(slot.split(":")[0], 10);
+                    const availability = checkSlotAvailability({
+                      spaceId: selectedSpace.id,
+                      spaces,
+                      bookings,
+                      targetDate: bookStartDate,
+                      startHour: startH,
+                      durationHours: bookDurationHours,
+                      checkPast: true,
+                    });
+                    const isSelected = bookStartTime === slot;
+                    const isDisabled = !availability.isAvailable;
+
+                    return (
+                      <Button
+                        key={slot}
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? "default" : "outline"}
+                        disabled={isDisabled}
+                        onClick={() => setBookStartTime(slot)}
+                        className="font-mono flex flex-col h-auto py-1.5 px-1 items-center justify-center text-center gap-0.5"
+                      >
+                        <span className="font-semibold text-xs leading-none">{slot}</span>
+                        <span
+                          className={`text-xs leading-tight ${
+                            availability.isPast
+                              ? "text-muted-foreground font-normal"
+                              : !availability.isAvailable
+                              ? "text-destructive font-medium"
+                              : isSelected
+                              ? "text-primary-foreground/90 font-medium"
+                              : "text-muted-foreground font-normal"
+                          }`}
+                        >
+                          {availability.label}
+                        </span>
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

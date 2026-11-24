@@ -886,7 +886,23 @@ export const platformSettingsDomainSpec: ServerDomainSpec<"platform-settings"> =
   domain: "platform-settings",
   filename: "platform_settings.json",
   defaultState: defaultPlatformSettingsState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    const isStaff =
+      auth.isAuthenticated &&
+      Boolean(auth.role) &&
+      auth.role !== "CUSTOMER";
+    if (!isStaff) {
+      return {
+        allowed: true,
+        transform: (state) => ({
+          ...state,
+          eventRevenueSharing: {
+            ...state.eventRevenueSharing,
+            history: [],
+          },
+        }),
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -1467,7 +1483,21 @@ export const wifiDomainSpec: ServerDomainSpec<"wifi"> = {
   domain: "wifi",
   filename: "wifi_state.json",
   defaultState: defaultWifiState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses konfigurasi Wi-Fi.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses konfigurasi Wi-Fi internal.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -1708,7 +1738,21 @@ export const subscriptionDomainSpec: ServerDomainSpec<"subscription"> = {
   domain: "subscription",
   filename: "subscription_state.json",
   defaultState: defaultSubscriptionState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses data langganan.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses data langganan internal.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {
@@ -1982,7 +2026,21 @@ export const printerConfigDomainSpec: ServerDomainSpec<"printer-config"> = {
   domain: "printer-config",
   filename: "printer_config.json",
   defaultState: defaultPrinterConfigState,
-  authorizeRead() {
+  authorizeRead(auth) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return {
+        allowed: false,
+        status: 401,
+        error: "UNAUTHORIZED: Autentikasi sesi staf diperlukan untuk mengakses konfigurasi printer.",
+      };
+    }
+    if (auth.role === "CUSTOMER") {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN: Pelanggan tidak memiliki wewenang mengakses konfigurasi printer.",
+      };
+    }
     return { allowed: true };
   },
   authorizeWrite(auth, command) {

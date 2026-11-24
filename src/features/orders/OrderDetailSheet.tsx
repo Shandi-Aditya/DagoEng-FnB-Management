@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, CreditCard, Printer, Undo2 } from "lucide-react";
+import { Ban, CreditCard, FileText, Printer, Undo2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ interface OrderDetailSheetProps {
   canPrintCashierReceipt?: boolean;
   canPrintKitchenReceipt?: boolean;
   promos?: Array<{ id: string; name?: string }>;
+  onViewInvoice?: (order: OrderRecord) => void;
   onOpenPayment: (order: OrderRecord) => void;
   onPrintReceipt: (order: OrderRecord) => void;
   onPrintKitchenTicket: (order: OrderRecord, purpose: "REPRINT" | "CANCELLATION") => void;
@@ -51,6 +52,7 @@ export function OrderDetailSheet({
   onPrintKitchenTicket,
   onOpenRefund,
   onOpenVoid,
+  onViewInvoice,
 }: OrderDetailSheetProps) {
   return (
     <Sheet open={order !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -68,6 +70,7 @@ export function OrderDetailSheet({
             onPrintKitchenTicket={onPrintKitchenTicket}
             onOpenRefund={onOpenRefund}
             onOpenVoid={onOpenVoid}
+            onViewInvoice={onViewInvoice}
           />
         ) : null}
       </SheetContent>
@@ -87,6 +90,7 @@ function OrderDetailBody({
   onPrintKitchenTicket,
   onOpenRefund,
   onOpenVoid,
+  onViewInvoice,
 }: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & {
   selectedOrder: OrderRecord;
   canPrintCashierReceipt: boolean;
@@ -96,8 +100,18 @@ function OrderDetailBody({
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
   const isPaid = selectedOrder.paymentStatus === "PAID";
+  const isRefunded = selectedOrder.paymentStatus === "REFUNDED";
   const hasFnbItems = (selectedOrder.items || []).some((it) => !isCoworkingOrderItem(it));
-  const canPayThis = selectedOrder.status !== "COMPLETED" && !isCancelled && !isPaid && canProcessPayment;
+  const isCorporateInvoice =
+    (selectedOrder.paymentMethod === "INVOICE" ||
+      selectedOrder.corporateInfo?.billingType === "INVOICE") &&
+    !isRefunded;
+  const canPayThis =
+    !isCancelled &&
+    !isPaid &&
+    !isRefunded &&
+    canProcessPayment &&
+    (selectedOrder.status !== "COMPLETED" || isCorporateInvoice);
   const timing = [
     { label: "Antre di dapur", minutes: metrics.kitchenQueueMinutes },
     { label: "Dimasak", minutes: metrics.cookingMinutes },
@@ -288,6 +302,12 @@ function OrderDetailBody({
           <Button size="lg" className="flex-1" onClick={() => onOpenPayment(selectedOrder)}>
             <CreditCard />
             Bayar
+          </Button>
+        ) : null}
+        {Boolean(selectedOrder.corporateInfo) && onViewInvoice ? (
+          <Button variant="outline" size="lg" onClick={() => onViewInvoice(selectedOrder)}>
+            <FileText />
+            Lihat invoice
           </Button>
         ) : null}
         {isPaid && canPrintCashierReceipt ? (

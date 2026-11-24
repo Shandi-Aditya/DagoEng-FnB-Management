@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList, CreditCard } from "lucide-react";
+import { ClipboardList, CreditCard, FileText } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
 import { EmptyState } from "@/components/app/empty-state";
@@ -36,6 +36,7 @@ interface OrdersTableProps {
   canViewNominals: boolean;
   canProcessPayment: boolean;
   emptyMessage: { title: string; description: string };
+  onViewInvoice?: (order: OrderRecord) => void;
   onOpenPayment: (order: OrderRecord) => void;
   onSelectOrder: (order: OrderRecord) => void;
 }
@@ -46,7 +47,13 @@ function isClosed(order: OrderRecord): boolean {
 }
 
 function isPayable(order: OrderRecord, canProcessPayment: boolean): boolean {
-  return canProcessPayment && order.paymentStatus !== "PAID" && order.status !== "CANCELLED" && order.status !== "COMPLETED";
+  if (!canProcessPayment || order.paymentStatus === "PAID" || order.status === "CANCELLED") {
+    return false;
+  }
+  const isCorporateInvoice =
+    (order.paymentMethod === "INVOICE" || order.corporateInfo?.billingType === "INVOICE") &&
+    order.paymentStatus !== "REFUNDED";
+  return (order.status !== "COMPLETED" && order.paymentStatus !== "REFUNDED") || isCorporateInvoice;
 }
 
 export function OrdersTable({
@@ -59,6 +66,7 @@ export function OrdersTable({
   canViewNominals,
   canProcessPayment,
   emptyMessage,
+  onViewInvoice,
   onOpenPayment,
   onSelectOrder,
 }: OrdersTableProps) {
@@ -147,18 +155,33 @@ export function OrdersTable({
                     {canViewNominals ? formatCurrencyIDR(o.total) : "—"}
                   </TableCell>
                   <TableCell>
-                    {isPayable(o, canProcessPayment) ? (
-                      <Button
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onOpenPayment(o);
-                        }}
-                      >
-                        <CreditCard />
-                        Bayar
-                      </Button>
-                    ) : null}
+                    <div className="flex items-center gap-1.5">
+                      {isPayable(o, canProcessPayment) ? (
+                        <Button
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenPayment(o);
+                          }}
+                        >
+                          <CreditCard />
+                          Bayar
+                        </Button>
+                      ) : null}
+                      {Boolean(o.corporateInfo) && onViewInvoice ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onViewInvoice(o);
+                          }}
+                        >
+                          <FileText />
+                          Lihat invoice
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

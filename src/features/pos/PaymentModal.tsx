@@ -4,11 +4,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
+  Building2,
   Check,
   CheckCircle2,
   Clock,
   CreditCard,
   KeyRound,
+  Landmark,
   Lock,
   QrCode,
   RefreshCw,
@@ -27,10 +29,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PaymentTabInvoice } from "./payment/PaymentTabInvoice";
+import { PaymentTabSplit } from "./payment/PaymentTabSplit";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
+import { OFFICIAL_BANK_ACCOUNTS } from "@/lib/contact-config";
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
+import type { CorporateBillingType } from "@/types/order";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
 import {
@@ -54,10 +60,15 @@ interface PaymentModalProps {
   tableNumber: string;
   customerName: string;
   orderType: "DINE_IN" | "TAKEAWAY";
+  isCorporateOrder?: boolean;
+  isSettlement?: boolean;
+  corporateBillingType?: CorporateBillingType;
+  corporateCompany?: string;
   onPaymentSuccess: (paymentData: {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    paymentReference?: string;
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => void;
@@ -77,9 +88,16 @@ export function PaymentModal({
   tableNumber,
   customerName,
   orderType,
+  isCorporateOrder = false,
+  isSettlement = false,
+  corporateBillingType = "PREPAID",
+  corporateCompany = "",
   onPaymentSuccess,
 }: PaymentModalProps) {
   const { logActivity } = useActivityLog();
+  const lockPrepaidTabs = isCorporateOrder && !isSettlement && corporateBillingType === "INVOICE";
+  const lockInvoiceTab = isCorporateOrder && !isSettlement && corporateBillingType === "PREPAID";
+  const showInvoiceTab = isCorporateOrder && !isSettlement;
   const [activeTab, setActiveTab] = useState<POSPaymentMethod>("QRIS");
 
   // Cash tab state (POS-29: initialized empty to prevent auto-fill)
@@ -105,6 +123,9 @@ export function PaymentModal({
   const [selectedBank, setSelectedBank] = useState<string>("BCA");
   const [approvalCode, setApprovalCode] = useState<string>("");
 
+  // Transfer tab state
+  const [transferReference, setTransferReference] = useState<string>("");
+
   // Split bill tab state
   const [splitGuestCount, setSplitGuestCount] = useState<number>(2);
   const [splitGuests, setSplitGuests] = useState<SplitGuestBill[]>([]);
@@ -113,6 +134,11 @@ export function PaymentModal({
 
   useEffect(() => {
     if (isOpen) {
+      if (lockPrepaidTabs) {
+        setActiveTab("INVOICE");
+      } else {
+        setActiveTab("QRIS");
+      }
       const newTxId = `GW-DAGO-${Date.now().toString().slice(-6)}`;
       // POS-29: Leave cash input empty to prevent accidental auto-fill of exact change
       setCashGiven(0);
@@ -129,6 +155,7 @@ export function PaymentModal({
       setSupervisorAuthError(null);
       setSupervisorOverrideData(null);
       setApprovalCode(`APP-${Math.floor(100000 + Math.random() * 900000)}`);
+      setTransferReference("");
       isSubmittingRef.current = false;
       setIsSubmitting(false);
 
@@ -150,7 +177,7 @@ export function PaymentModal({
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
-  }, [isOpen, grandTotal]);
+  }, [isOpen, grandTotal, lockPrepaidTabs]);
 
   // QRIS countdown timer
   const hasSplitQris = useMemo(
@@ -360,6 +387,39 @@ export function PaymentModal({
       onPaymentSuccess({
         method: "EDC",
         amountPaid: grandTotal,
+        changeDue: 0,
+      });
+    } else if (activeTab === "TRANSFER") {
+      const cleanReference = transferReference.trim();
+      if (!cleanReference) return;
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      logActivity({
+        module: "POS",
+        action: "TRANSFER_PAYMENT",
+        description: `Pembayaran transfer bank ref ${cleanReference}: ${formatCurrencyIDR(grandTotal)}`,
+        recordId: cleanReference || corporateCompany || customerName,
+        newValue: `Lunas transfer: ${formatCurrencyIDR(grandTotal)}`,
+      });
+      onPaymentSuccess({
+        method: "TRANSFER",
+        amountPaid: grandTotal,
+        changeDue: 0,
+        paymentReference: cleanReference,
+      });
+    } else if (activeTab === "INVOICE") {
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      logActivity({
+        module: "POS",
+        action: "CORPORATE_INVOICE_ISSUED",
+        description: `Penerbitan invoice perusahaan ${corporateCompany || customerName}: ${formatCurrencyIDR(grandTotal)} (Tempo 14 hari)`,
+        recordId: corporateCompany || customerName,
+        newValue: `Tagihan diterbitkan: ${formatCurrencyIDR(grandTotal)}`,
+      });
+      onPaymentSuccess({
+        method: "INVOICE",
+        amountPaid: 0,
         changeDue: 0,
       });
     } else if (activeTab === "SPLIT") {
@@ -608,26 +668,44 @@ export function PaymentModal({
         <div className="border-b border-border bg-muted/20 px-4 py-2">
           <Tabs
             value={activeTab}
-            onValueChange={(val) => setActiveTab(val as POSPaymentMethod)}
+            onValueChange={(val) => {
+              const next = val as POSPaymentMethod;
+              if (lockPrepaidTabs && next !== "INVOICE") return;
+              if (lockInvoiceTab && next === "INVOICE") return;
+              setActiveTab(next);
+            }}
             className="w-full"
           >
-            <TabsList aria-label="Metode pembayaran" className="w-full grid grid-cols-4 h-10">
-              <TabsTrigger value="QRIS" className="gap-1.5 text-xs">
+            <TabsList
+              aria-label="Metode pembayaran"
+              className={`w-full grid grid-cols-3 ${showInvoiceTab ? "sm:grid-cols-6" : "sm:grid-cols-5"} group-data-horizontal/tabs:h-auto h-auto p-1`}
+            >
+              <TabsTrigger value="QRIS" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <QrCode />
                 <span>QRIS</span>
               </TabsTrigger>
-              <TabsTrigger value="CASH" className="gap-1.5 text-xs">
+              <TabsTrigger value="CASH" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <Banknote />
                 <span>Tunai</span>
               </TabsTrigger>
-              <TabsTrigger value="EDC" className="gap-1.5 text-xs">
+              <TabsTrigger value="EDC" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <CreditCard />
                 <span>Debit / EDC</span>
               </TabsTrigger>
-              <TabsTrigger value="SPLIT" className="gap-1.5 text-xs">
+              <TabsTrigger value="TRANSFER" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
+                <Landmark />
+                <span>Transfer</span>
+              </TabsTrigger>
+              <TabsTrigger value="SPLIT" disabled={lockPrepaidTabs} className="gap-1.5 py-1.5 text-xs">
                 <Users />
                 <span>Bagi tagihan</span>
               </TabsTrigger>
+              {showInvoiceTab ? (
+                <TabsTrigger value="INVOICE" disabled={lockInvoiceTab} className="gap-1.5 py-1.5 text-xs">
+                  <Building2 />
+                  <span>Invoice</span>
+                </TabsTrigger>
+              ) : null}
             </TabsList>
           </Tabs>
         </div>
@@ -759,158 +837,68 @@ export function PaymentModal({
             </div>
           )}
 
+          {/* TAB 3.5: TRANSFER BANK */}
+          {activeTab === "TRANSFER" && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-3.5 space-y-2">
+                <span className="block font-semibold text-foreground">
+                  Rekening resmi tujuan transfer
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {OFFICIAL_BANK_ACCOUNTS.map((bank) => (
+                    <div key={bank.accountNumber} className="rounded border bg-background p-2.5 space-y-0.5">
+                      <span className="font-semibold text-foreground block">{bank.bankName}</span>
+                      <span className="font-mono text-sm block">{bank.accountNumber}</span>
+                      <span className="text-muted-foreground text-xs block">a.n. {bank.accountHolder}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="transfer-ref" className="text-xs font-medium text-foreground">
+                  Nomor referensi atau bukti transfer <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="transfer-ref"
+                  type="text"
+                  required
+                  value={transferReference}
+                  onChange={(e) => setTransferReference(e.target.value)}
+                  placeholder="Contoh: TRF-20261124-001"
+                  className="font-mono text-xs font-medium"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Isi nomor referensi transfer dan pastikan dana sudah masuk ke rekening resmi.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: SPLIT BILL */}
           {activeTab === "SPLIT" && (
-            <div className="space-y-4">
-              {/* Header: Equal Split Presets */}
-              <div className="flex flex-col gap-2 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h4 className="text-xs font-semibold text-foreground">
-                    Bagi tagihan & metode pembayaran
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Atur nominal dan metode bayar untuk masing-masing tamu
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Bagi rata:</span>
-                  <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-1">
-                    {[2, 3, 4, 5].map((cnt) => (
-                      <Button
-                        key={cnt}
-                        type="button"
-                        size="icon-sm"
-                        variant={splitGuestCount === cnt ? "default" : "ghost"}
-                        onClick={() => handleSplitCountChange(cnt)}
-                        className="font-mono"
-                      >
-                        {cnt}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            <PaymentTabSplit
+              grandTotal={grandTotal}
+              splitGuestCount={splitGuestCount}
+              splitGuests={splitGuests}
+              splitBalance={splitBalance}
+              hasSplitQris={hasSplitQris}
+              splitQrisAmount={splitQrisAmount}
+              onSplitCountChange={handleSplitCountChange}
+              onToggleGuestPaid={handleToggleGuestPaid}
+              onGuestMethodChange={handleGuestMethodChange}
+              onGuestAmountChange={handleGuestAmountChange}
+              renderQrisVerificationBlock={renderQrisVerificationBlock}
+            />
+          )}
 
-              {/* Real-time Allocation Summary Card */}
-              <div className="grid grid-cols-3 gap-2 rounded-xl border border-border bg-muted/30 p-3 text-center text-xs">
-                <div>
-                  <span className="block text-xs text-muted-foreground">Total tagihan</span>
-                  <span className="font-mono font-medium text-foreground tabular-nums">
-                    {formatCurrencyIDR(grandTotal)}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-xs text-muted-foreground">Total dialokasikan</span>
-                  <span
-                    className={cn(
-                      "font-mono font-medium tabular-nums",
-                      splitBalance.isBalanced ? "text-success" : "text-warning"
-                    )}
-                  >
-                    {formatCurrencyIDR(splitBalance.totalAssigned)}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-xs text-muted-foreground">Sisa alokasi</span>
-                  <span
-                    className={cn(
-                      "font-mono font-medium tabular-nums",
-                      splitBalance.remaining === 0
-                        ? "text-success"
-                        : splitBalance.remaining < 0
-                        ? "text-destructive"
-                        : "text-warning"
-                    )}
-                  >
-                    {formatCurrencyIDR(splitBalance.remaining)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Warning Alert if allocation does not match grand total */}
-              {!splitBalance.isBalanced && (
-                <Alert className="border-warning/40 bg-warning/10">
-                  <AlertTriangle className="size-4 text-warning" />
-                  <AlertDescription className="text-foreground">
-                    {splitBalance.remaining > 0
-                      ? `Alokasi pembayaran masih kurang ${formatCurrencyIDR(splitBalance.remaining)}.`
-                      : `Alokasi pembayaran melebihi total tagihan sebesar ${formatCurrencyIDR(Math.abs(splitBalance.remaining))}.`}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Guest Rows */}
-              <div className="space-y-2.5">
-                {splitGuests.map((guest) => (
-                  <div
-                    key={guest.id}
-                    className={cn(
-                      "space-y-2.5 rounded-xl border p-3.5 transition-colors",
-                      guest.isPaid
-                        ? "border-success/30 bg-success/5"
-                        : "border-border bg-card"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <Button
-                          type="button"
-                          variant={guest.isPaid ? "default" : "outline"}
-                          size="icon-xs"
-                          onClick={() => handleToggleGuestPaid(guest.id)}
-                          aria-label={`Tandai ${guest.guestLabel} lunas`}
-                        >
-                          {guest.isPaid && <Check className="size-3.5" />}
-                        </Button>
-                        <span className="text-xs font-semibold text-foreground">
-                          {guest.guestLabel}
-                        </span>
-                      </div>
-
-                      {/* Payment Method Selector */}
-                      <div className="flex items-center gap-1">
-                        {(["QRIS", "CASH", "EDC"] as const).map((m) => (
-                          <Button
-                            key={m}
-                            type="button"
-                            size="xs"
-                            variant={guest.paymentMethod === m ? "default" : "outline"}
-                            onClick={() => handleGuestMethodChange(guest.id, m)}
-                          >
-                            {m}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Assigned Amount Input */}
-                    <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
-                      <span className="text-xs text-muted-foreground">Nominal pembayaran:</span>
-                      <div className="relative w-44">
-                        <span className="absolute left-2.5 top-2 text-xs font-medium text-muted-foreground">
-                          Rp
-                        </span>
-                        <Input
-                          type="number"
-                          value={guest.assignedAmount}
-                          onChange={(e) => handleGuestAmountChange(guest.id, Number(e.target.value))}
-                          className="pl-8 text-right font-mono text-xs font-medium tabular-nums"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {hasSplitQris ? (
-                <div className="border-t border-border pt-3">
-                  {renderQrisVerificationBlock(
-                    splitQrisAmount,
-                    "Verifikasi pembayaran QRIS pada bagi tagihan"
-                  )}
-                </div>
-              ) : null}
-            </div>
+          {/* TAB 5: INVOICE / TAGIHAN PERUSAHAAN */}
+          {activeTab === "INVOICE" && (
+            <PaymentTabInvoice
+              corporateCompany={corporateCompany}
+              customerName={customerName}
+              grandTotal={grandTotal}
+            />
           )}
         </div>
 
@@ -932,6 +920,7 @@ export function PaymentModal({
             size="lg"
             disabled={
               (activeTab === "CASH" && !isCashSufficient) ||
+              (activeTab === "TRANSFER" && !transferReference.trim()) ||
               (activeTab === "SPLIT" && (!splitBalance.isValid || (hasSplitQris && !isQrisVerified))) ||
               (activeTab === "QRIS" && !isQrisVerified) ||
               isQrisProcessing ||
@@ -951,9 +940,19 @@ export function PaymentModal({
               <span className="flex items-center justify-center gap-2 truncate">
                 <CheckCircle2 className="size-4 shrink-0" />
                 <span className="truncate">
-                  {activeTab === "QRIS"
-                    ? "Selesaikan pembayaran QRIS"
-                    : `Konfirmasi pembayaran (${activeTab})`}
+                  {activeTab === "INVOICE"
+                    ? "Terbitkan invoice perusahaan"
+                    : activeTab === "CASH"
+                    ? "Konfirmasi pembayaran tunai"
+                    : activeTab === "QRIS"
+                    ? "Konfirmasi pembayaran QRIS"
+                    : activeTab === "EDC"
+                    ? "Konfirmasi pembayaran EDC"
+                    : activeTab === "TRANSFER"
+                    ? "Konfirmasi pembayaran transfer"
+                    : activeTab === "SPLIT"
+                    ? "Konfirmasi bagi tagihan"
+                    : "Konfirmasi pembayaran"}
                 </span>
               </span>
             )}

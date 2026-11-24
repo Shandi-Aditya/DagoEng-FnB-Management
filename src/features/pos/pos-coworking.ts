@@ -34,11 +34,17 @@ export function getCurrentTimeFormatted(): string {
   }).format(now);
 }
 
-export function getValidOperationalTime(targetDateStr?: string): string {
-  const now = new Date();
+export function getValidOperationalTime(
+  targetDateStr?: string,
+  now: Date = new Date()
+): string {
   const todayStr = getTodayWitaDateString(now);
-  if (targetDateStr && targetDateStr > todayStr) {
+  const targetYmd = targetDateStr ? normalizeDateToYMD(targetDateStr) : "";
+  if (targetYmd && targetYmd > todayStr) {
     return "09:00";
+  }
+  if (targetYmd && targetYmd < todayStr) {
+    return "";
   }
   const witaHourStr = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Makassar",
@@ -49,14 +55,17 @@ export function getValidOperationalTime(targetDateStr?: string): string {
     timeZone: "Asia/Makassar",
     minute: "numeric",
   }).format(now);
-  const curH = parseInt(witaHourStr, 10);
+  const curH = parseInt(witaHourStr, 10) % 24;
   const curM = parseInt(witaMinuteStr, 10);
   if (curH < 9) return "09:00";
-  if (curH >= 9 && curH <= 17) {
-    const slotHour = curM > 15 ? Math.min(curH + 1, 17) : curH;
+  if (curH >= 9 && curH < 17) {
+    const slotHour = curM > 15 ? curH + 1 : curH;
     return `${slotHour.toString().padStart(2, "0")}:00`;
   }
-  return "09:00";
+  if (curH === 17 && curM <= 15) {
+    return "17:00";
+  }
+  return "";
 }
 
 export function calculateEndTime(startTime: string, durationHours: number): string {
@@ -73,10 +82,45 @@ export function calculateEndTime(startTime: string, durationHours: number): stri
   return `${endHour.toString().padStart(2, "0")}:00`;
 }
 
+export function isSlotPast(
+  targetDate: string,
+  slotTime: string,
+  now = new Date()
+): boolean {
+  const todayWita = getTodayWitaDateString(now);
+  const targetYmd = normalizeDateToYMD(targetDate);
+  if (!targetYmd) return false;
+  if (targetYmd < todayWita) {
+    return true;
+  }
+  if (targetYmd > todayWita) {
+    return false;
+  }
+  const witaHourStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Makassar",
+    hour: "numeric",
+    hour12: false,
+  }).format(now);
+  const witaMinuteStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Makassar",
+    minute: "numeric",
+  }).format(now);
+  const curH = parseInt(witaHourStr, 10) % 24;
+  const curM = parseInt(witaMinuteStr, 10);
+  const slotH = parseHour(slotTime);
+  if (slotH < curH) return true;
+  if (slotH === curH && curM > 15) return true;
+  return false;
+}
+
 export interface SlotAvailabilityResult {
   isAvailable: boolean;
   reason?: string;
   conflictingBooking?: CoworkingBooking;
+  remainingSeats: number;
+  maxCapacity: number;
+  isPast: boolean;
+  label: string;
 }
 
 export interface CheckSlotParams {
@@ -86,6 +130,8 @@ export interface CheckSlotParams {
   targetDate: string;
   startHour: number;
   durationHours: number;
+  checkPast?: boolean;
+  now?: Date;
 }
 
 export function checkSlotAvailability({
@@ -95,27 +141,57 @@ export function checkSlotAvailability({
   targetDate,
   startHour,
   durationHours,
+  checkPast = false,
+  now = new Date(),
 }: CheckSlotParams): SlotAvailabilityResult {
   const space = spaces.find((s) => s.id === spaceId);
+  const maxCapacity = space?.type === "HOT_DESK" ? space.capacity || 8 : 1;
+  const isPast = checkPast
+    ? isSlotPast(targetDate, `${startHour.toString().padStart(2, "0")}:00`, now)
+    : false;
+
   if (space?.status === "MAINTENANCE") {
     return {
       isAvailable: false,
       reason: "Sedang pemeliharaan",
+      remainingSeats: 0,
+      maxCapacity,
+      isPast: false,
+      label: "Pemeliharaan",
     };
   }
 
-  const maxCapacity = space?.type === "HOT_DESK" ? space.capacity || 8 : 1;
+  if (startHour + durationHours > 18) {
+    return {
+      isAvailable: false,
+      reason: "Melewati jam tutup operasional (18:00 WITA)",
+      remainingSeats: 0,
+      maxCapacity,
+      isPast,
+      label: "Tutup 18:00",
+    };
+  }
+
   const targetYmd = normalizeDateToYMD(targetDate);
   const reqStartMin = startHour * 60;
   const reqEndMin = (startHour + durationHours) * 60;
 
   const activeBookings = bookings.filter((b) => {
     if (b.spaceId !== spaceId) return false;
-    if (b.checkInStatus === "CANCELLED" || b.checkInStatus === "COMPLETED") return false;
+    if (
+      b.checkInStatus === "CANCELLED" ||
+      b.checkInStatus === "COMPLETED" ||
+      (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
+    ) {
+      return false;
+    }
     const bStartYmd = normalizeDateToYMD(b.date);
     const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
     return Boolean(bStartYmd) && targetYmd >= bStartYmd && targetYmd <= bEndYmd;
   });
+
+  let peakOverlapping = 0;
+  let firstConflicting: CoworkingBooking | undefined;
 
   for (let min = reqStartMin; min < reqEndMin; min += 30) {
     const windowEnd = min + 30;
@@ -127,16 +203,46 @@ export function checkSlotAvailability({
       return min < bEndMin && windowEnd > bStartMin;
     });
 
-    if (overlapping.length >= maxCapacity) {
-      return {
-        isAvailable: false,
-        reason: "Sudah dibooking",
-        conflictingBooking: overlapping[0],
-      };
+    if (overlapping.length > peakOverlapping) {
+      peakOverlapping = overlapping.length;
+      if (!firstConflicting && overlapping.length >= maxCapacity) {
+        firstConflicting = overlapping[0];
+      }
     }
   }
 
-  return { isAvailable: true };
+  const remainingSeats = Math.max(0, maxCapacity - peakOverlapping);
+
+  if (isPast) {
+    return {
+      isAvailable: false,
+      reason: "Slot sudah lewat",
+      remainingSeats,
+      maxCapacity,
+      isPast: true,
+      label: "Lewat",
+    };
+  }
+
+  if (remainingSeats <= 0) {
+    return {
+      isAvailable: false,
+      reason: "Sudah dibooking",
+      conflictingBooking: firstConflicting,
+      remainingSeats: 0,
+      maxCapacity,
+      isPast: false,
+      label: "Penuh",
+    };
+  }
+
+  return {
+    isAvailable: true,
+    remainingSeats,
+    maxCapacity,
+    isPast: false,
+    label: `${remainingSeats}/${maxCapacity} tersisa`,
+  };
 }
 
 const SPACE_TYPE_LABELS: Record<string, string> = {

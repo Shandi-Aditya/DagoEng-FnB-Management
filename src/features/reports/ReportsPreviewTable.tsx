@@ -8,6 +8,7 @@ import { StatCard } from "@/components/app/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -34,6 +35,11 @@ export interface ReportsPreviewTableProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  companyFilter?: {
+    selectedCompany: string;
+    availableCompanies: string[];
+    onCompanyChange: (company: string) => void;
+  };
 }
 
 export function ReportsPreviewTable({
@@ -46,6 +52,7 @@ export function ReportsPreviewTable({
   pageSize,
   onPageChange,
   onPageSizeChange,
+  companyFilter,
 }: ReportsPreviewTableProps) {
   const hasSearch = searchQuery.trim() !== "";
   const filteredRows = filterReportRows(report.tableRows, searchQuery);
@@ -100,20 +107,38 @@ export function ReportsPreviewTable({
             <p className="text-xs text-muted-foreground">{report.subtitle}</p>
           </div>
 
-          {report.tableRows.length > 0 ? (
-            <InputGroup className="sm:max-w-xs">
-              <InputGroupAddon>
-                <Search />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Cari di laporan ini"
-                aria-label="Cari baris laporan"
-              />
-            </InputGroup>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {companyFilter && (
+              <NativeSelect
+                className="w-full sm:w-48"
+                value={companyFilter.selectedCompany}
+                onChange={(e) => companyFilter.onCompanyChange(e.target.value)}
+                aria-label="Filter perusahaan"
+              >
+                <NativeSelectOption value="ALL">Semua perusahaan</NativeSelectOption>
+                {companyFilter.availableCompanies.map((c) => (
+                  <NativeSelectOption key={c} value={c}>
+                    {c}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            )}
+
+            {report.tableRows.length > 0 || hasSearch ? (
+              <InputGroup className="sm:max-w-xs">
+                <InputGroupAddon>
+                  <Search />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Cari di laporan ini"
+                  aria-label="Cari baris laporan"
+                />
+              </InputGroup>
+            ) : null}
+          </div>
         </div>
 
         {filteredRows.length === 0 ? (

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/components/app/notify";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCoworking } from "@/contexts/CoworkingContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
@@ -17,6 +18,7 @@ import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useTables } from "@/contexts/TableContext";
+import { CorporateInvoicePDFModal } from "@/features/pos/CorporateInvoicePDFModal";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
@@ -57,6 +59,7 @@ export default function OrdersPage() {
   const { settings } = useSettings();
   const { activeShift, openShift, recordShiftTransaction, recordShiftRefund } = useEmployeeShift();
   const { canReceiveCashierReceipt, canReceiveKitchenReceipt } = usePrinter();
+  const { bookings: cwBookings, confirmBookingPayment, cancelBooking } = useCoworking();
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
@@ -122,6 +125,7 @@ export default function OrdersPage() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [receiptModalOrder, setReceiptModalOrder] = useState<POSReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState<OrderRecord | null>(null);
   const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
   const [isKitchenModalOpen, setIsKitchenModalOpen] = useState<boolean>(false);
   const [refundOrderTarget, setRefundOrderTarget] = useState<OrderRecord | null>(null);
@@ -196,6 +200,7 @@ export default function OrdersPage() {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    paymentReference?: string;
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => {
@@ -231,11 +236,13 @@ export default function OrdersPage() {
         {
           paymentStatus: "PAID",
           paymentMethod: chosenMethod,
+          paymentReference:
+            paymentData.paymentReference || paymentData.qrisVerification?.referenceNumber,
           qrisVerification: paymentData.qrisVerification,
           splitDetails: mappedSplitDetails,
           cashierName: user?.name,
-          tax: pBreakdown.pb1,
-          serviceCharge: pBreakdown.serviceCharge,
+          tax: paymentOrder.tax ?? pBreakdown.pb1,
+          serviceCharge: paymentOrder.serviceCharge ?? pBreakdown.serviceCharge,
         }
       );
 
@@ -258,6 +265,15 @@ export default function OrdersPage() {
             : 0;
       recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
 
+      if (paymentOrder.corporateInfo?.linkedBookingCode) {
+        const matchingBooking = cwBookings.find(
+          (b) => b.bookingCode === paymentOrder.corporateInfo?.linkedBookingCode
+        );
+        if (matchingBooking) {
+          confirmBookingPayment(matchingBooking.id, chosenMethod);
+        }
+      }
+
       const orderNormPhone = paymentOrder.customerPhone
         ? normalizeLoyaltyPhone(paymentOrder.customerPhone)
         : "";
@@ -269,7 +285,12 @@ export default function OrdersPage() {
           (m) => m.name.toLowerCase().trim() === paymentOrder.customerName.toLowerCase().trim()
         );
       let pointsAdded = 0;
-      if (matchingMember) {
+      const alreadyEarnedForOrder = matchingMember
+        ? matchingMember.pointHistory.some(
+            (h) => h.type === "EARN" && h.relatedTransactionId === paymentOrder.id
+          )
+        : false;
+      if (matchingMember && !alreadyEarnedForOrder) {
         pointsAdded = Math.floor(paymentOrder.total / 1000);
         addPoints(
           matchingMember.id,
@@ -322,6 +343,10 @@ export default function OrdersPage() {
           status: nextStatus,
           paymentStatus: "PAID" as const,
           paymentMethod: chosenMethod,
+          paymentReference:
+            paymentData.paymentReference ||
+            paymentData.qrisVerification?.referenceNumber ||
+            paymentOrder.paymentReference,
           qrisVerification: paymentData.qrisVerification ?? paymentOrder.qrisVerification,
           splitDetails: mappedSplitDetails ?? paymentOrder.splitDetails,
           cashierName: user?.name || paymentOrder.cashierName,
@@ -461,6 +486,12 @@ export default function OrdersPage() {
           resolvedOrder.outletId
         );
       }
+      if (refundOrderTarget.corporateInfo?.linkedBookingCode) {
+        const matchingBooking = cwBookings.find(
+          (b) => b.bookingCode === refundOrderTarget.corporateInfo?.linkedBookingCode
+        );
+        cancelBooking(matchingBooking?.id || refundOrderTarget.corporateInfo.linkedBookingCode);
+      }
 
       const isPostCook =
         !isOrderBeforeCooking(refundOrderTarget) || !isOrderBeforeCooking(resolvedOrder);
@@ -545,6 +576,7 @@ export default function OrdersPage() {
         emptyMessage={emptyQueueMessage(orderQueue, searchQuery.trim() !== "")}
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}
+        onViewInvoice={(order) => setInvoiceModalOrder(order)}
         onOpenPayment={handleOpenPayment}
         onSelectOrder={setSelectedOrder}
       />
@@ -557,6 +589,7 @@ export default function OrdersPage() {
         canPrintCashierReceipt={canPrintCashierReceipt}
         canPrintKitchenReceipt={canPrintKitchenReceipt}
         promos={settings.promos}
+        onViewInvoice={(order) => setInvoiceModalOrder(order)}
         onOpenPayment={handleOpenPayment}
         onPrintReceipt={handlePrintReceipt}
         onPrintKitchenTicket={handlePrintKitchenTicket}
@@ -594,6 +627,7 @@ export default function OrdersPage() {
             tableNumber={paymentOrder.tableNumber}
             customerName={paymentOrder.customerName}
             orderType={paymentOrder.orderType === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"}
+            isSettlement
             onPaymentSuccess={handlePaymentSuccess}
           />
         );
@@ -631,6 +665,13 @@ export default function OrdersPage() {
         isOpen={isReceiptModalOpen}
         receiptData={receiptModalOrder}
         onClose={() => setIsReceiptModalOpen(false)}
+      />
+
+      {/* Corporate Invoice PDF Modal */}
+      <CorporateInvoicePDFModal
+        isOpen={Boolean(invoiceModalOrder)}
+        onClose={() => setInvoiceModalOrder(null)}
+        order={invoiceModalOrder}
       />
 
       {/* Kitchen Order Thermal Ticket Modal for Reprinting (Kitchen) */}

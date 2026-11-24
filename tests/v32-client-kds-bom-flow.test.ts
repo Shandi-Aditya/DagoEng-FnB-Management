@@ -125,6 +125,45 @@ describe("V-32 Wave 2B: Client KDS, Waiter, Orders/POS & BOM Flow", () => {
       const ready = getReadyWaiterOrders([paidReady, unpaidReady, refundedReady], "outlet-sgr");
       expect(ready.map((o) => o.id)).toEqual(["ord-ready-paid"]);
     });
+
+    it("includes corporate INVOICE orders in getReadyWaiterOrders while excluding regular PENDING and REFUNDED", () => {
+      const invoiceByMethod = makeOrder({
+        id: "ord-ready-invoice-method",
+        status: "READY",
+        paymentStatus: "PENDING",
+        paymentMethod: "INVOICE",
+      });
+      const invoiceByCorpInfo = makeOrder({
+        id: "ord-ready-invoice-corp",
+        status: "READY",
+        paymentStatus: "PENDING",
+        paymentMethod: undefined,
+        corporateInfo: {
+          companyName: "PT Uji Korporat",
+          picName: "Rina",
+          picPhone: "08123456789",
+          billingType: "INVOICE",
+        },
+      });
+      const unpaidRegular = makeOrder({
+        id: "ord-ready-regular-pending",
+        status: "READY",
+        paymentStatus: "PENDING",
+        paymentMethod: "QRIS",
+      });
+      const refundedInvoice = makeOrder({
+        id: "ord-ready-invoice-refunded",
+        status: "READY",
+        paymentStatus: "REFUNDED",
+        paymentMethod: "INVOICE",
+      });
+
+      const ready = getReadyWaiterOrders(
+        [invoiceByMethod, invoiceByCorpInfo, unpaidRegular, refundedInvoice],
+        "outlet-sgr"
+      );
+      expect(ready.map((o) => o.id)).toEqual(["ord-ready-invoice-method", "ord-ready-invoice-corp"]);
+    });
   });
 
   describe("2. Client Payment Gate & Post-Payment Status Mapping", () => {
@@ -153,6 +192,61 @@ describe("V-32 Wave 2B: Client KDS, Waiter, Orders/POS & BOM Flow", () => {
       expect(canAdvanceOrderStatus({ paymentStatus: "PAID" }, "KITCHEN_RECEIVED").allowed).toBe(
         true
       );
+    });
+
+    it("allows advancing corporate INVOICE orders through KDS/Waiter while keeping regular PENDING blocked", () => {
+      for (const nextStatus of [
+        "KITCHEN_RECEIVED",
+        "COOKING",
+        "READY",
+        "SERVED",
+        "COMPLETED",
+      ] as const) {
+        expect(
+          canAdvanceOrderStatus(
+            { paymentStatus: "PENDING", paymentMethod: "INVOICE" },
+            nextStatus
+          ).allowed
+        ).toBe(true);
+        expect(
+          canAdvanceOrderStatus(
+            {
+              paymentStatus: "PENDING",
+              corporateInfo: {
+                companyName: "PT Uji Korporat",
+                picName: "Rina",
+                picPhone: "08123456789",
+                billingType: "INVOICE",
+              },
+            },
+            nextStatus
+          ).allowed
+        ).toBe(true);
+        expect(
+          canAdvanceOrderStatus(
+            {
+              paymentStatus: "PENDING",
+              corporateInfo: {
+                companyName: "PT Uji Korporat",
+                picName: "Rina",
+                picPhone: "08123456789",
+                billingType: "PREPAID",
+              },
+            },
+            nextStatus
+          ).allowed
+        ).toBe(false);
+        expect(
+          canAdvanceOrderStatus({ paymentStatus: "PENDING" }, nextStatus).allowed
+        ).toBe(false);
+      }
+
+      expect(
+        canAdvanceOrderStatus(
+          { paymentStatus: "REFUNDED", paymentMethod: "INVOICE" },
+          "KITCHEN_RECEIVED"
+        ).allowed
+      ).toBe(false);
     });
 
     it("maps NEW -> CONFIRMED on payment so paid orders enter KDS instead of skipping to COMPLETED", () => {
@@ -575,6 +669,78 @@ describe("V-32 Wave 2B: Client KDS, Waiter, Orders/POS & BOM Flow", () => {
         precookSeed.orderNumber,
         precookSeed.id
       );
+    });
+
+    it("triggers deductOrderBOM for corporate INVOICE POS orders and persists paymentReference on settlement", async () => {
+      const invoiceOrder = makeOrder({
+        id: "ord-pos-invoice-bom",
+        status: "CONFIRMED",
+        paymentStatus: "PENDING",
+        paymentMethod: "INVOICE",
+        corporateInfo: {
+          companyName: "PT Uji Korporat",
+          picName: "Rina",
+          picPhone: "08123456789",
+          billingType: "INVOICE",
+        },
+      });
+
+      let callNum = 0;
+      (globalThis as Record<string, unknown>).fetch = vi.fn(async (_input, init) => {
+        callNum++;
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        if (callNum === 1) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              order: { ...invoiceOrder, ...(body.order || {}), bomDeducted: false },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            order: { ...(body.order || invoiceOrder), bomDeducted: true },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      });
+
+      const ctx = mountOrderContext();
+      const { order, serverSync } = ctx.createPosOrderWithSync({
+        id: invoiceOrder.id,
+        items: invoiceOrder.items,
+        subtotal: invoiceOrder.subtotal,
+        tax: invoiceOrder.tax,
+        serviceCharge: invoiceOrder.serviceCharge,
+        total: invoiceOrder.total,
+        paymentStatus: "PENDING",
+        paymentMethod: "INVOICE",
+        corporateInfo: invoiceOrder.corporateInfo,
+      });
+
+      const createRes = await serverSync;
+      expect(createRes.rejected).toBe(false);
+      expect(mockDeductOrderBOM).toHaveBeenCalledTimes(1);
+      expect(ctx.getOrderById(order.id)?.bomDeducted).toBe(true);
+
+      const settleRes = await ctx.advanceOrderStatus(
+        order.id,
+        "COMPLETED",
+        "Pelunasan transfer bank",
+        {
+          paymentStatus: "PAID",
+          paymentMethod: "TRANSFER",
+          paymentReference: "TRF-20261124-900",
+        }
+      );
+
+      expect(settleRes.rejected).toBe(false);
+      expect(settleRes.order?.paymentStatus).toBe("PAID");
+      expect(settleRes.order?.paymentMethod).toBe("TRANSFER");
+      expect(settleRes.order?.paymentReference).toBe("TRF-20261124-900");
+      expect(mockDeductOrderBOM).toHaveBeenCalledTimes(1);
     });
   });
 });

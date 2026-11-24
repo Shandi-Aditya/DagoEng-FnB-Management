@@ -3264,6 +3264,44 @@ export function getBookingPaymentExpiryMs(): number {
 }
 
 /**
+ * Checks and expires unpaid bookings in an in-transaction snapshot.
+ * Purely operates on loaded arrays and recalculates promo usage if any booking expired.
+ * Does not perform external I/O or independent transaction commits.
+ */
+export function expirePendingBookingsSnapshot(
+  bookings: EventTicketOrder[],
+  events: CommunityEvent[],
+  nowMs: number = Date.now()
+): boolean {
+  const expiryWindow = getBookingPaymentExpiryMs();
+  let modified = false;
+
+  for (let i = 0; i < bookings.length; i++) {
+    const b = bookings[i];
+    if (b.paymentStatus === "PENDING" && b.totalPrice > 0 && !b.paymentProofUrl) {
+      const createdMs = new Date(b.createdAt).getTime();
+      const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
+      const isExpiredByTimestamp = !isNaN(expiresAtMs) && nowMs > expiresAtMs;
+      const isExpiredByWindow = !isNaN(createdMs) && nowMs - createdMs > expiryWindow;
+      if (isExpiredByTimestamp || isExpiredByWindow) {
+        bookings[i] = {
+          ...b,
+          paymentStatus: "EXPIRED",
+          updatedAt: new Date(nowMs).toISOString(),
+        };
+        modified = true;
+      }
+    }
+  }
+
+  if (modified) {
+    recalculateAllPromoUsageCounts(events, bookings);
+  }
+
+  return modified;
+}
+
+/**
  * Checks and cancels/expires unpaid bookings older than the payment window.
  * Releases ticket quota immediately. Idempotent and safe to run concurrently.
  * Strictly guarantees that PAID tickets NEVER expire.
@@ -3653,6 +3691,7 @@ export async function createInvitationTicket(
   return withBookingLock(async () => {
     let committedBooking: EventTicketOrder | null = null;
     let committedBookingsList: EventTicketOrder[] | null = null;
+    let committedEventsList: CommunityEvent[] | null = null;
 
     const result = await runWithDistributedEventLock(payload.eventId, async (tx) => {
       let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
@@ -3671,7 +3710,13 @@ export async function createInvitationTicket(
         throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk menerbitkan tiket undangan pada event ini.");
       }
 
-      await expirePendingBookings();
+      const hadExpired = expirePendingBookingsSnapshot(allBookings, allEvents, Date.now());
+      if (hadExpired) {
+        await saveBookingsToDisk(allBookings, { tx });
+        await saveEventsToDisk(allEvents, { tx });
+        committedEventsList = allEvents;
+        committedBookingsList = allBookings;
+      }
 
       // Resolve tier if specified
       let selectedTier: EventTicketTier | undefined;
@@ -3788,6 +3833,10 @@ export async function createInvitationTicket(
       return newBooking;
     });
 
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
+    }
     if (committedBookingsList) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
@@ -4377,33 +4426,69 @@ export async function createEventBooking(
     let committedBooking: EventTicketOrder | null = null;
     let committedBookingsList: EventTicketOrder[] | null = null;
     let committedEventsList: CommunityEvent[] | null = null;
+    let createdNewBooking = false;
 
     const result = await runWithDistributedEventLock(payload.eventId, async (tx) => {
       let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
       let allBookings: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
 
-      const initialEvent = allEvents.find((e) => e.id === payload.eventId);
-      if (!initialEvent) {
+      const event = allEvents.find((e) => e.id === payload.eventId);
+      if (!event) {
         throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
       }
 
-      const validation = validateEventBooking(payload, initialEvent);
+      const hadExpired = expirePendingBookingsSnapshot(allBookings, allEvents, Date.now());
+
+      const validation = validateEventBooking(payload, event);
       if (!validation.valid) {
         throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
       }
 
-      await expirePendingBookings();
-      allEvents = await loadEventsFromTxOrDisk(tx);
-      allBookings = await loadBookingsFromTxOrDisk(tx);
-      const event = allEvents.find((e) => e.id === payload.eventId);
-      if (!event) {
-        throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
+      if (hadExpired) {
+        await saveBookingsToDisk(allBookings, { tx });
+        await saveEventsToDisk(allEvents, { tx });
+        committedEventsList = allEvents;
+        committedBookingsList = allBookings;
       }
       const activeBookings = allBookings.filter(
         (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
       );
 
-      // 1. Quota & Venue Capacity Check
+      // 1. ClientReferenceId Idempotency Guard & 3-Minute Anti-duplicate Booking Protection
+      // Must be evaluated BEFORE quota subtraction so rapid clicks converge gracefully
+      const normalizedEmail = payload.guestEmail.trim().toLowerCase();
+      const normalizedPhone = payload.guestPhone ? payload.guestPhone.trim() : "";
+      const trimmedClientRef = typeof payload.clientReferenceId === "string" ? payload.clientReferenceId.trim() : "";
+
+      if (trimmedClientRef.length >= 8) {
+        const matching = activeBookings.find(
+          (b) =>
+            b.eventId === event.id &&
+            b.clientReferenceId === trimmedClientRef &&
+            b.guestEmail.toLowerCase() === normalizedEmail &&
+            (b.guestPhone || "").trim() === normalizedPhone &&
+            (b.paymentStatus === "PENDING" || b.paymentStatus === "PAID")
+        );
+        if (matching) {
+          committedBooking = matching;
+          return matching;
+        }
+      }
+
+      const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
+      const isDuplicate = activeBookings.some((b) => {
+        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
+        const isRecent = new Date(b.createdAt).getTime() > threeMinutesAgo;
+        return isSameEmail && isRecent;
+      });
+
+      if (isDuplicate) {
+        throw new Error(
+          "Pemesanan tiket untuk event ini baru saja dilakukan dari email yang sama. Mohon tunggu 3 menit sebelum melakukan pemesanan tiket baru."
+        );
+      }
+
+      // 2. Quota & Venue Capacity Check
       let selectedTier: EventTicketTier | undefined;
       let unitPrice = 0;
 
@@ -4443,21 +4528,6 @@ export async function createEventBooking(
       if (payload.ticketCount > remainingQuota) {
         throw new Error(
           `Kapasitas venue atau kuota tiket telah penuh. Sisa tiket tersedia saat ini: ${Math.max(0, remainingQuota)} tiket.`
-        );
-      }
-
-      // 2. Anti-duplicate Booking Protection (same email + same event within 3 minutes)
-      const normalizedEmail = payload.guestEmail.trim().toLowerCase();
-      const threeMinutesAgo = Date.now() - 3 * 60 * 1000;
-      const isDuplicate = activeBookings.some((b) => {
-        const isSameEmail = b.guestEmail.toLowerCase() === normalizedEmail;
-        const isRecent = new Date(b.createdAt).getTime() > threeMinutesAgo;
-        return isSameEmail && isRecent;
-      });
-
-      if (isDuplicate) {
-        throw new Error(
-          "Pemesanan tiket untuk event ini baru saja dilakukan dari email yang sama. Mohon tunggu 3 menit sebelum melakukan pemesanan tiket baru."
         );
       }
 
@@ -4589,6 +4659,7 @@ export async function createEventBooking(
         checkedInSeats: [],
         seatCheckInTimes: {},
         destinationBankSnapshot,
+        clientReferenceId: trimmedClientRef.length >= 8 ? trimmedClientRef : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -4598,6 +4669,7 @@ export async function createEventBooking(
 
       committedBooking = newBooking;
       committedBookingsList = allBookings;
+      createdNewBooking = true;
 
       return newBooking;
     });
@@ -4612,11 +4684,11 @@ export async function createEventBooking(
       markStorageSyncSynced("event_bookings.json");
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket gratis terbit (PAID)
-      if (committedBooking && (committedBooking as EventTicketOrder).paymentStatus === "PAID") {
+      if (createdNewBooking && result && result.paymentStatus === "PAID") {
         let emailTimer: NodeJS.Timeout | undefined;
         try {
           await Promise.race([
-            dispatchPaidTicketEmail(committedBooking as EventTicketOrder),
+            dispatchPaidTicketEmail(result),
             new Promise((_, reject) => {
               emailTimer = setTimeout(() => reject(new Error("Timeout sending free ticket email")), 10000);
             }),

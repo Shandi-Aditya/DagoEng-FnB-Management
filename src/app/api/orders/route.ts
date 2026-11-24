@@ -180,6 +180,42 @@ function canonicalSale(order: OrderRecord): string {
   return JSON.stringify(sortKeys(sale));
 }
 
+function canonicalCoreSale(order: OrderRecord): string {
+  const PAYMENT_OR_WORKFLOW_FIELDS = new Set([
+    ...WORKFLOW_FIELDS,
+    "paymentStatus",
+    "paymentMethod",
+    "paidAmount",
+    "changeDue",
+    "paymentReference",
+    "qrisVerification",
+    "cashierName",
+    "splitDetails",
+  ]);
+  const sortKeys = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.keys(value as Record<string, unknown>)
+          .sort()
+          .map((key) => [key, sortKeys((value as Record<string, unknown>)[key])])
+      );
+    }
+    return value;
+  };
+  const normalized: OrderRecord = {
+    ...order,
+    tax: Math.round(order.tax ?? 0),
+    serviceCharge: Math.round(order.serviceCharge ?? 0),
+  };
+  const sale = Object.fromEntries(
+    Object.entries(normalized).filter(
+      ([key, value]) => !PAYMENT_OR_WORKFLOW_FIELDS.has(key) && value !== undefined
+    )
+  );
+  return JSON.stringify(sortKeys(sale));
+}
+
 type OrderWriteDecision =
   | { allowed: true; auditPaidChange: boolean; requiresPinCheck: boolean }
   | { allowed: false; error: string; status?: number };
@@ -229,8 +265,25 @@ function decideOrderWrite(
     next.status === "CANCELLED" ||
     next.paymentStatus === "REFUNDED" ||
     Boolean(next.voidReason);
+  const isCorporateInvoice =
+    next.paymentMethod === "INVOICE" ||
+    next.corporateInfo?.billingType === "INVOICE" ||
+    existing?.paymentMethod === "INVOICE" ||
+    existing?.corporateInfo?.billingType === "INVOICE";
+  const createsOrSwitchesToInvoice =
+    (next.paymentMethod === "INVOICE" || next.corporateInfo?.billingType === "INVOICE") &&
+    (!existing ||
+      (existing.paymentMethod !== "INVOICE" && existing.corporateInfo?.billingType !== "INVOICE"));
 
-  if (!isCancellingOrRefunding && targetsKdsStage(next) && effectivePaymentStatus !== "PAID") {
+  if (createsOrSwitchesToInvoice && !isPosRole) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN: Hanya peran kasir atau manajemen yang dapat menerbitkan pesanan tagihan perusahaan (INVOICE).",
+    };
+  }
+
+  if (!isCancellingOrRefunding && !isCorporateInvoice && targetsKdsStage(next) && effectivePaymentStatus !== "PAID") {
     return {
       allowed: false,
       status: 403,
@@ -312,6 +365,27 @@ function decideOrderWrite(
   }
 
   if (existing.paymentStatus !== "PAID" && !isClosed) {
+    if (next.paymentStatus === "PAID") {
+      if (canonicalCoreSale(existing) !== canonicalCoreSale(next)) {
+        return {
+          allowed: false,
+          error: "FORBIDDEN: Item dan nilai transaksi tidak boleh diubah saat pelunasan.",
+        };
+      }
+      if (Array.isArray(next.splitDetails) && next.splitDetails.length > 0) {
+        const splitSum = next.splitDetails.reduce(
+          (sum, g) => sum + Math.round(Number(g.amount || 0)),
+          0
+        );
+        if (Math.abs(splitSum - Math.round(existing.total)) > 1) {
+          return {
+            allowed: false,
+            status: 400,
+            error: "INVALID_SPLIT_TOTAL: Total rincian split payment tidak sesuai dengan total pesanan.",
+          };
+        }
+      }
+    }
     return isPosRole
       ? { allowed: true, auditPaidChange: false, requiresPinCheck: false }
       : { allowed: false, error: `FORBIDDEN: Role [${role}] hanya boleh mengubah status pesanan.` };
@@ -352,6 +426,19 @@ const OrderItemSchema = z.object({
   modifiers: z.array(z.string()).optional(),
 });
 
+const CorporateInfoSchema = z.object({
+  companyName: z.string(),
+  picName: z.string(),
+  picPhone: z.string(),
+  headcount: z.number().int().positive().optional(),
+  billingType: z.enum(["PREPAID", "INVOICE"]),
+  invoiceNumber: z.string().optional(),
+  invoiceDueDate: z.string().optional(),
+  notes: z.string().optional(),
+  linkedBookingCode: z.string().optional(),
+  linkedSpaceName: z.string().optional(),
+});
+
 const OrderPayloadSchema = z.object({
   id: z.string().min(1),
   orderNumber: z.string().optional(),
@@ -367,8 +454,9 @@ const OrderPayloadSchema = z.object({
   total: z.number().finite().nonnegative(),
   items: z.array(OrderItemSchema).optional(),
   paymentStatus: z.enum(["PENDING", "PAID", "REFUNDED"]).optional(),
-  paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT"]).optional(),
+  paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT", "INVOICE"]).optional(),
   notes: z.string().optional(),
+  corporateInfo: CorporateInfoSchema.optional(),
   status: z
     .enum(["NEW", "CONFIRMED", "KITCHEN_RECEIVED", "COOKING", "READY", "SERVED", "COMPLETED", "CANCELLED"])
     .optional(),
@@ -450,6 +538,7 @@ function validateOrderPayload(orderData: OrderRecord):
     paymentStatus: orderData.paymentStatus,
     paymentMethod: orderData.paymentMethod as OrderRecord["paymentMethod"],
     notes: orderData.notes,
+    corporateInfo: orderData.corporateInfo,
     status: orderData.status,
   });
 
@@ -942,13 +1031,18 @@ async function executeAuthorizedOrderWrite(params: {
   }
 
   let bomDeduction: { applied: boolean; deductedItems: number } | null = null;
+  const isCorporateInvoiceOrder =
+    savedOrder.paymentMethod === "INVOICE" ||
+    savedOrder.corporateInfo?.billingType === "INVOICE";
   if (
-    savedOrder.paymentStatus === "PAID" &&
+    (savedOrder.paymentStatus === "PAID" || isCorporateInvoiceOrder) &&
     savedOrder.status !== "CANCELLED" &&
     !savedOrder.bomDeducted
   ) {
     bomDeduction = await deductPersistentOrderBOM(savedOrder, {
-      reason: "POS Server Order Settlement",
+      reason: isCorporateInvoiceOrder
+        ? "POS Corporate Invoice Order Confirmation"
+        : "POS Server Order Settlement",
     });
   }
 
@@ -1057,6 +1151,10 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Gagal menyimpan transaksi POS.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+export async function PUT(req: NextRequest) {
+  return POST(req);
 }
 
 export async function PATCH(req: NextRequest) {

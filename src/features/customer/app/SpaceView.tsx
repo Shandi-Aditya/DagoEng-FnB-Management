@@ -54,18 +54,13 @@ function upcomingDays(): { value: string; weekday: string; day: string }[] {
 }
 
 
-function currentHourWita(): string {
-  const hour = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    hourCycle: "h23",
-    timeZone: WITA,
-  }).format(new Date());
-  return `${hour}:00`;
-}
-
 interface Selection {
   space: CoworkingSpaceItem;
   start: string;
+}
+
+function spaceMaxCapacity(space: CoworkingSpaceItem): number {
+  return space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
 }
 
 /** Pick a day, see each room's free hours, tap one to book it. */
@@ -90,7 +85,6 @@ export function SpaceView(props: SpaceViewProps) {
   const slots = getAvailableTimeSlots();
   const bookable = props.spaces.filter((space) => space.status !== "MAINTENANCE");
   const dayStatus = props.isDateOpen(date);
-  const pastCutoff = date === days[0].value ? currentHourWita() : null;
 
   const open = (space: CoworkingSpaceItem, start: string) => {
     setSelection({ space, start });
@@ -103,7 +97,14 @@ export function SpaceView(props: SpaceViewProps) {
     selection !== null &&
     hours < COWORKING_MAX_HOURS &&
     isWithinCoworkingHours(selection.start, hours + 1) &&
-    isRangeFree(props.bookings, selection.space.id, date, selection.start, hours + 1);
+    isRangeFree(
+      props.bookings,
+      selection.space.id,
+      date,
+      selection.start,
+      hours + 1,
+      spaceMaxCapacity(selection.space)
+    );
   const basePrice = selection ? selection.space.hourlyRate * hours : 0;
   const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
   const total = basePrice + taxAmount;
@@ -170,24 +171,33 @@ export function SpaceView(props: SpaceViewProps) {
                   space.id,
                   date,
                   slots,
-                  space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1
-                )
-                  .map((slot) => ({ ...slot, isTaken: slot.isTaken || (pastCutoff !== null && slot.time < pastCutoff) }))
-                  .map((slot) => (
+                  spaceMaxCapacity(space),
+                  { checkPast: true }
+                ).map((slot) => (
                   <button
                     key={slot.time}
                     type="button"
                     disabled={slot.isTaken}
                     onClick={() => open(space, slot.time)}
-                    aria-label={`${space.name} jam ${slot.time}${slot.isTaken ? ", terisi" : ""}`}
+                    aria-label={`${space.name} jam ${slot.time}, ${slot.label}`}
                     className={cn(
-                      "h-9 rounded-md border font-mono text-xs tabular-nums transition-colors",
-                      slot.isTaken
-                        ? "cursor-not-allowed border-transparent bg-muted text-muted-foreground line-through"
-                        : "border-unit-coworking/40 bg-unit-coworking/10 hover:bg-unit-coworking/20",
+                      "flex flex-col items-center justify-center rounded-md border p-1 text-center transition-colors min-h-[46px]",
+                      slot.isPast && "cursor-not-allowed border-border/40 bg-muted/30 text-muted-foreground opacity-60",
+                      !slot.isPast && slot.isTaken && "cursor-not-allowed border-destructive/20 bg-destructive/10 text-destructive/80 opacity-75",
+                      !slot.isTaken && "border-unit-coworking/40 bg-unit-coworking/10 hover:bg-unit-coworking/20 text-foreground"
                     )}
                   >
-                    {slot.time}
+                    <span className="font-mono text-xs font-semibold leading-tight">{slot.time}</span>
+                    <span
+                      className={cn(
+                        "text-xs leading-tight font-medium mt-0.5",
+                        slot.isPast && "text-muted-foreground",
+                        !slot.isPast && slot.isTaken && "text-destructive",
+                        !slot.isTaken && "text-success"
+                      )}
+                    >
+                      {slot.label}
+                    </span>
                   </button>
                 ))}
               </div>

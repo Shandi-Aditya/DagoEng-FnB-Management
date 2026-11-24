@@ -446,6 +446,55 @@ export function checkCoworkingBookingConflict(
   const candStartMin = parseTimeToMinutes(candidate.startTime);
   const candEndMin = parseTimeToMinutes(candidate.endTime);
   const allowedConcurrent = Math.max(1, candidate.maxCapacity ?? 1);
+
+  if (
+    candidate.bookingType === "HOURLY" &&
+    candStartMin !== null &&
+    candEndMin !== null &&
+    candStartYmd === candEndYmd
+  ) {
+    const relevantBookings = existingBookings.filter((b) => {
+      if (candidate.id && b.id === candidate.id) return false;
+      if (
+        b.checkInStatus === "CANCELLED" ||
+        b.checkInStatus === "COMPLETED" ||
+        (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
+      ) {
+        return false;
+      }
+      if (b.spaceId !== candidate.spaceId) return false;
+      const bStartYmd = normalizeDateToYMD(b.date);
+      const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
+      return !(candEndYmd < bStartYmd || candStartYmd > bEndYmd);
+    });
+
+    for (let min = candStartMin; min < candEndMin; min += 30) {
+      const windowEnd = min + 30;
+      const overlapping = relevantBookings.filter((b) => {
+        if (b.bookingType === "DAILY" || b.bookingType === "MONTHLY") return true;
+        const bStartMin = parseTimeToMinutes(b.startTime);
+        const bEndMin = parseTimeToMinutes(b.endTime);
+        if (bStartMin === null || bEndMin === null) return true;
+        return min < bEndMin && windowEnd > bStartMin;
+      });
+
+      if (overlapping.length >= allowedConcurrent) {
+        const firstOverlap = overlapping[0];
+        const remainingSeats = Math.max(0, allowedConcurrent - overlapping.length);
+        return {
+          hasConflict: true,
+          conflictingBooking: firstOverlap,
+          message:
+            allowedConcurrent > 1
+              ? `Kapasitas slot tidak mencukupi: Workspace ${candidate.spaceName || firstOverlap.spaceName} sudah terisi ${overlapping.length}/${allowedConcurrent} kursi pada rentang ini (tersisa ${remainingSeats} kursi).`
+              : `Jadwal bentrok: Workspace ${candidate.spaceName || firstOverlap.spaceName} sudah dipesan oleh ${firstOverlap.guestName} pada jam ${firstOverlap.startTime} - ${firstOverlap.endTime || "Selesai"} (Kode: ${firstOverlap.bookingCode}).`,
+        };
+      }
+    }
+
+    return { hasConflict: false };
+  }
+
   let overlappingCount = 0;
   let firstOverlap: CoworkingBooking | undefined;
 

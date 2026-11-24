@@ -69,12 +69,22 @@ export function shouldRestoreClientOrderBOM(
 }
 
 export function canAdvanceOrderStatus(
-  order: Pick<OrderRecord, "paymentStatus">,
+  order: Pick<OrderRecord, "paymentStatus"> &
+    Partial<Pick<OrderRecord, "paymentMethod" | "corporateInfo">>,
   nextStatus: OrderStatus,
-  paymentStatusOverride?: OrderRecord["paymentStatus"]
+  paymentStatusOverride?: OrderRecord["paymentStatus"],
+  paymentMethodOverride?: OrderRecord["paymentMethod"]
 ): { allowed: true } | { allowed: false; reason: string } {
   const effectivePaymentStatus = paymentStatusOverride || order.paymentStatus;
-  if (isKdsGatedStatus(nextStatus) && effectivePaymentStatus !== "PAID") {
+  const effectivePaymentMethod = paymentMethodOverride || order.paymentMethod;
+  const isCorporateInvoice =
+    effectivePaymentMethod === "INVOICE" ||
+    order.corporateInfo?.billingType === "INVOICE";
+  if (
+    isKdsGatedStatus(nextStatus) &&
+    effectivePaymentStatus !== "PAID" &&
+    !(isCorporateInvoice && effectivePaymentStatus !== "REFUNDED")
+  ) {
     return {
       allowed: false,
       reason: "Pesanan belum lunas tidak dapat masuk dapur / KDS.",
@@ -163,7 +173,8 @@ interface OrderContextType {
     note?: string,
     paymentUpdate?: {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
-      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+      paymentMethod?: OrderRecord["paymentMethod"];
+      paymentReference?: string;
       qrisVerification?: OrderRecord["qrisVerification"];
       splitDetails?: OrderRecord["splitDetails"];
       cashierName?: string;
@@ -579,7 +590,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     note?: string,
     paymentUpdate?: {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
-      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+      paymentMethod?: OrderRecord["paymentMethod"];
+      paymentReference?: string;
       qrisVerification?: OrderRecord["qrisVerification"];
       splitDetails?: OrderRecord["splitDetails"];
       cashierName?: string;
@@ -593,7 +605,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       return { synced: false, rejected: true, error: "Pesanan tidak ditemukan." };
     }
 
-    const gate = canAdvanceOrderStatus(target, nextStatus, paymentUpdate?.paymentStatus);
+    const gate = canAdvanceOrderStatus(
+      target,
+      nextStatus,
+      paymentUpdate?.paymentStatus,
+      paymentUpdate?.paymentMethod
+    );
     if (!gate.allowed) {
       notify.error(gate.reason);
       return { synced: false, rejected: true, error: gate.reason };
@@ -656,9 +673,20 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     if (nextStatus === "COMPLETED") {
       if (!target.completedAt) updated.completedAt = nowIso;
       if (target.paymentStatus !== "PAID") {
-        updated.paymentStatus = paymentUpdate?.paymentStatus || "PAID";
+        if (
+          (target.paymentMethod === "INVOICE" ||
+            target.corporateInfo?.billingType === "INVOICE") &&
+          !paymentUpdate?.paymentStatus
+        ) {
+          updated.paymentStatus = target.paymentStatus;
+        } else {
+          updated.paymentStatus = paymentUpdate?.paymentStatus || "PAID";
+        }
         if (paymentUpdate?.paymentMethod) {
           updated.paymentMethod = paymentUpdate.paymentMethod;
+        }
+        if (paymentUpdate?.paymentReference) {
+          updated.paymentReference = paymentUpdate.paymentReference;
         }
         if (paymentUpdate?.qrisVerification) {
           updated.qrisVerification = paymentUpdate.qrisVerification;
@@ -688,8 +716,14 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     } else if (paymentUpdate && target.paymentStatus !== "PAID") {
       if (paymentUpdate.paymentStatus) updated.paymentStatus = paymentUpdate.paymentStatus;
       if (paymentUpdate.paymentMethod) updated.paymentMethod = paymentUpdate.paymentMethod;
+      if (paymentUpdate.paymentReference) {
+        updated.paymentReference = paymentUpdate.paymentReference;
+      }
       if (paymentUpdate.qrisVerification) {
         updated.qrisVerification = paymentUpdate.qrisVerification;
+        if (paymentUpdate.qrisVerification.referenceNumber) {
+          updated.paymentReference = paymentUpdate.qrisVerification.referenceNumber;
+        }
       }
       if (paymentUpdate.splitDetails) {
         updated.splitDetails = paymentUpdate.splitDetails;
@@ -707,8 +741,13 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     }
 
     const finalOrder = syncRes.order ?? updated;
-    const isNowPaid = finalOrder.paymentStatus === "PAID" && finalOrder.status !== "CANCELLED";
-    if (isNowPaid && !target.bomDeducted) {
+    const isCorporateInvoice =
+      finalOrder.paymentMethod === "INVOICE" ||
+      finalOrder.corporateInfo?.billingType === "INVOICE";
+    const isNowPaid =
+      (finalOrder.paymentStatus === "PAID" || isCorporateInvoice) &&
+      finalOrder.status !== "CANCELLED";
+    if (isNowPaid && !target.bomDeducted && !finalOrder.bomDeducted) {
       deductOrderBOM(toOrderBomItems(finalOrder.items), finalOrder.id);
       updateOrdersState((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, bomDeducted: true } : o))
@@ -1087,11 +1126,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       taxRatePercent: newOrderData.taxRatePercent,
       serviceChargePercent: newOrderData.serviceChargePercent,
       total: newOrderData.total || 0,
-      paymentStatus: "PAID",
+      paymentStatus: newOrderData.paymentStatus || "PAID",
       paymentMethod: newOrderData.paymentMethod || "QRIS",
       paymentReference: newOrderData.paymentReference,
       cashierName: newOrderData.cashierName || user?.name || "Kasir POS",
       qrisVerification: newOrderData.qrisVerification,
+      corporateInfo: newOrderData.corporateInfo,
       createdAt: nowIso,
       confirmedAt: nowIso,
       statusHistory: [
@@ -1111,7 +1151,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
           toStatus: "CONFIRMED",
           timestamp: nowIso,
           actorName: user?.name || "Kasir POS",
-          note: `Pembayaran lunas via ${newOrderData.paymentMethod || "QRIS"}`,
+          note:
+            newOrderData.paymentStatus === "PENDING"
+              ? `Pesanan tagihan bertempo via ${newOrderData.paymentMethod || "INVOICE"}`
+              : `Pembayaran lunas via ${newOrderData.paymentMethod || "QRIS"}`,
         },
       ],
       ...newOrderData,
@@ -1128,25 +1171,31 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       }
 
       const effectiveOrder = syncRes.order ?? newOrder;
-      if (effectiveOrder.paymentStatus === "PAID") {
-        if (!newOrderData.bomDeducted) {
-          deductOrderBOM(toOrderBomItems(effectiveOrder.items), effectiveOrder.id);
-          updateOrdersState((prev) =>
-            prev.map((o) => (o.id === effectiveOrder.id ? { ...o, bomDeducted: true } : o))
-          );
-        }
-        logActivity({
-          module: "POS",
-          action: "POS_TRANSACTION",
-          recordId: effectiveOrder.orderNumber,
-          newValue: `Total: Rp ${effectiveOrder.total.toLocaleString()} (${effectiveOrder.paymentMethod} - LUNAS)`,
-          description: `Transaksi kasir POS selesai: ${effectiveOrder.orderNumber} (Meja ${effectiveOrder.tableNumber})`,
-          reason: "Pembayaran kasir berhasil",
-          status: "SUCCESS",
-          outletId: targetOutletId,
-          outletName: targetOutletName,
-        });
+      const isCorporateInvoice =
+        effectiveOrder.paymentMethod === "INVOICE" ||
+        effectiveOrder.corporateInfo?.billingType === "INVOICE";
+      if (
+        (effectiveOrder.paymentStatus === "PAID" || isCorporateInvoice) &&
+        effectiveOrder.status !== "CANCELLED" &&
+        !newOrderData.bomDeducted &&
+        !effectiveOrder.bomDeducted
+      ) {
+        deductOrderBOM(toOrderBomItems(effectiveOrder.items), effectiveOrder.id);
+        updateOrdersState((prev) =>
+          prev.map((o) => (o.id === effectiveOrder.id ? { ...o, bomDeducted: true } : o))
+        );
       }
+      logActivity({
+        module: "POS",
+        action: "POS_TRANSACTION",
+        recordId: effectiveOrder.orderNumber,
+        newValue: `Total: Rp ${effectiveOrder.total.toLocaleString()} (${effectiveOrder.paymentMethod} - ${effectiveOrder.paymentStatus === "PENDING" ? "BELUM DIBAYAR (TAGIHAN)" : "LUNAS"})`,
+        description: `Transaksi kasir POS selesai: ${effectiveOrder.orderNumber} (Meja ${effectiveOrder.tableNumber})`,
+        reason: "Pembayaran kasir berhasil",
+        status: "SUCCESS",
+        outletId: targetOutletId,
+        outletName: targetOutletName,
+      });
       return { ...syncRes, order: effectiveOrder };
     });
 

@@ -34,15 +34,41 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const ALLOWED_SETTLEMENT_READ_ROLES: string[] = [
+      "SUPER_ADMIN",
+      "OWNER",
+      "MANAGER",
+      "CASHIER",
+      "WAITER",
+      "KITCHEN_STAFF",
+    ];
+    if (!ALLOWED_SETTLEMENT_READ_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki wewenang untuk membaca kebijakan bagi hasil dan struk.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const stored = await readPersistentData<Partial<SettlementReceiptPolicyConfig> | null>(
       SETTLEMENT_POLICY_STORAGE_FILE,
       null
     );
     const policy = mergeSettlementReceiptPolicy(stored, DEFAULT_TENANT_REVENUE_SPLITS);
 
+    const isManagerial = ["SUPER_ADMIN", "OWNER", "MANAGER"].includes(auth.role);
+    const sanitizedPolicy = isManagerial
+      ? policy
+      : {
+          ...policy,
+          revenueSplits: {},
+        };
+
     return NextResponse.json({
       success: true,
-      policy,
+      policy: sanitizedPolicy,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gagal membaca kebijakan bagi hasil dan struk.";

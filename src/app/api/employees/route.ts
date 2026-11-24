@@ -12,6 +12,7 @@ import {
 } from "@/lib/unified-account";
 import { RoleSlug } from "@/types/auth";
 import { EmployeeProfile } from "@/types/shift";
+import { maskCustomerPhone, maskCustomerEmail } from "@/lib/loyalty-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -90,9 +91,43 @@ async function revokeEmployeeSessions(
 /**
  * GET /api/employees
  * Fetches all employee profiles from persistent server storage.
+ * Restricted to authenticated staff and managers. Non-managerial staff receive masked contacts.
  */
 export async function GET(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    const ALLOWED_EMPLOYEE_READ_ROLES: RoleSlug[] = [
+      "SUPER_ADMIN",
+      "OWNER",
+      "MANAGER",
+      "CASHIER",
+      "WAITER",
+      "KITCHEN_STAFF",
+      "INVENTORY_STAFF",
+    ];
+
+    if (!ALLOWED_EMPLOYEE_READ_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki izin mengakses data karyawan.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const isManagerial =
+      auth.role === "SUPER_ADMIN" ||
+      (auth.role === "OWNER" && auth.scopeLevel !== "TENANT") ||
+      auth.role === "MANAGER";
+
     const { searchParams } = new URL(req.url);
     const outletId = searchParams.get("outletId");
     const status = searchParams.get("status");
@@ -104,6 +139,15 @@ export async function GET(req: NextRequest) {
     }
     if (status) {
       employees = employees.filter((e) => e.status === status);
+    }
+
+    // Mask contacts for non-managerial staff to prevent internal data harvesting
+    if (!isManagerial) {
+      employees = employees.map((e) => ({
+        ...e,
+        contact: e.contact ? maskCustomerPhone(e.contact) : e.contact,
+        email: e.email ? maskCustomerEmail(e.email) : e.email,
+      }));
     }
 
     return NextResponse.json({

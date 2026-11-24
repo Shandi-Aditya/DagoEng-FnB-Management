@@ -1,5 +1,5 @@
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
-import type { CoworkingOrderItemMeta, OrderItemCategoryType } from "@/types/order";
+import type { CorporateOrderInfo, CoworkingOrderItemMeta, OrderItemCategoryType } from "@/types/order";
 
 export type { CoworkingOrderItemMeta, OrderItemCategoryType };
 
@@ -53,7 +53,7 @@ export interface POSCartItem {
   coworkingMeta?: CoworkingOrderItemMeta;
 }
 
-export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "SPLIT";
+export type POSPaymentMethod = "QRIS" | "CASH" | "EDC" | "TRANSFER" | "SPLIT" | "INVOICE";
 
 export interface SplitGuestBill {
   id: string;
@@ -123,6 +123,7 @@ export interface POSReceiptData {
   coworkingDiscount?: number;
   grandTotal: number;
   paymentMethod: POSPaymentMethod;
+  paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
   amountPaid: number;
   changeDue: number;
   splitDetails?: SplitGuestBill[];
@@ -134,6 +135,7 @@ export interface POSReceiptData {
     pointsRemaining: number;
     voucherTitle?: string;
   };
+  corporateInfo?: CorporateOrderInfo;
 }
 
 export type POSReceiptItem = POSReceiptData["items"][number];

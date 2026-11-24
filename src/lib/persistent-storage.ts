@@ -27,6 +27,8 @@ import type {
   SyncDomainName,
 } from "@/lib/domain-sync-types";
 import type { ServerAuthResult } from "@/lib/server-auth";
+import { checkCoworkingBookingConflict } from "@/lib/operating-hours";
+import type { CoworkingBooking } from "@/types/coworking";
 import {
   ensureUniqueSequentialOrderNumber,
   resolvePublisherCode,
@@ -94,7 +96,7 @@ export function __setMockStorageWriteFailure(err: Error | null): void {
 }
 
 // Mutex queues per file to serialize read-modify-write operations atomically
-const fileLocks = new Map<string, Promise<any>>();
+const fileLocks = new Map<string, Promise<unknown>>();
 
 export function withFileLock<T>(filename: string, fn: () => Promise<T> | T): Promise<T> {
   const currentLock = fileLocks.get(filename) || Promise.resolve();
@@ -158,10 +160,11 @@ async function writeUnlocked<T>(filename: string, data: T): Promise<boolean> {
     }
 
     return true;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menyimpan data ke media penyimpanan.";
     console.error(`[persistent-storage] Write failed for ${filename}:`, err);
     throw new Error(
-      `STORAGE_WRITE_FAILED [${filename}]: ${err?.message || "Gagal menyimpan data ke media penyimpanan."}`
+      `STORAGE_WRITE_FAILED [${filename}]: ${message}`
     );
   }
 }
@@ -318,21 +321,76 @@ export async function savePersistentShift(shift: ShiftRecord): Promise<boolean> 
 // 3. COWORKING BOOKINGS PERSISTENCE
 // ==========================================
 
-export async function getCoworkingBookings(): Promise<any[]> {
-  return readPersistentData<any[]>(FILE_COWORKING_BOOKINGS, []);
+export class CoworkingConflictError extends Error {
+  readonly code = "OVERBOOKING_CONFLICT";
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CoworkingConflictError";
+  }
 }
 
-export async function saveCoworkingBooking(booking: any): Promise<boolean> {
-  await mutatePersistentData<any[]>(FILE_COWORKING_BOOKINGS, [], (existing) => {
+export async function getCoworkingBookings(): Promise<CoworkingBooking[]> {
+  return readPersistentData<CoworkingBooking[]>(FILE_COWORKING_BOOKINGS, []);
+}
+
+export async function saveCoworkingBooking(
+  booking: CoworkingBooking | Record<string, unknown>,
+  options?: {
+    maxCapacity?: number;
+    spaceName?: string;
+    checkConflict?: boolean;
+  }
+): Promise<boolean> {
+  await mutatePersistentData<CoworkingBooking[]>(FILE_COWORKING_BOOKINGS, [], (existing) => {
+    const isNonActiveStatus =
+      booking.checkInStatus === "CANCELLED" ||
+      booking.checkInStatus === "COMPLETED" ||
+      booking.paymentStatus === "CANCELLED";
+
+    if (
+      options?.checkConflict !== false &&
+      !isNonActiveStatus &&
+      booking.date &&
+      booking.spaceId
+    ) {
+      const conflict = checkCoworkingBookingConflict(
+        existing,
+        {
+          id: typeof booking.id === "string" ? booking.id : undefined,
+          spaceId: String(booking.spaceId),
+          spaceName: options?.spaceName || (typeof booking.spaceName === "string" ? booking.spaceName : undefined),
+          bookingType:
+            booking.bookingType === "DAILY" || booking.bookingType === "MONTHLY"
+              ? booking.bookingType
+              : "HOURLY",
+          date: String(booking.date),
+          endDate: typeof booking.endDate === "string" ? booking.endDate : undefined,
+          startTime: String(booking.startTime || "09:00"),
+          endTime: typeof booking.endTime === "string" ? booking.endTime : undefined,
+          maxCapacity: options?.maxCapacity,
+        }
+      );
+
+      if (conflict.hasConflict) {
+        throw new CoworkingConflictError(
+          conflict.message || "Kapasitas slot tidak mencukupi atau sudah penuh."
+        );
+      }
+    }
+
     const index = existing.findIndex(
-      (b) => b.id === booking.id || (booking.bookingCode && b.bookingCode === booking.bookingCode)
+      (b) =>
+        b.id === booking.id ||
+        (booking.bookingCode && b.bookingCode === booking.bookingCode)
     );
     if (index >= 0) {
       const updated = [...existing];
-      updated[index] = booking;
+      updated[index] = booking as CoworkingBooking;
       return updated;
     }
-    return [booking, ...existing];
+    return [booking as CoworkingBooking, ...existing];
   });
   return true;
 }

@@ -7,10 +7,13 @@ import {
   DEFAULT_TENANT_OPERATIONS,
   type TenantOperationConfig,
 } from "@/lib/operating-hours";
+import { getRequestAuthUser } from "@/lib/server-auth";
+import { RoleSlug } from "@/types/auth";
 
 export const dynamic = "force-dynamic";
 
 const STORAGE_FILE = "tenant_operations.json";
+const ALLOWED_TENANT_OP_WRITE_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
 
 /**
  * GET /api/tenant/operations
@@ -43,11 +46,52 @@ export async function GET(_req: NextRequest) {
 /**
  * POST /api/tenant/operations
  * Updates and persists tenant operational hours, status, and manual overrides.
+ * Restricted to managerial roles (SUPER_ADMIN, OWNER, MANAGER).
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak: Sesi login diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    if (!ALLOWED_TENANT_OP_WRITE_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses ditolak: Role [${auth.role}] tidak memiliki wewenang untuk mengubah jam operasional mitra.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { tenantOperations, tenantId, updates } = body;
+
+    // Enforce Tenant Boundary: A tenant-scoped caller can only modify their own tenant operations
+    if (auth.scopeLevel === "TENANT" && auth.tenantId) {
+      if (tenantId && tenantId !== auth.tenantId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Akses ditolak: Mitra hanya diizinkan mengubah jam operasional tenant miliknya sendiri.",
+          },
+          { status: 403 }
+        );
+      }
+      if (tenantOperations && Object.keys(tenantOperations).some((tId) => tId !== auth.tenantId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Akses ditolak: Mitra tidak diizinkan mengubah jam operasional tenant lain.",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     const current = await readPersistentData<Record<string, TenantOperationConfig>>(
       STORAGE_FILE,

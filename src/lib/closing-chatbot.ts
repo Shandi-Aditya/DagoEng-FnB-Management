@@ -587,6 +587,24 @@ export async function sendWhatsAppChatbotMessage(
 ): Promise<ClosingChannelDeliveryResult> {
   const startedAt = Date.now();
   const timestamp = new Date(startedAt).toISOString();
+
+  if (
+    !options?.fetchImpl &&
+    (process.env.ENABLE_WHATSAPP_CHATBOT === "false" ||
+      process.env.DISABLE_WHATSAPP_CHATBOT === "true")
+  ) {
+    return {
+      channel: "WHATSAPP",
+      target: phone,
+      sent: false,
+      configured: false,
+      reason: "GATEWAY_NOT_CONFIGURED",
+      message: "Chatbot WhatsApp dinonaktifkan sementara hingga sistem siap rilis produksi.",
+      timestamp,
+      durationMs: Math.max(0, Date.now() - startedAt),
+    };
+  }
+
   const token = options?.apiToken ?? process.env.FONNTE_API_TOKEN;
 
   if (!token || !token.trim()) {
