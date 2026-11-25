@@ -13,7 +13,42 @@ export {
 };
 
 import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
+import { readPersistentData } from "@/lib/persistent-storage";
 import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
+
+const TENANT_OWNER_ACCOUNTS_FILE = "tenant_owner_accounts.json";
+
+function isTenantOwnerEmailSync(email: string): boolean {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) return false;
+  try {
+    const filePath = getDataFilePath(TENANT_OWNER_ACCOUNTS_FILE);
+    if (!fs.existsSync(filePath)) return false;
+    const raw = fs.readFileSync(filePath, "utf-8").trim();
+    if (!raw) return false;
+    const accounts = JSON.parse(raw);
+    if (!Array.isArray(accounts)) return false;
+    return accounts.some(
+      (acc: { email?: unknown; status?: unknown }) =>
+        typeof acc?.email === "string" && acc.email.trim().toLowerCase() === normalized
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function isTenantOwnerEmailAsync(email: string): Promise<boolean> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) return false;
+  const accounts = await readPersistentData<Array<{ email?: string; status?: string }>>(
+    TENANT_OWNER_ACCOUNTS_FILE,
+    []
+  );
+  if (!Array.isArray(accounts)) return false;
+  return accounts.some(
+    (acc) => typeof acc?.email === "string" && acc.email.trim().toLowerCase() === normalized
+  );
+}
 
 const getDataFile = () => getDataFilePath("organizers.json");
 
@@ -247,6 +282,12 @@ export function createOrganizer(payload: RegisterOrganizerPayload): CommunityOrg
   }
   if (!payload.phone || payload.phone.trim().length < 8) {
     throw new Error("Nomor kontak telepon/WhatsApp minimal 8 digit.");
+  }
+
+  if (isTenantOwnerEmailSync(normalizedEmail)) {
+    throw new Error(
+      `EMAIL_CONFLICT: Email [${normalizedEmail}] sudah terdaftar sebagai akun pemilik mitra.`
+    );
   }
 
   const all = getAllOrganizers();

@@ -3,6 +3,7 @@ import {
   updateBookingCheckIn,
   updateBookingPaymentStatus,
   getBookingById,
+  isMatchingTicketCode,
   updateBookingPaymentProof,
   adminApproveBookingPayment,
   adminRejectBookingPayment,
@@ -425,11 +426,26 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           }
         }
 
+        const suppliedTicketCode = intent.ticketCode?.trim();
+        if (
+          suppliedTicketCode &&
+          existing.ticketCode &&
+          !isMatchingTicketCode(suppliedTicketCode, existing.ticketCode)
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Kode tiket tidak sesuai dengan pemesanan yang dipilih.",
+            },
+            { status: 403 }
+          );
+        }
+
         updated = await updateBookingCheckIn(id, intent.checkInStatus, {
           incrementQty: intent.incrementQty,
           targetQty: intent.targetQty,
           reset: intent.reset,
-          ticketCode: intent.ticketCode || id,
+          ticketCode: suppliedTicketCode || existing.ticketCode || id,
           seatNumber: intent.seatNumber,
           enforceDateWindow: !intent.reset,
           checkedInBy: checkInAuth.name || checkInAuth.email || "Petugas Check-In",

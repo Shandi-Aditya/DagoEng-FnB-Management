@@ -476,5 +476,79 @@ describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () 
       expect(delRes.status).toBe(200);
       expect(delJson.data.guestToken).toBeUndefined();
     });
+
+    it("menolak cross-event check-in hijack saat ticketCode milik event lain dikirim ke endpoint booking ID atau updateBookingCheckIn", async () => {
+      const otherEv = await createEventSubmission({
+        organizerName: "Komunitas Korban",
+        organizerEmail: "korban-other@dagocreative.id",
+        organizerPhone: "081234567899",
+        title: "Event Korban Hijack",
+        category: "COMMUNITY",
+        description: "Event target terpisah",
+        startDate: new Date(Date.now() - 3600000).toISOString(),
+        endDate: new Date(Date.now() + 5 * 3600000).toISOString(),
+        location: "Main Hall Dago",
+        isPaid: true,
+        price: 50000,
+        posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      });
+      await updateEventStatus(otherEv.id, "APPROVED");
+
+      const bookingA = await createEventBooking({
+        eventId: nowEventId,
+        guestName: "Peserta Event A",
+        guestEmail: "peserta.a@example.com",
+        guestPhone: "081200010001",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+      await updateBookingPaymentStatus(bookingA.id, "PAID");
+
+      const bookingB = await createEventBooking({
+        eventId: otherEv.id,
+        guestName: "Korban Event B",
+        guestEmail: "korban.b@example.com",
+        guestPhone: "081200020002",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+      await updateBookingPaymentStatus(bookingB.id, "PAID");
+
+      const hijackReq = new NextRequest(`http://localhost:3000/api/events/bookings/${bookingA.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=SUPER_ADMIN",
+        },
+        body: JSON.stringify({
+          checkInStatus: "CHECKED_IN",
+          ticketCode: bookingB.ticketCode,
+        }),
+      });
+
+      const hijackRes = await handleAdminCheckIn(hijackReq, {
+        params: Promise.resolve({ id: bookingA.id }),
+      });
+      const hijackJson = await hijackRes.json();
+
+      expect(hijackRes.status).toBe(403);
+      expect(hijackJson.success).toBe(false);
+      expect(hijackJson.error).toBe("Kode tiket tidak sesuai dengan pemesanan yang dipilih.");
+
+      await expect(
+        updateBookingCheckIn(bookingA.id, "CHECKED_IN", {
+          ticketCode: bookingB.ticketCode,
+          enforceDateWindow: false,
+        })
+      ).rejects.toThrow("Kode tiket tidak sesuai dengan pemesanan yang dipilih.");
+
+      const allBookings = await getEventBookings();
+      const afterA = allBookings.find((b) => b.id === bookingA.id);
+      const afterB = allBookings.find((b) => b.id === bookingB.id);
+      expect(afterA?.checkInStatus).toBe("REGISTERED");
+      expect(afterA?.checkedInQty || 0).toBe(0);
+      expect(afterB?.checkInStatus).toBe("REGISTERED");
+      expect(afterB?.checkedInQty || 0).toBe(0);
+    });
   });
 });

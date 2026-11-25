@@ -4,6 +4,7 @@ import { getRequestAuthUser, TRUSTED_PERSONAS } from "@/lib/server-auth";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import { getLatestRevocation, revokeUserSessionsAfter } from "@/lib/session-revocation";
 import { updateUnifiedUserCredentialsOrRole } from "@/lib/unified-account";
+import { updateTenantOwnerPassword } from "@/lib/tenant-activation";
 
 export const dynamic = "force-dynamic";
 
@@ -142,23 +143,52 @@ export async function POST(req: NextRequest) {
     const matchingPersonas = Object.values(TRUSTED_PERSONAS).filter(
       (p) => p.email.toLowerCase() === targetEmail
     );
-    const revokedAt = updateRes.revokedAt || Date.now();
+    let revokedAt = updateRes.revokedAt || Date.now();
     for (const persona of matchingPersonas) {
       await revokeUserSessionsAfter(persona.userId, revokedAt);
     }
 
+    let updatedTenantOwner:
+      | { id: string; email: string; name: string; role: string }
+      | undefined;
+
     if (!updateRes.success && newPassword && matchingPersonas.length === 0) {
-      return NextResponse.json(
-        { success: false, error: updateRes.error || "Pengguna tidak ditemukan." },
-        { status: 404 }
-      );
+      if (!hasPrivilegeMutation) {
+        if (typeof body.currentPassword === "string" && !isOrgAdmin) {
+          const { verifyTenantOwnerCredentials } = await import("@/lib/tenant-activation");
+          const currentCheck = await verifyTenantOwnerCredentials(targetEmail, body.currentPassword);
+          if (currentCheck.found && !currentCheck.authenticated) {
+            return NextResponse.json(
+              { success: false, error: currentCheck.error || "Kata sandi saat ini tidak sesuai." },
+              { status: 401 }
+            );
+          }
+        }
+        const tenantOwnerUpdate = await updateTenantOwnerPassword(targetEmail, newPassword);
+        if (tenantOwnerUpdate.success && tenantOwnerUpdate.account) {
+          revokedAt = tenantOwnerUpdate.revokedAt;
+          updatedTenantOwner = {
+            id: tenantOwnerUpdate.account.id,
+            email: tenantOwnerUpdate.account.email,
+            name: tenantOwnerUpdate.account.name,
+            role: "OWNER",
+          };
+        }
+      }
+
+      if (!updatedTenantOwner) {
+        return NextResponse.json(
+          { success: false, error: updateRes.error || "Pengguna tidak ditemukan." },
+          { status: 404 }
+        );
+      }
     }
 
     const res = NextResponse.json({
       success: true,
       email: targetEmail,
       revokedAt,
-      newRole: newRole || updateRes.user?.role,
+      newRole: newRole || updateRes.user?.role || updatedTenantOwner?.role,
       newScopeLevel,
       newTenantId,
       user: updateRes.user
@@ -169,10 +199,14 @@ export async function POST(req: NextRequest) {
             phone: updateRes.user.phone,
             role: updateRes.user.role,
           }
-        : undefined,
+        : updatedTenantOwner,
     });
 
-    if (isSelf || matchingPersonas.some((p) => p.userId === auth.userId)) {
+    if (
+      isSelf ||
+      matchingPersonas.some((p) => p.userId === auth.userId) ||
+      updatedTenantOwner?.id === auth.userId
+    ) {
       clearAuthCookies(res);
     }
 

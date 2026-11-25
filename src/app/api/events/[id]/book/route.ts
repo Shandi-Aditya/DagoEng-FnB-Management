@@ -3,12 +3,7 @@ import {
   createEventBooking,
   loadBookingsFromDisk,
   saveBookingsToDisk,
-  loadEventsFromDisk,
-  saveEventsToDisk,
-  recalculateAllPromoUsageCounts,
-  syncBookingsToLocalDiskAndCache,
-  syncEventsToLocalDiskAndCache,
-  getEventRevenuePolicy,
+  updateBookingPaymentStatus,
 } from "@/lib/events";
 import { createDokuCheckoutSession, DokuCheckoutError } from "@/lib/doku";
 import { EventBookingPayload } from "@/types/event";
@@ -84,22 +79,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             dokuErr instanceof DokuCheckoutError ? dokuErr.isDefiniteFailure : false;
 
           if (isDefinite) {
-            // Definite pre-transaction failure: roll back booking to CANCELLED to immediately release held quota
-            const allBookings = loadBookingsFromDisk();
-            const idx = allBookings.findIndex((b) => b.id === booking.id);
-            if (idx !== -1) {
-              allBookings[idx] = {
-                ...allBookings[idx],
-                paymentStatus: "CANCELLED",
-                updatedAt: new Date().toISOString(),
-              };
-              await saveBookingsToDisk(allBookings);
-              syncBookingsToLocalDiskAndCache(allBookings, Date.now());
-              const allEvents = loadEventsFromDisk();
-              if (recalculateAllPromoUsageCounts(allEvents, allBookings)) {
-                await saveEventsToDisk(allEvents);
-                syncEventsToLocalDiskAndCache(allEvents, Date.now());
-              }
+            // Definite pre-transaction failure: roll back booking to CANCELLED via distributed lock and release seat lock keys
+            try {
+              await updateBookingPaymentStatus(booking.id, "CANCELLED", {
+                note: `Pembayaran dibatalkan otomatis karena inisiasi DOKU Checkout gagal definitif: ${dokuErr.message}`,
+                actorName: "DOKU Checkout",
+              });
+            } catch (rollbackErr) {
+              console.error("Failed to rollback booking after definite DOKU error:", rollbackErr);
             }
             return NextResponse.json(
               {

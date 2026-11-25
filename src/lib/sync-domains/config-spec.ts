@@ -146,7 +146,6 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/2024/001",
     contractPksFile: "pks-kopi-senja-2024.pdf",
-    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
   "tenant-kitchen": {
     brandName: "Dapur Mama",
@@ -168,7 +167,6 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/2024/002",
     contractPksFile: "pks-dapur-mama-2024.pdf",
-    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
   "tenant-bakery": {
     brandName: "Manis Bakery",
@@ -190,7 +188,6 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/INT/2024/001",
     contractPksFile: "pks-manis-bakery-internal.pdf",
-    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
   "tenant-tea": {
     brandName: "Warung Bu Narti",
@@ -212,7 +209,6 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/2024/004",
     contractPksFile: "pks-warung-bu-narti-2024.pdf",
-    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
 };
 
@@ -1183,7 +1179,7 @@ export function buildTenantProfileWithDefaults(
       contractPksNumber: partial.contractPksNumber || def.contractPksNumber || "",
       contractPksFile: partial.contractPksFile || def.contractPksFile || "",
       lastSettlementDepositDate:
-        partial.lastSettlementDepositDate || def.lastSettlementDepositDate || "",
+        partial.lastSettlementDepositDate || def.lastSettlementDepositDate || getTodayWitaDateKey(),
       suspendedReason: partial.suspendedReason || def.suspendedReason || "",
     };
   }
@@ -1209,15 +1205,18 @@ export function buildTenantProfileWithDefaults(
     contractEndDate: def.contractEndDate || "",
     contractPksNumber: def.contractPksNumber || "",
     contractPksFile: def.contractPksFile || "",
-    lastSettlementDepositDate: def.lastSettlementDepositDate || "",
+    lastSettlementDepositDate: def.lastSettlementDepositDate || getTodayWitaDateKey(),
     suspendedReason: def.suspendedReason || "",
   };
 }
 
 export function defaultTenantsState(): TenantsDomainState {
+  const todayWita = getTodayWitaDateKey();
   const profiles: Record<string, TenantProfileData> = {};
   for (const tenant of SEED_FNB_TENANTS) {
-    profiles[tenant.id] = buildTenantProfileWithDefaults(tenant.id);
+    profiles[tenant.id] = buildTenantProfileWithDefaults(tenant.id, {
+      lastSettlementDepositDate: todayWita,
+    });
   }
   return {
     customTenants: [],
@@ -1265,8 +1264,8 @@ export function applyTenantsCommand(
       const tid = command.profile.tenantId;
       const existing = current.profiles[tid];
       const isAdmin = auth ? isSuperAdminOrOrgOwner(auth) : true;
-      const preservedBankNumber = !isAdmin && existing
-        ? existing.bankAccountNumber
+      const preservedBankNumber = !isAdmin
+        ? existing?.bankAccountNumber ?? ""
         : command.profile.bankAccountNumber?.includes("•") &&
             existing?.bankAccountNumber &&
             !existing.bankAccountNumber.includes("•")
@@ -1284,10 +1283,10 @@ export function applyTenantsCommand(
             contractEndDate: existing?.contractEndDate,
             contractPksNumber: existing?.contractPksNumber,
             contractPksFile: existing?.contractPksFile,
-            bankName: existing?.bankName ?? command.profile.bankName,
-            bankAccountNumber: existing?.bankAccountNumber ?? command.profile.bankAccountNumber,
-            bankAccountHolder: existing?.bankAccountHolder ?? command.profile.bankAccountHolder,
-            npwp: existing?.npwp ?? command.profile.npwp,
+            bankName: existing?.bankName ?? "",
+            bankAccountNumber: existing?.bankAccountNumber ?? "",
+            bankAccountHolder: existing?.bankAccountHolder ?? "",
+            npwp: existing?.npwp,
           };
 
       const merged = buildTenantProfileWithDefaults(
@@ -1367,17 +1366,20 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
         const isHubManager =
           auth.isAuthenticated &&
           auth.role === "MANAGER" &&
-          auth.scopeLevel !== "TENANT";
+          (auth.scopeLevel === "ORGANIZATION" || auth.scopeLevel === "BUSINESS_UNIT") &&
+          !auth.tenantId;
         const maskedProfiles: Record<string, TenantProfileData> = {};
         for (const [tenantId, profile] of Object.entries(state.profiles || {})) {
           const isOwnTenant =
             isTenantOwner(auth) && Boolean(auth.tenantId) && auth.tenantId === tenantId;
+          const rawBankAcc = (profile.bankAccountNumber || "").trim();
+          const maskedBankAcc = rawBankAcc && rawBankAcc !== "-" ? "••••••••" : "";
           maskedProfiles[tenantId] = isOwnTenant
             ? { ...profile }
             : {
                 ...profile,
                 bankName: "",
-                bankAccountNumber: "",
+                bankAccountNumber: maskedBankAcc,
                 bankAccountHolder: "",
                 npwp: undefined,
                 contactPhone: profile.contactPhone ? "••••••••" : "",

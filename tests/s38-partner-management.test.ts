@@ -1,3 +1,7 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { NextRequest } from "next/server";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   defaultTenantsState,
@@ -19,7 +23,10 @@ import {
   setTenantRevenueSplit,
   calculateSettlement,
 } from "@/lib/settlement";
-import { findBlockedOrderTenant } from "@/lib/tenant-order-guard";
+import {
+  findBlockedOrderTenant,
+  resolveCatalogOrderGuardItems,
+} from "@/lib/tenant-order-guard";
 import { computeDashboardFnbRevenue } from "@/features/dashboard/dashboard-metrics";
 import {
   generateTenantOwnerInviteToken,
@@ -27,8 +34,33 @@ import {
   consumeTenantOwnerInviteToken,
   verifyTenantOwnerCredentials,
 } from "@/lib/tenant-activation";
+import {
+  applyPersistentDomainCommand,
+  getPersistentOrders,
+  getPersistentQrisSession,
+} from "@/lib/persistent-storage";
+import {
+  getRequestAuthUser,
+  TRUSTED_PERSONAS,
+  type ServerAuthResult,
+} from "@/lib/server-auth";
+import { EDGE_SESSION_COOKIE_NAME } from "@/lib/edge-session";
+import { POST as inviteTenantPost } from "@/app/api/tenants/invite/route";
+import {
+  POST as outletsPost,
+  PATCH as outletsPatch,
+  DELETE as outletsDelete,
+} from "@/app/api/outlets/route";
+import { POST as registerPost } from "@/app/api/auth/register/route";
+import { POST as loginPost } from "@/app/api/auth/login/route";
+import { POST as sessionPost } from "@/app/api/auth/session/route";
+import { POST as ordersPost, PATCH as ordersPatch } from "@/app/api/orders/route";
+import { POST as qrisVerifyPost } from "@/app/api/pos/qris/verify/route";
+import { POST as eventsPost } from "@/app/api/events/route";
+import { createOrganizer } from "@/lib/organizers";
+import { registerUnifiedUser } from "@/lib/unified-account";
+import { signQrisWebhookPayload } from "@/lib/qris-verification";
 import type { OrderRecord } from "@/types/order";
-import type { ServerAuthResult } from "@/lib/server-auth";
 
 describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persistence", () => {
   beforeEach(() => {
@@ -377,7 +409,8 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
         expect(transformed.profiles["tenant-ks"].npwp).toBeUndefined();
         expect(transformed.profiles["tenant-ks"].contactPhone).toBe("••••••••");
         expect(transformed.profiles["tenant-ks"].bankName).toBe("");
-        expect(transformed.profiles["tenant-ks"].bankAccountNumber).toBe("");
+        expect(transformed.profiles["tenant-ks"].bankAccountNumber).toBe("••••••••");
+        expect(transformed.profiles["tenant-ks"].bankAccountNumber).not.toMatch(/\d/);
         expect(transformed.profiles["tenant-ks"].bankAccountHolder).toBe("");
         expect(transformed.profiles["tenant-ks"].contactPerson).toBeUndefined();
         expect(transformed.profiles["tenant-ks"].contactEmail).toBeUndefined();
@@ -408,7 +441,8 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
       if (readDecision.allowed) {
         const transformed = readDecision.transform!(state);
         expect(transformed.revenueSplits?.["tenant-ks"]).toBeDefined();
-        expect(transformed.profiles["tenant-ks"].bankAccountNumber).toBe("");
+        expect(transformed.profiles["tenant-ks"].bankAccountNumber).toBe("••••••••");
+        expect(transformed.profiles["tenant-ks"].bankAccountNumber).not.toMatch(/\d/);
       }
 
       const tenantOwnerAuth: ServerAuthResult = {
@@ -479,10 +513,27 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
       expect(blockedRes.blocked).toBe(true);
 
       const coworkOnly = findBlockedOrderTenant(
-        [{ tenantId: "tenant-ks", itemType: "COWORKING", productName: "Hot Desk" }],
+        [
+          {
+            tenantId: "DAGO_HUB",
+            itemType: "COWORKING",
+            productName: "Hot Desk",
+            coworkingMeta: {
+              spaceId: "sp-hot-1",
+              spaceName: "Hot Desk",
+              durationHours: 2,
+            },
+          },
+        ],
         state.profiles
       );
       expect(coworkOnly.blocked).toBe(false);
+
+      const spoofedCowork = findBlockedOrderTenant(
+        [{ tenantId: "tenant-ks", itemType: "COWORKING", productName: "Hot Desk" }],
+        state.profiles
+      );
+      expect(spoofedCowork.blocked).toBe(true);
     });
 
     it("menyertakan pendapatan mitra INTERNAL di dashboard-metrics", () => {
@@ -563,6 +614,943 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
           password: "PasswordAman123!",
         })
       ).rejects.toThrow(/sudah terdaftar/i);
+    });
+  });
+
+  describe("8. Hardening TOCTOU, Unified Collision, Catalog Guard, Outlet RBAC & Session Owner", () => {
+    let tempDir = "";
+    let prevDataDirOverride: string | undefined;
+    let prevSupervisorPin: string | undefined;
+
+    beforeEach(() => {
+      prevDataDirOverride = process.env.DATA_DIR_OVERRIDE;
+      prevSupervisorPin = process.env.SUPERVISOR_OVERRIDE_PIN;
+      process.env.SUPERVISOR_OVERRIDE_PIN = "123456";
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "s38-hardening-"));
+      process.env.DATA_DIR_OVERRIDE = tempDir;
+      fs.writeFileSync(path.join(tempDir, "organizers.json"), "[]", "utf-8");
+      fs.writeFileSync(path.join(tempDir, "unified_users.json"), "[]", "utf-8");
+    });
+
+    afterEach(() => {
+      if (prevDataDirOverride === undefined) {
+        delete process.env.DATA_DIR_OVERRIDE;
+      } else {
+        process.env.DATA_DIR_OVERRIDE = prevDataDirOverride;
+      }
+      if (prevSupervisorPin === undefined) {
+        delete process.env.SUPERVISOR_OVERRIDE_PIN;
+      } else {
+        process.env.SUPERVISOR_OVERRIDE_PIN = prevSupervisorPin;
+      }
+      if (tempDir && fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("mencegah TOCTOU race pada consumeTenantOwnerInviteToken dan melakukan rollback bila gagal", async () => {
+      const invite = await generateTenantOwnerInviteToken("tenant-ks", "Admin Hub");
+      const token = new URL(`http://localhost${invite.activationUrl}`).searchParams.get("invite")!;
+
+      // Kegagalan validasi email sistem harus melakukan rollback usedAt sehingga token masih bisa dipakai
+      await expect(
+        consumeTenantOwnerInviteToken({
+          token,
+          email: TRUSTED_PERSONAS.DAGO_OWNER.email,
+          name: "Blocked",
+          password: "PasswordAman123!",
+        })
+      ).rejects.toThrow(/sudah terdaftar/i);
+      const stillValid = await validateTenantOwnerInviteToken(token);
+      expect(stillValid.valid).toBe(true);
+
+      // Konsumsi paralel hanya boleh meluluskan tepat 1 pemanggil
+      const results = await Promise.allSettled([
+        consumeTenantOwnerInviteToken({
+          token,
+          email: "race.owner1@mitra.id",
+          name: "Owner 1",
+          password: "PasswordAman123!",
+        }),
+        consumeTenantOwnerInviteToken({
+          token,
+          email: "race.owner2@mitra.id",
+          name: "Owner 2",
+          password: "PasswordAman123!",
+        }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+    });
+
+    it("menolak email yang sudah terdaftar di unified_users.json dan menolak register jika sudah di tenant_owner_accounts.json", async () => {
+      const regReq = new NextRequest("http://localhost:3000/api/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Pelanggan Terpadu",
+          email: "unified.user@dagoeng.com",
+          phone: "081234567890",
+          password: "Password123!",
+        }),
+      });
+      const regRes = await registerPost(regReq);
+      expect(regRes.status).toBe(201);
+
+      const invite = await generateTenantOwnerInviteToken("tenant-ks", "Admin Hub");
+      const token = new URL(`http://localhost${invite.activationUrl}`).searchParams.get("invite")!;
+      await expect(
+        consumeTenantOwnerInviteToken({
+          token,
+          email: "unified.user@dagoeng.com",
+          name: "Shadow Attacker",
+          password: "PasswordAman123!",
+        })
+      ).rejects.toThrow(/sudah terdaftar/i);
+
+      await consumeTenantOwnerInviteToken({
+        token,
+        email: "owner.teraktivasi@mitra.id",
+        name: "Owner Aktif",
+        password: "PasswordAman123!",
+      });
+
+      const dupRegReq = new NextRequest("http://localhost:3000/api/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Penyerang Register",
+          email: "owner.teraktivasi@mitra.id",
+          phone: "081299998888",
+          password: "Password123!",
+        }),
+      });
+      const dupRegRes = await registerPost(dupRegReq);
+      expect(dupRegRes.status).toBe(409);
+    });
+
+    it("menutup bypass catalog itemType/tenantId di POST /api/orders, item kosong fallback tenantId, dan memblokir QRIS verify untuk mitra SUSPENDED", async () => {
+      const adminAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        role: "SUPER_ADMIN",
+        userId: "user-admin",
+        scopeLevel: "PLATFORM",
+      };
+
+      // Pastikan item kosong tetap memeriksa fallback orderData.tenantId
+      const stateWithSuspended = defaultTenantsState();
+      stateWithSuspended.profiles["tenant-ks"].status = "SUSPENDED";
+      expect(
+        findBlockedOrderTenant([], stateWithSuspended.profiles, "tenant-ks").blocked
+      ).toBe(true);
+
+      // 1. Buat order PENDING QRIS saat tenant-ks masih ACTIVE
+      const pendingOrderReq = new NextRequest("http://localhost:3000/api/orders", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=CASHIER_SGR",
+        },
+        body: JSON.stringify({
+          id: "ord-qris-suspend-test",
+          orderNumber: "ORD-S38-QRIS-1",
+          organizationId: "org-dago-hub",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "01",
+          customerName: "Tamu QRIS",
+          orderType: "DINE_IN",
+          status: "NEW",
+          paymentStatus: "PENDING",
+          paymentMethod: "QRIS",
+          subtotal: 24000,
+          discount: 0,
+          tax: 2400,
+          serviceCharge: 1200,
+          total: 27600,
+          targetServiceMinutes: 15,
+          statusHistory: [],
+          items: [
+            {
+              id: "it-qris-1",
+              productId: "prod-101",
+              tenantId: "tenant-ks",
+              productName: "Kopi Senja Aren",
+              quantity: 1,
+              unitPrice: 24000,
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      const pendingRes = await ordersPost(pendingOrderReq);
+      expect(pendingRes.status).toBe(200);
+
+      const initQrisReq = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=CASHIER_SGR",
+        },
+        body: JSON.stringify({
+          mode: "INIT",
+          orderId: "ord-qris-suspend-test",
+          invoiceNumber: "ORD-S38-QRIS-1",
+          expectedAmount: 27600,
+        }),
+      });
+      const initQrisRes = await qrisVerifyPost(initQrisReq);
+      expect(initQrisRes.status).toBe(200);
+
+      // 2. Tangguhkan tenant-ks
+      await applyPersistentDomainCommand(
+        tenantsDomainSpec,
+        {
+          op: "SET_TENANT_STATUS",
+          tenantId: "tenant-ks",
+          status: "SUSPENDED",
+          reason: "Telat setor mingguan",
+        },
+        adminAuth
+      );
+
+      // 3. Upaya bypass spoof itemType: "COWORKING" & tenantId lain untuk prod-101 wajib ditolak 403
+      const spoofReq = new NextRequest("http://localhost:3000/api/orders", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=CASHIER_SGR",
+        },
+        body: JSON.stringify({
+          id: "ord-spoof-bypass",
+          orderNumber: "ORD-S38-SPOOF",
+          organizationId: "org-dago-hub",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "02",
+          customerName: "Attacker",
+          orderType: "DINE_IN",
+          status: "NEW",
+          paymentStatus: "PAID",
+          paymentMethod: "CASH",
+          subtotal: 24000,
+          discount: 0,
+          tax: 2400,
+          serviceCharge: 1200,
+          total: 27600,
+          targetServiceMinutes: 15,
+          statusHistory: [],
+          items: [
+            {
+              id: "it-spoof",
+              productId: "prod-101",
+              tenantId: "tenant-kitchen",
+              itemType: "COWORKING",
+              productName: "Kopi Senja Aren",
+              quantity: 1,
+              unitPrice: 24000,
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      const spoofRes = await ordersPost(spoofReq);
+      expect(spoofRes.status).toBe(403);
+
+      // 4. Pelunasan QRIS terhadap order PENDING milik tenant-ks yang SUSPENDED wajib ditolak 403 & tetap PENDING
+      const verifyReq = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=DAGO_OWNER",
+        },
+        body: JSON.stringify({
+          mode: "SUPERVISOR_OVERRIDE",
+          orderId: "ord-qris-suspend-test",
+          invoiceNumber: "ORD-S38-QRIS-1",
+          pin: "123456",
+          referenceNumber: "RRN-998877",
+        }),
+      });
+      const verifyRes = await qrisVerifyPost(verifyReq);
+      expect(verifyRes.status).toBe(403);
+
+      const persistedOrders = await getPersistentOrders();
+      const targetOrder = persistedOrders.find((o) => o.id === "ord-qris-suspend-test");
+      expect(targetOrder?.paymentStatus).toBe("PENDING");
+    });
+
+    it("membatasi /api/tenants/invite & /api/outlets hanya untuk SUPER_ADMIN / Org OWNER serta menangani duplikat kode & DELETE", async () => {
+      // MANAGER ditolak 403
+      for (const persona of ["COWORK_MANAGER", "COMMERCIAL_MANAGER"]) {
+        const invRes = await inviteTenantPost(
+          new NextRequest("http://localhost:3000/api/tenants/invite", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              cookie: `dagoeng_active_persona=${persona}`,
+            },
+            body: JSON.stringify({ tenantId: "tenant-ks" }),
+          })
+        );
+        expect(invRes.status).toBe(403);
+
+        const outRes = await outletsPost(
+          new NextRequest("http://localhost:3000/api/outlets", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              cookie: `dagoeng_active_persona=${persona}`,
+            },
+            body: JSON.stringify({
+              name: "Outlet Baru",
+              code: "DCH-NEW",
+              address: "Jl. Raya",
+            }),
+          })
+        );
+        expect(outRes.status).toBe(403);
+      }
+
+      // DAGO_OWNER diizinkan
+      const ownerInvRes = await inviteTenantPost(
+        new NextRequest("http://localhost:3000/api/tenants/invite", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=DAGO_OWNER",
+          },
+          body: JSON.stringify({ tenantId: "tenant-ks" }),
+        })
+      );
+      expect(ownerInvRes.status).toBe(200);
+
+      const createOutletRes = await outletsPost(
+        new NextRequest("http://localhost:3000/api/outlets", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=DAGO_OWNER",
+          },
+          body: JSON.stringify({
+            name: "Canggu",
+            code: "KS-CGU",
+            address: "Jl. Pantai Berawa",
+          }),
+        })
+      );
+      expect(createOutletRes.status).toBe(200);
+      const createdJson = await createOutletRes.json();
+      const createdId = createdJson.outlet.id as string;
+
+      // Duplikat kode case-insensitive ditolak 409
+      const dupCreateRes = await outletsPost(
+        new NextRequest("http://localhost:3000/api/outlets", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=SUPER_ADMIN",
+          },
+          body: JSON.stringify({
+            name: "Canggu Duplikat",
+            code: "ks-cgu",
+            address: "Jl. Lain",
+          }),
+        })
+      );
+      expect(dupCreateRes.status).toBe(409);
+
+      const dupPatchRes = await outletsPatch(
+        new NextRequest("http://localhost:3000/api/outlets", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=DAGO_OWNER",
+          },
+          body: JSON.stringify({
+            id: createdId,
+            code: "ks-sgr",
+          }),
+        })
+      );
+      expect(dupPatchRes.status).toBe(409);
+
+      // Outlet utama tidak boleh dihapus
+      const delDefaultRes = await outletsDelete(
+        new NextRequest("http://localhost:3000/api/outlets?id=outlet-sgr", {
+          method: "DELETE",
+          headers: { cookie: "dagoeng_active_persona=SUPER_ADMIN" },
+        })
+      );
+      expect(delDefaultRes.status).toBe(400);
+
+      // Outlet non-utama bisa dihapus
+      const delCreatedRes = await outletsDelete(
+        new NextRequest(`http://localhost:3000/api/outlets?id=${createdId}`, {
+          method: "DELETE",
+          headers: { cookie: "dagoeng_active_persona=SUPER_ADMIN" },
+        })
+      );
+      expect(delCreatedRes.status).toBe(200);
+    });
+
+    it("mengembalikan profil sesi lengkap & mendukung ganti password untuk Tenant Owner teraktivasi serta menolak login saat INACTIVE", async () => {
+      const invite = await generateTenantOwnerInviteToken("tenant-ks", "Admin Hub");
+      const token = new URL(`http://localhost${invite.activationUrl}`).searchParams.get("invite")!;
+      await consumeTenantOwnerInviteToken({
+        token,
+        email: "session.owner@mitra.id",
+        name: "Pemilik Sesi KS",
+        password: "PasswordAwal123!",
+      });
+
+      const loginRes = await loginPost(
+        new NextRequest("http://localhost:3000/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "session.owner@mitra.id",
+            password: "PasswordAwal123!",
+          }),
+        })
+      );
+      expect(loginRes.status).toBe(200);
+      const loginJson = await loginRes.json();
+      expect(loginJson.user.organization).toEqual({
+        id: "org-dago-hub",
+        name: "Dago Creative Hub",
+        code: "DAGO-HUB",
+      });
+      expect(loginJson.user.businessModule).toBe("FNB");
+      expect(loginJson.user.permissions).toEqual(TRUSTED_PERSONAS.TENANT_OWNER_KS.permissions);
+
+      const edgeCookie = loginRes.cookies.get(EDGE_SESSION_COOKIE_NAME)?.value;
+      expect(edgeCookie).toBeTruthy();
+
+      const authFromEdge = await getRequestAuthUser(
+        new NextRequest("http://localhost:3000/api/orders", {
+          headers: { cookie: `${EDGE_SESSION_COOKIE_NAME}=${edgeCookie}` },
+        })
+      );
+      expect(authFromEdge.isAuthenticated).toBe(true);
+      expect(authFromEdge.role).toBe("OWNER");
+      expect(authFromEdge.scopeLevel).toBe("TENANT");
+      expect(authFromEdge.businessModule).toBe("FNB");
+      expect(authFromEdge.name).toBe("Pemilik Mitra");
+      expect(authFromEdge.permissions).toEqual(TRUSTED_PERSONAS.TENANT_OWNER_KS.permissions);
+
+      // Ganti password via POST /api/auth/session
+      const changePassRes = await sessionPost(
+        new NextRequest("http://localhost:3000/api/auth/session", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${EDGE_SESSION_COOKIE_NAME}=${edgeCookie}`,
+          },
+          body: JSON.stringify({
+            email: "session.owner@mitra.id",
+            newPassword: "PasswordBaru456!",
+          }),
+        })
+      );
+      expect(changePassRes.status).toBe(200);
+
+      // Password lama ditolak, password baru diterima
+      const oldPassLogin = await loginPost(
+        new NextRequest("http://localhost:3000/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "session.owner@mitra.id",
+            password: "PasswordAwal123!",
+          }),
+        })
+      );
+      expect(oldPassLogin.status).toBe(401);
+
+      const newPassLogin = await loginPost(
+        new NextRequest("http://localhost:3000/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "session.owner@mitra.id",
+            password: "PasswordBaru456!",
+          }),
+        })
+      );
+      expect(newPassLogin.status).toBe(200);
+
+      // Saat mitra berstatus INACTIVE, login ditolak 403
+      await applyPersistentDomainCommand(
+        tenantsDomainSpec,
+        { op: "SET_TENANT_STATUS", tenantId: "tenant-ks", status: "INACTIVE" },
+        {
+          isAuthenticated: true,
+          role: "SUPER_ADMIN",
+          userId: "user-admin",
+          scopeLevel: "PLATFORM",
+        }
+      );
+
+      const inactiveLogin = await loginPost(
+        new NextRequest("http://localhost:3000/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "session.owner@mitra.id",
+            password: "PasswordBaru456!",
+          }),
+        })
+      );
+      expect(inactiveLogin.status).toBe(403);
+    });
+  });
+
+  describe("9. Audit P0/P1 Hardening (Group A)", () => {
+    let tempDir = "";
+    let prevDataDirOverride: string | undefined;
+    let prevSupervisorPin: string | undefined;
+
+    beforeEach(() => {
+      prevDataDirOverride = process.env.DATA_DIR_OVERRIDE;
+      prevSupervisorPin = process.env.SUPERVISOR_OVERRIDE_PIN;
+      process.env.SUPERVISOR_OVERRIDE_PIN = "123456";
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "s38-group-a-"));
+      process.env.DATA_DIR_OVERRIDE = tempDir;
+      fs.writeFileSync(path.join(tempDir, "organizers.json"), "[]", "utf-8");
+      fs.writeFileSync(path.join(tempDir, "unified_users.json"), "[]", "utf-8");
+      fs.writeFileSync(path.join(tempDir, "events.json"), "[]", "utf-8");
+    });
+
+    afterEach(() => {
+      if (prevDataDirOverride === undefined) {
+        delete process.env.DATA_DIR_OVERRIDE;
+      } else {
+        process.env.DATA_DIR_OVERRIDE = prevDataDirOverride;
+      }
+      if (prevSupervisorPin === undefined) {
+        delete process.env.SUPERVISOR_OVERRIDE_PIN;
+      } else {
+        process.env.SUPERVISOR_OVERRIDE_PIN = prevSupervisorPin;
+      }
+      if (tempDir && fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("menutup spoof COWORKING tanpa productId/katalog pada mitra SUSPENDED", async () => {
+      const adminAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        role: "SUPER_ADMIN",
+        userId: "user-admin",
+        scopeLevel: "PLATFORM",
+      };
+      await applyPersistentDomainCommand(
+        tenantsDomainSpec,
+        {
+          op: "SET_TENANT_STATUS",
+          tenantId: "tenant-ks",
+          status: "SUSPENDED",
+          reason: "Telat setor",
+        },
+        adminAuth
+      );
+
+      const resolved = resolveCatalogOrderGuardItems(
+        [
+          {
+            productId: "unknown-spoof-item",
+            tenantId: "tenant-ks",
+            itemType: "COWORKING",
+            productName: "Kopi Spoof",
+          },
+        ],
+        []
+      );
+      expect(resolved[0].itemType).toBe("FNB");
+
+      const spoofReq = new NextRequest("http://localhost:3000/api/orders", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=CASHIER_SGR",
+        },
+        body: JSON.stringify({
+          id: "ord-unmatched-cowork-spoof",
+          orderNumber: "ORD-UNMATCHED-SPOOF",
+          organizationId: "org-dago-hub",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "03",
+          customerName: "Attacker",
+          orderType: "DINE_IN",
+          status: "NEW",
+          paymentStatus: "PAID",
+          paymentMethod: "CASH",
+          subtotal: 25000,
+          discount: 0,
+          tax: 2500,
+          serviceCharge: 1250,
+          total: 28750,
+          targetServiceMinutes: 15,
+          statusHistory: [],
+          items: [
+            {
+              id: "it-unmatched-spoof",
+              productId: "non-existent-prod-999",
+              tenantId: "tenant-ks",
+              itemType: "COWORKING",
+              productName: "Item Tanpa Katalog",
+              quantity: 1,
+              unitPrice: 25000,
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      const spoofRes = await ordersPost(spoofReq);
+      expect(spoofRes.status).toBe(403);
+    });
+
+    it("memblokir mutasi item pada order PAID untuk mitra SUSPENDED via UPSERT dan PATCH namun mengizinkan progresi workflow saja", async () => {
+      const adminAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        role: "SUPER_ADMIN",
+        userId: "user-admin",
+        scopeLevel: "PLATFORM",
+      };
+
+      const baseOrder: OrderRecord = {
+        id: "ord-paid-mutation-guard",
+        orderNumber: "ORD-PAID-MUT-1",
+        organizationId: "org-dago-hub",
+        outletId: "outlet-sgr",
+        outletName: "Singaraja",
+        tableNumber: "04",
+        customerName: "Pelanggan Sah",
+        orderType: "DINE_IN",
+        status: "CONFIRMED",
+        paymentStatus: "PAID",
+        paymentMethod: "CASH",
+        subtotal: 24000,
+        discount: 0,
+        tax: 2400,
+        serviceCharge: 1200,
+        total: 27600,
+        targetServiceMinutes: 15,
+        statusHistory: [],
+        items: [
+          {
+            id: "it-paid-1",
+            productId: "prod-101",
+            tenantId: "tenant-ks",
+            productName: "Kopi Senja Aren",
+            quantity: 1,
+            unitPrice: 24000,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      };
+
+      const createRes = await ordersPost(
+        new NextRequest("http://localhost:3000/api/orders", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=CASHIER_SGR",
+          },
+          body: JSON.stringify(baseOrder),
+        })
+      );
+      expect(createRes.status).toBe(200);
+
+      await applyPersistentDomainCommand(
+        tenantsDomainSpec,
+        {
+          op: "SET_TENANT_STATUS",
+          tenantId: "tenant-ks",
+          status: "SUSPENDED",
+          reason: "Telat setor",
+        },
+        adminAuth
+      );
+
+      // UPSERT pada order PAID untuk mitra SUSPENDED wajib ditolak 403
+      const upsertRes = await ordersPost(
+        new NextRequest("http://localhost:3000/api/orders", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=DAGO_OWNER",
+          },
+          body: JSON.stringify({
+            ...baseOrder,
+            subtotal: 48000,
+            tax: 4800,
+            serviceCharge: 2400,
+            total: 55200,
+            items: [
+              ...baseOrder.items,
+              {
+                id: "it-paid-2",
+                productId: "prod-101",
+                tenantId: "tenant-ks",
+                productName: "Kopi Senja Aren",
+                quantity: 1,
+                unitPrice: 24000,
+              },
+            ],
+          }),
+        })
+      );
+      expect(upsertRes.status).toBe(403);
+
+      // PATCH yang memodifikasi items untuk mitra SUSPENDED wajib ditolak 403
+      const patchItemsRes = await ordersPatch(
+        new NextRequest("http://localhost:3000/api/orders", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=DAGO_OWNER",
+          },
+          body: JSON.stringify({
+            order: {
+              id: baseOrder.id,
+              subtotal: 48000,
+              tax: 4800,
+              serviceCharge: 2400,
+              total: 55200,
+              items: [
+                ...baseOrder.items,
+                {
+                  id: "it-paid-3",
+                  productId: "prod-101",
+                  tenantId: "tenant-ks",
+                  productName: "Kopi Senja Aren",
+                  quantity: 1,
+                  unitPrice: 24000,
+                },
+              ],
+            },
+          }),
+        })
+      );
+      expect(patchItemsRes.status).toBe(403);
+
+      // PATCH progresi workflow KDS tanpa mutasi item tetap diizinkan (200)
+      const patchWorkflowRes = await ordersPatch(
+        new NextRequest("http://localhost:3000/api/orders", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=KITCHEN_SGR",
+          },
+          body: JSON.stringify({
+            order: {
+              id: baseOrder.id,
+              status: "COOKING",
+              tenantStatuses: { "tenant-ks": "COOKING" },
+            },
+          }),
+        })
+      );
+      expect(patchWorkflowRes.status).toBe(200);
+    });
+
+    it("tidak menyimpan sesi QRIS VERIFIED_WEBHOOK / VERIFIED_SUPERVISOR saat order milik mitra SUSPENDED", async () => {
+      const adminAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        role: "SUPER_ADMIN",
+        userId: "user-admin",
+        scopeLevel: "PLATFORM",
+      };
+
+      const pendingRes = await ordersPost(
+        new NextRequest("http://localhost:3000/api/orders", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=CASHIER_SGR",
+          },
+          body: JSON.stringify({
+            id: "ord-qris-session-guard",
+            orderNumber: "ORD-QRIS-NO-PERSIST-1",
+            organizationId: "org-dago-hub",
+            outletId: "outlet-sgr",
+            outletName: "Singaraja",
+            tableNumber: "05",
+            customerName: "Tamu QRIS",
+            orderType: "DINE_IN",
+            status: "NEW",
+            paymentStatus: "PENDING",
+            paymentMethod: "QRIS",
+            subtotal: 24000,
+            discount: 0,
+            tax: 2400,
+            serviceCharge: 1200,
+            total: 27600,
+            targetServiceMinutes: 15,
+            statusHistory: [],
+            items: [
+              {
+                id: "it-qris-guard-1",
+                productId: "prod-101",
+                tenantId: "tenant-ks",
+                productName: "Kopi Senja Aren",
+                quantity: 1,
+                unitPrice: 24000,
+              },
+            ],
+            createdAt: new Date().toISOString(),
+          }),
+        })
+      );
+      expect(pendingRes.status).toBe(200);
+
+      const initRes = await qrisVerifyPost(
+        new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=CASHIER_SGR",
+          },
+          body: JSON.stringify({
+            mode: "INIT",
+            orderId: "ord-qris-session-guard",
+            invoiceNumber: "ORD-QRIS-NO-PERSIST-1",
+            expectedAmount: 27600,
+          }),
+        })
+      );
+      expect(initRes.status).toBe(200);
+
+      await applyPersistentDomainCommand(
+        tenantsDomainSpec,
+        {
+          op: "SET_TENANT_STATUS",
+          tenantId: "tenant-ks",
+          status: "SUSPENDED",
+          reason: "Telat setor",
+        },
+        adminAuth
+      );
+
+      // 1. Supervisor override ditolak 403 dan sesi tetap PENDING
+      const supRes = await qrisVerifyPost(
+        new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "dagoeng_active_persona=DAGO_OWNER",
+          },
+          body: JSON.stringify({
+            mode: "SUPERVISOR_OVERRIDE",
+            orderId: "ord-qris-session-guard",
+            invoiceNumber: "ORD-QRIS-NO-PERSIST-1",
+            pin: "123456",
+            referenceNumber: "RRN-123456",
+          }),
+        })
+      );
+      expect(supRes.status).toBe(403);
+      const afterSupSession = await getPersistentQrisSession("ORD-QRIS-NO-PERSIST-1");
+      expect(afterSupSession?.status).toBe("PENDING");
+
+      // 2. Webhook ditolak 403 dan sesi tetap PENDING (tidak menjadi VERIFIED_WEBHOOK)
+      const signature = signQrisWebhookPayload({
+        invoiceNumber: "ORD-QRIS-NO-PERSIST-1",
+        amount: 27600,
+        transactionStatus: "SUCCESS",
+      });
+      const whRes = await qrisVerifyPost(
+        new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-dago-signature": signature,
+          },
+          body: JSON.stringify({
+            mode: "WEBHOOK",
+            orderId: "ord-qris-session-guard",
+            invoiceNumber: "ORD-QRIS-NO-PERSIST-1",
+            amount: 27600,
+            transactionStatus: "SUCCESS",
+          }),
+        })
+      );
+      expect(whRes.status).toBe(403);
+      const afterWhSession = await getPersistentQrisSession("ORD-QRIS-NO-PERSIST-1");
+      expect(afterWhSession?.status).toBe("PENDING");
+    });
+
+    it("menjaga guard onToggleTenantOrderStatus agar tidak menimpa status SUSPENDED", () => {
+      const settingsSource = fs.readFileSync(
+        path.resolve(process.cwd(), "src/app/(dashboard)/settings/page.tsx"),
+        "utf-8"
+      );
+      expect(settingsSource).toContain('currentProfile?.status === "SUSPENDED"');
+      expect(settingsSource).toContain(
+        "Mitra sedang ditangguhkan. Gunakan 'Buka kunci' atau 'Catat setoran kas' terlebih dahulu."
+      );
+      expect(settingsSource).toContain('await fetch("/api/tenant/operations"');
+      expect(settingsSource).toContain("!res.ok || !data?.success");
+    });
+
+    it("memblokir createOrganizer, registerUnifiedUser, dan POST /api/events bila email sudah dimiliki Tenant Owner", async () => {
+      const invite = await generateTenantOwnerInviteToken("tenant-ks", "Admin Hub");
+      const token = new URL(`http://localhost${invite.activationUrl}`).searchParams.get("invite")!;
+      await consumeTenantOwnerInviteToken({
+        token,
+        email: "locked.owner@mitra.id",
+        name: "Pemilik Terkunci",
+        password: "PasswordAman123!",
+      });
+
+      expect(() =>
+        createOrganizer({
+          name: "Komunitas Bayangan",
+          category: "Komunitas",
+          contactPerson: "Shadow",
+          phone: "081234567890",
+          email: "locked.owner@mitra.id",
+        })
+      ).toThrow(/EMAIL_CONFLICT/i);
+
+      await expect(
+        registerUnifiedUser({
+          name: "User Bayangan",
+          email: "locked.owner@mitra.id",
+          phone: "081234567891",
+          password: "Password123!",
+        })
+      ).rejects.toThrow(/EMAIL_CONFLICT/i);
+
+      const eventRes = await eventsPost(
+        new NextRequest("http://localhost:3000/api/events", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            title: "Event Shadowing Test",
+            description: "Deskripsi lengkap acara komunitas kreatif Singaraja minimal 20 karakter.",
+            category: "WORKSHOP",
+            startDate: "2026-12-20T10:00:00.000Z",
+            endDate: "2026-12-20T13:00:00.000Z",
+            location: "Main Hall Dago",
+            isPaid: false,
+            price: 0,
+            posterUrl: "https://example.com/poster.png",
+            organizerName: "Komunitas Bayangan",
+            organizerEmail: "locked.owner@mitra.id",
+            organizerPhone: "081234567892",
+            password: "Password123!",
+            maxCapacity: 30,
+          }),
+        })
+      );
+      expect(eventRes.status).toBe(409);
     });
   });
 });

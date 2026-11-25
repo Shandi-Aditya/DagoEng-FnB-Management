@@ -16,9 +16,11 @@ export interface TicketDownloadData {
   paymentStatus: string;
   eventLocation?: string;
   eventDate?: string;
+  selectedSeats?: string[];
   subTicketIndex?: number;
   subTicketCode?: string;
   subGuestLabel?: string;
+  subSeatLabel?: string;
   subCheckedIn?: boolean;
 }
 
@@ -277,6 +279,18 @@ export async function downloadTicketAsImage(
     const methodLabel = formatPaymentMethodLabel(ticket.paymentMethod || "FREE");
     ctx.fillText(truncateText(ctx, methodLabel, col2Width), col2X, currentY);
 
+    const seatLabel =
+      ticket.subSeatLabel ||
+      (Array.isArray(ticket.selectedSeats) && ticket.selectedSeats.length > 0
+        ? ticket.selectedSeats.join(", ")
+        : "");
+    if (seatLabel) {
+      currentY += 18;
+      ctx.fillStyle = "#0F172A";
+      ctx.font = "600 12px 'Courier New', Courier, monospace";
+      ctx.fillText(truncateText(ctx, `Kursi: ${seatLabel}`, cardWidth - 48), col1X, currentY);
+    }
+
     // 7. Perforated Ticket Stub Divider with Left/Right Circular Notches
     currentY += 28;
     const notchRadius = 14;
@@ -417,7 +431,9 @@ export async function downloadTicketAsImage(
     ctx.fillStyle = "#64748B";
     ctx.font = "11px system-ui, -apple-system, sans-serif";
     const subNotice = isSubTicket
-      ? `Akses masuk resmi untuk 1 tamu • Seat #${ticket.subTicketIndex}`
+      ? `Akses masuk resmi untuk 1 tamu • Tiket #${ticket.subTicketIndex}${ticket.subSeatLabel ? ` (Kursi ${ticket.subSeatLabel})` : ""}`
+      : ticket.selectedSeats && ticket.selectedSeats.length > 0
+      ? `Kursi terdaftar: ${ticket.selectedSeats.join(", ")}`
       : "Petugas akan memindai QR code ini di pintu masuk venue.";
     ctx.fillText(subNotice, qrContainerX + qrContainerWidth / 2, qrContainerY + 235);
 

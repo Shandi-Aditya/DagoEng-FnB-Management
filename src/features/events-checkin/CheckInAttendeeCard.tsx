@@ -3,6 +3,7 @@
 import React from "react";
 import { QrCode, Check, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/app/status-badge";
 import type { EventTicketOrder } from "@/types/event";
@@ -12,6 +13,7 @@ import {
   formatPaymentStatusLabel,
   formatCheckInTime,
 } from "./events-checkin-domain";
+import { formatSeatsList } from "@/lib/event-seating";
 
 interface CheckInAttendeeCardProps {
   ticket: EventTicketOrder;
@@ -83,19 +85,30 @@ export function CheckInAttendeeCard({
         )}
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
           {ticket.isInvitation && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+            <Badge
+              variant="outline"
+              className="text-xs border-primary/20 bg-primary/10 text-primary"
+            >
               Tiket undangan
-            </span>
+            </Badge>
           )}
           {ticket.ticketTierName && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
+            <Badge variant="secondary" className="text-xs">
               {ticket.ticketTierName}
-            </span>
+            </Badge>
           )}
           {ticket.promoCode && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border">
+            <Badge variant="outline" className="text-xs text-muted-foreground">
               Promo: {ticket.promoCode}
-            </span>
+            </Badge>
+          )}
+          {ticket.selectedSeats && ticket.selectedSeats.length > 0 && (
+            <Badge
+              variant="outline"
+              className="text-xs font-mono border-primary/20 bg-primary/10 text-primary"
+            >
+              Kursi: {formatSeatsList(ticket.selectedSeats)}
+            </Badge>
           )}
         </div>
         {ticket.isInvitation && ticket.invitationNote && (

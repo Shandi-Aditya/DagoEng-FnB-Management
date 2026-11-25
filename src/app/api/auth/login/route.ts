@@ -17,6 +17,8 @@ import {
   syncOrganizerCredentials,
 } from "@/lib/unified-account";
 import { verifyTenantOwnerCredentials } from "@/lib/tenant-activation";
+import { readPersistentDomainState } from "@/lib/persistent-storage";
+import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
 import { syncStorageFromDb } from "@/lib/data-storage";
 
 export const dynamic = "force-dynamic";
@@ -430,6 +432,18 @@ export async function POST(req: NextRequest) {
       }
 
       const acc = tenantOwnerAuth.account;
+      const tenantsState = await readPersistentDomainState(tenantsDomainSpec);
+      const tenantProfile = tenantsState.profiles?.[acc.tenantId];
+      if (tenantProfile?.status === "INACTIVE") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `FORBIDDEN: Akun pemilik mitra [${acc.tenantName}] tidak dapat masuk karena status mitra saat ini NONAKTIF.`,
+          },
+          { status: 403 }
+        );
+      }
+
       const edgeToken = signEdgeSessionToken({
         userId: acc.id,
         role: "OWNER",
@@ -449,9 +463,11 @@ export async function POST(req: NextRequest) {
           role: "OWNER",
           scopeLevel: "TENANT",
           tenantId: acc.tenantId,
+          businessModule: "FNB",
+          organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
           tenant: {
             id: acc.tenantId,
-            name: acc.tenantName,
+            name: tenantProfile?.brandName || acc.tenantName,
             code: acc.tenantId.toUpperCase(),
             businessModule: "FNB",
           },

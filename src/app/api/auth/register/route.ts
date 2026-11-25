@@ -4,8 +4,13 @@ import { createOrganizerSession } from "@/lib/organizer-activation";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import {
   getPersistentLoyaltyMembers,
+  readSeededPersistentData,
   savePersistentLoyaltyMember,
 } from "@/lib/persistent-storage";
+import {
+  TENANT_ACCOUNTS_FILE,
+  type TenantOwnerAccount,
+} from "@/lib/tenant-activation";
 import { normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 import type { LoyaltyMember } from "@/types/loyalty";
 
@@ -41,6 +46,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Password minimal 6 karakter." },
         { status: 400 }
+      );
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const tenantOwnerAccounts = await readSeededPersistentData<TenantOwnerAccount[]>(
+      TENANT_ACCOUNTS_FILE,
+      () => []
+    );
+    if (tenantOwnerAccounts.some((a) => a.email.toLowerCase() === normalizedEmail)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Email tersebut sudah terdaftar sebagai akun pemilik mitra. Gunakan halaman masuk atau email lain.",
+        },
+        { status: 409 }
       );
     }
 

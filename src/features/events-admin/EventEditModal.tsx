@@ -12,10 +12,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { CommunityEvent, EventCategory } from "@/types/event";
 import { eventCategoryLabel } from "./events-admin-domain";
-import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
+import { validateEventPrice, validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
 
@@ -105,6 +107,16 @@ export function EventEditModal({
 
   if (!event) return null;
 
+  const tierValidation =
+    Array.isArray(formData.ticketTiers) && formData.ticketTiers.length > 0
+      ? validateEventTicketTiers(formData.ticketTiers, {
+          hasSeatingChart: Boolean(formData.hasSeatingChart),
+        })
+      : { valid: true };
+  const tierError = !tierValidation.valid
+    ? tierValidation.error || "Konfigurasi jenis tiket tidak valid."
+    : null;
+
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
     setRawPrice(raw);
@@ -142,15 +154,15 @@ export function EventEditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b shrink-0">
           <DialogTitle>Ubah informasi event</DialogTitle>
           <DialogDescription>
             Perbarui jadwal, lokasi, kuota, atau ketentuan untuk event "{event.title}".
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2 text-xs">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-4 text-xs">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="editTitle">Judul event</Label>
             <Input
@@ -181,7 +193,7 @@ export function EventEditModal({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="editLocation">Lokasi / Venue</Label>
+              <Label htmlFor="editLocation">Lokasi acara</Label>
               <Input
                 id="editLocation"
                 type="text"
@@ -258,24 +270,24 @@ export function EventEditModal({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="editDescription">Deskripsi</Label>
-            <textarea
+            <Textarea
               id="editDescription"
               rows={3}
               value={formData.description || ""}
               onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
-              className="w-full rounded-md border bg-card p-2 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              className="text-xs"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="editGuidelines">Panduan & ketentuan acara (1 baris per poin)</Label>
-            <textarea
+            <Textarea
               id="editGuidelines"
               rows={3}
               value={guidelinesText}
               onChange={(e) => onGuidelinesTextChange(e.target.value)}
               placeholder="Contoh:&#10;Bawa laptop masing-masing&#10;Dilarang membawa makanan dari luar"
-              className="w-full rounded-md border bg-card p-2 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              className="text-xs"
             />
           </div>
 
@@ -290,12 +302,12 @@ export function EventEditModal({
                   Pembeli memilih kursi di denah visual saat pesan tiket (contoh VIP A1-A10, Reguler B1-B20).
                 </p>
               </div>
-              <input
+              <Checkbox
                 id="edit-has-seating"
-                type="checkbox"
                 checked={Boolean(formData.hasSeatingChart)}
-                onChange={(e) => onFormDataChange({ ...formData, hasSeatingChart: e.target.checked })}
-                className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                onCheckedChange={(checked) =>
+                  onFormDataChange({ ...formData, hasSeatingChart: checked === true })
+                }
               />
             </div>
 
@@ -321,6 +333,7 @@ export function EventEditModal({
                 setPriceError(null);
               }}
             />
+            {tierError && <p className="text-xs text-destructive">{tierError}</p>}
           </div>
 
           {/* Editor Kebijakan Refund */}
@@ -340,7 +353,7 @@ export function EventEditModal({
           )}
         </div>
 
-        <DialogFooter className="border-t pt-3">
+        <DialogFooter className="p-4 px-6 border-t shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -354,7 +367,7 @@ export function EventEditModal({
             type="button"
             size="lg"
             onClick={onSave}
-            disabled={isSaving || Boolean(priceError) || Boolean(quotaError)}
+            disabled={isSaving || Boolean(priceError) || Boolean(quotaError) || Boolean(tierError)}
           >
             {isSaving ? "Menyimpan…" : "Simpan perubahan"}
           </Button>

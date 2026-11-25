@@ -2,6 +2,7 @@ import { OrderRecord } from "@/types/order";
 import {
   allocateCategoryDiscounts,
   allocateCategoryTaxAndService,
+  allocateIntegerProRata,
   getOrderTaxBreakdown,
   isCoworkingOrderItem,
   normalizeTenantId,
@@ -586,8 +587,24 @@ export function calculateTenantProfitSharing(
       const tenantDpp = Math.max(0, tenantGross - allocatedDiscount);
       totalDiscount += allocatedDiscount;
       totalDpp += tenantDpp;
-      if (order.paymentMethod === "QRIS") {
+      const method = (order.paymentMethod || "").toUpperCase();
+      if (method === "QRIS") {
         qrisDpp += tenantDpp;
+      } else if (
+        method === "SPLIT" &&
+        Array.isArray(order.splitDetails) &&
+        order.splitDetails.length > 0
+      ) {
+        const weights = order.splitDetails.map((s) => Math.max(0, Number(s.amount) || 0));
+        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+        if (totalWeight > 0) {
+          const allocatedBySplit = allocateIntegerProRata(Math.round(tenantDpp), weights);
+          order.splitDetails.forEach((s, idx) => {
+            if ((s.method || "").toUpperCase() === "QRIS") {
+              qrisDpp += allocatedBySplit[idx] ?? 0;
+            }
+          });
+        }
       }
     }
   });

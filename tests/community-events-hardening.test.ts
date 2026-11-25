@@ -201,7 +201,7 @@ describe("Hardening Event Marketplace — Multi-Tenant, Partial Check-In, Ticket
           "CHECKED_IN",
           { incrementQty: 1 }
         )
-      ).rejects.toThrow(/semua tiket dalam pemesanan ini sudah selesai check-in/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("Support resetting check-in for correction", async () => {
@@ -234,7 +234,7 @@ describe("Hardening Event Marketplace — Multi-Tenant, Partial Check-In, Ticket
           bookingQty1.id,
           "CHECKED_IN"
         )
-      ).rejects.toThrow(/semua tiket dalam pemesanan ini sudah selesai check-in/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("CANCELLED booking cannot be checked in", async () => {

@@ -117,17 +117,17 @@ export function EventAttendeesModal({
 
   const handleExportCSV = () => {
     const headers = [
-      "Kode Tiket",
-      "Nama Pemesan",
+      "Kode tiket",
+      "Nama pemesan",
       "Email",
       "WhatsApp",
-      "Jumlah Tiket",
-      "Nomor Kursi",
-      "Total Bayar",
-      "Status Bayar",
-      "Status Kehadiran",
-      "Waktu Check-in",
-      "Petugas Check-in",
+      "Jumlah tiket",
+      "Nomor kursi",
+      "Total bayar",
+      "Status bayar",
+      "Status kehadiran",
+      "Waktu check-in",
+      "Petugas check-in",
     ];
     const rows = filteredBookings.map((b) => {
       const { ticketCount: qty, isCheckedIn, isPartial, checkedInQty } = getBookingAttendance(b);
@@ -135,7 +135,7 @@ export function EventAttendeesModal({
         ? "Hadir"
         : isPartial
         ? `Hadir ${checkedInQty}/${qty}`
-        : "Belum Hadir";
+        : "Belum hadir";
       return [
         b.ticketCode,
         b.guestName,
@@ -149,7 +149,7 @@ export function EventAttendeesModal({
         b.checkInTime
           ? new Date(b.checkInTime).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
           : "—",
-        b.checkedInBy || (attendanceLabel !== "Belum Hadir" ? "Petugas Check-In" : "—"),
+        b.checkedInBy || (attendanceLabel !== "Belum hadir" ? "Petugas check-in" : "—"),
       ];
     });
     downloadCSV(`Peserta_${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.csv`, headers, rows);
@@ -238,7 +238,7 @@ export function EventAttendeesModal({
         </div>
 
         {/* Tabel Peserta */}
-        <div className="flex-1 overflow-y-auto px-6 pb-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4">
           <div className="rounded-xl border bg-card overflow-hidden">
             {filteredBookings.length === 0 ? (
               <p className="py-12 text-center text-xs text-muted-foreground">
@@ -248,7 +248,7 @@ export function EventAttendeesModal({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[160px]">Kode Tiket</TableHead>
+                    <TableHead className="w-[160px]">Kode tiket</TableHead>
                     <TableHead>Peserta</TableHead>
                     <TableHead className="hidden sm:table-cell text-right">Tiket</TableHead>
                     <TableHead className="hidden md:table-cell">Bayar</TableHead>
@@ -260,10 +260,8 @@ export function EventAttendeesModal({
                 </TableHeader>
                 <TableBody>
                   {filteredBookings.map((b) => {
-                    const { ticketCount, checkedInQty, isCheckedIn, isPartial, attendanceLabel } = getBookingAttendance(b);
+                    const { ticketCount, isCheckedIn, isPartial, attendanceLabel } = getBookingAttendance(b);
                     const isUpdating = isUpdatingCheckInId === b.id;
-                    const isInvalidPayment =
-                      b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED";
 
                     return (
                       <TableRow key={b.id}>

@@ -3,6 +3,15 @@
 import React, { useEffect, useState } from "react";
 import { QrCode, Check, RotateCcw, Loader2, Ticket, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { DataPagination } from "@/components/app/data-pagination";
@@ -13,6 +22,7 @@ import {
   formatPaymentStatusLabel,
   formatCheckInTime,
 } from "./events-checkin-domain";
+import { formatSeatsList } from "@/lib/event-seating";
 
 interface CheckInAttendeesTableProps {
   tickets: readonly EventTicketOrder[];
@@ -84,176 +94,185 @@ export function CheckInAttendeesTable({
   return (
     <div className="space-y-3">
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-border bg-muted/40 text-muted-foreground font-medium">
-              <tr>
-                <th className="py-3 px-4">Tiket</th>
-                <th className="py-3 px-4">Peserta</th>
-                <th className="py-3 px-4 hidden lg:table-cell">Kontak</th>
-                <th className="py-3 px-4 text-center">Jumlah</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {paginatedTickets.map((ticket) => {
-                const ticketCount = ticket.ticketCount || 1;
-                const checkedQty =
-                  typeof ticket.checkedInQty === "number"
-                    ? ticket.checkedInQty
-                    : ticket.checkInStatus === "CHECKED_IN"
-                    ? ticketCount
-                    : 0;
+        <Table>
+          <TableHeader className="bg-muted/40">
+            <TableRow>
+              <TableHead className="py-3 px-4">Tiket</TableHead>
+              <TableHead className="py-3 px-4">Peserta</TableHead>
+              <TableHead className="py-3 px-4 hidden lg:table-cell">Kontak</TableHead>
+              <TableHead className="py-3 px-4 text-center">Jumlah</TableHead>
+              <TableHead className="py-3 px-4 text-center">Status</TableHead>
+              <TableHead className="py-3 px-4 text-right">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedTickets.map((ticket) => {
+              const ticketCount = ticket.ticketCount || 1;
+              const checkedQty =
+                typeof ticket.checkedInQty === "number"
+                  ? ticket.checkedInQty
+                  : ticket.checkInStatus === "CHECKED_IN"
+                  ? ticketCount
+                  : 0;
 
-                const isFullyCheckedIn = ticket.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
-                const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
-                const isPaid =
-                  ticket.paymentStatus === "PAID" &&
-                  ticket.refundStatus !== "REQUESTED" &&
-                  ticket.refundStatus !== "APPROVED";
-                const isProcessing = isProcessingId === ticket.id;
+              const isFullyCheckedIn = ticket.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
+              const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
+              const isPaid =
+                ticket.paymentStatus === "PAID" &&
+                ticket.refundStatus !== "REQUESTED" &&
+                ticket.refundStatus !== "APPROVED";
+              const isProcessing = isProcessingId === ticket.id;
 
-                const checkInStatus = getCheckInStatusTone(ticket);
-                const paymentTone = getPaymentStatusTone(ticket.paymentStatus);
-                const paymentLabel = formatPaymentStatusLabel(ticket.paymentStatus);
+              const checkInStatus = getCheckInStatusTone(ticket);
+              const paymentTone = getPaymentStatusTone(ticket.paymentStatus);
+              const paymentLabel = formatPaymentStatusLabel(ticket.paymentStatus);
 
-                return (
-                  <tr key={ticket.id} className="hover:bg-muted/30 transition-colors">
-                    {/* Tiket Code */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono font-medium text-foreground">
-                          {ticket.ticketCode}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => onViewQR(ticket)}
-                          title="Lihat QR Code tiket"
-                          aria-label="Lihat QR Code tiket"
+              return (
+                <TableRow key={ticket.id}>
+                  {/* Tiket Code */}
+                  <TableCell className="py-3 px-4 whitespace-normal">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono font-medium text-foreground">
+                        {ticket.ticketCode}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => onViewQR(ticket)}
+                        title="Lihat QR Code tiket"
+                        aria-label="Lihat QR Code tiket"
+                      >
+                        <QrCode />
+                      </Button>
+                      {ticket.isInvitation && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-primary/20 bg-primary/10 text-primary"
                         >
-                          <QrCode />
-                        </Button>
-                        {ticket.isInvitation && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                            Tiket undangan
-                          </span>
-                        )}
-                        {ticket.ticketTierName && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
-                            {ticket.ticketTierName}
-                          </span>
-                        )}
-                        {ticket.promoCode && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border">
-                            Promo: {ticket.promoCode}
-                          </span>
-                        )}
-                      </div>
-                      {ticket.invitationNote && (
-                        <p className="text-xs text-muted-foreground italic truncate max-w-[220px]" title={ticket.invitationNote}>
-                          {ticket.invitationNote}
-                        </p>
+                          Tiket undangan
+                        </Badge>
                       )}
-                      {ticket.checkInTime && (
-                        <p className="text-xs text-muted-foreground">
-                          {formatCheckInTime(ticket.checkInTime)}
-                        </p>
+                      {ticket.ticketTierName && (
+                        <Badge variant="secondary" className="text-xs">
+                          {ticket.ticketTierName}
+                        </Badge>
                       )}
-                    </td>
-
-                    {/* Peserta */}
-                    <td className="py-3 px-4">
-                      <p className="font-medium text-foreground">{ticket.guestName}</p>
-                      {ticket.institution && (
-                        <p className="text-xs text-muted-foreground">{ticket.institution}</p>
+                      {ticket.promoCode && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Promo: {ticket.promoCode}
+                        </Badge>
                       )}
-                      <p className="text-xs text-muted-foreground lg:hidden">
-                        {ticket.guestPhone}
+                      {ticket.selectedSeats && ticket.selectedSeats.length > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs font-mono border-primary/20 bg-primary/10 text-primary"
+                        >
+                          Kursi: {formatSeatsList(ticket.selectedSeats)}
+                        </Badge>
+                      )}
+                    </div>
+                    {ticket.invitationNote && (
+                      <p className="text-xs text-muted-foreground italic truncate max-w-[220px]" title={ticket.invitationNote}>
+                        {ticket.invitationNote}
                       </p>
-                    </td>
+                    )}
+                    {ticket.checkInTime && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatCheckInTime(ticket.checkInTime)}
+                      </p>
+                    )}
+                  </TableCell>
 
-                    {/* Kontak */}
-                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">
-                      <p>{ticket.guestEmail}</p>
-                      <p className="font-mono text-xs">{ticket.guestPhone}</p>
-                    </td>
+                  {/* Peserta */}
+                  <TableCell className="py-3 px-4 whitespace-normal">
+                    <p className="font-medium text-foreground">{ticket.guestName}</p>
+                    {ticket.institution && (
+                      <p className="text-xs text-muted-foreground">{ticket.institution}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground lg:hidden">
+                      {ticket.guestPhone}
+                    </p>
+                  </TableCell>
 
-                    {/* Jumlah */}
-                    <td className="py-3 px-4 text-center font-medium text-foreground">
-                      <span className="tabular-nums">{ticketCount}</span> tiket
-                    </td>
+                  {/* Kontak */}
+                  <TableCell className="py-3 px-4 hidden lg:table-cell text-muted-foreground">
+                    <p>{ticket.guestEmail}</p>
+                    <p className="font-mono text-xs">{ticket.guestPhone}</p>
+                  </TableCell>
 
-                    {/* Status */}
-                    <td className="py-3 px-4 text-center">
-                      <div className="inline-flex flex-col items-center gap-1">
-                        <StatusBadge status={checkInStatus.tone}>{checkInStatus.label}</StatusBadge>
-                        <StatusBadge status={paymentTone}>{paymentLabel}</StatusBadge>
-                      </div>
-                    </td>
+                  {/* Jumlah */}
+                  <TableCell className="py-3 px-4 text-center font-medium text-foreground">
+                    <span className="tabular-nums">{ticketCount}</span> tiket
+                  </TableCell>
 
-                    {/* Aksi */}
-                    <td className="py-3 px-4 text-right">
-                      <div className="inline-flex items-center justify-end gap-1.5">
-                        {!isFullyCheckedIn ? (
-                          <>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="default"
-                              disabled={!isPaid || isProcessing}
-                              onClick={() => onCheckIn(ticket)}
-                            >
-                              {isProcessing ? (
-                                <Loader2 className="animate-spin" />
-                              ) : (
-                                <Check />
-                              )}
-                              <span>
-                                {isProcessing
-                                  ? "Menyimpan..."
-                                  : ticketCount > 1
-                                  ? "Rombongan"
-                                  : "Check-in"}
-                              </span>
-                            </Button>
+                  {/* Status */}
+                  <TableCell className="py-3 px-4 text-center">
+                    <div className="inline-flex flex-col items-center gap-1">
+                      <StatusBadge status={checkInStatus.tone}>{checkInStatus.label}</StatusBadge>
+                      <StatusBadge status={paymentTone}>{paymentLabel}</StatusBadge>
+                    </div>
+                  </TableCell>
 
-                            {isPartiallyCheckedIn && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={isProcessing}
-                                onClick={() => onReset(ticket)}
-                                title="Reset kehadiran"
-                                aria-label="Reset kehadiran"
-                              >
-                                <RotateCcw />
-                              </Button>
-                            )}
-                          </>
-                        ) : (
+                  {/* Aksi */}
+                  <TableCell className="py-3 px-4 text-right">
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      {!isFullyCheckedIn ? (
+                        <>
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
-                            disabled={isProcessing}
-                            onClick={() => onReset(ticket)}
+                            variant="default"
+                            disabled={!isPaid || isProcessing}
+                            onClick={() => onCheckIn(ticket)}
                           >
-                            <RotateCcw />
-                            <span>Reset</span>
+                            {isProcessing ? (
+                              <Loader2 className="animate-spin" />
+                            ) : (
+                              <Check />
+                            )}
+                            <span>
+                              {isProcessing
+                                ? "Menyimpan..."
+                                : ticketCount > 1
+                                ? "Rombongan"
+                                : "Check-in"}
+                            </span>
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+
+                          {isPartiallyCheckedIn && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={isProcessing}
+                              onClick={() => onReset(ticket)}
+                              title="Reset kehadiran"
+                              aria-label="Reset kehadiran"
+                            >
+                              <RotateCcw />
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isProcessing}
+                          onClick={() => onReset(ticket)}
+                        >
+                          <RotateCcw />
+                          <span>Reset</span>
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
 
       <DataPagination

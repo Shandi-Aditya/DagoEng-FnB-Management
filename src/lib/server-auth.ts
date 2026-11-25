@@ -488,16 +488,25 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
             (verification.payload!.email &&
               p.email.toLowerCase() === verification.payload!.email.toLowerCase()))
       );
+      const resolvedScopeLevel: ScopeLevel =
+        verification.payload.scopeLevel || matchedPersona?.scopeLevel || "OUTLET";
+      const isActivatedTenantOwner =
+        !matchedPersona &&
+        verification.payload.role === "OWNER" &&
+        resolvedScopeLevel === "TENANT";
       return {
         isAuthenticated: true,
         role: verification.payload.role,
         userId: verification.payload.userId,
         email: verification.payload.email || matchedPersona?.email || null,
-        name: matchedPersona?.name,
-        scopeLevel: verification.payload.scopeLevel || matchedPersona?.scopeLevel || "OUTLET",
-        permissions: matchedPersona?.permissions || [],
+        name: matchedPersona?.name || (isActivatedTenantOwner ? "Pemilik Mitra" : undefined),
+        scopeLevel: resolvedScopeLevel,
+        permissions:
+          matchedPersona?.permissions ||
+          (isActivatedTenantOwner ? TRUSTED_PERSONAS.TENANT_OWNER_KS.permissions : []),
         tenantId: verification.payload.tenantId ?? matchedPersona?.tenantId ?? null,
-        businessModule: matchedPersona?.businessModule ?? null,
+        businessModule:
+          matchedPersona?.businessModule ?? (isActivatedTenantOwner ? "FNB" : null),
       };
     }
   }
@@ -631,6 +640,16 @@ export function isHubAdminOrManager(
     ((auth.role === "OWNER" || auth.role === "MANAGER") &&
       auth.scopeLevel === "ORGANIZATION" &&
       !auth.tenantId)
+  );
+}
+
+export function isSuperAdminOrOrgOwner(
+  auth: Pick<ServerAuthResult, "isAuthenticated" | "role" | "scopeLevel" | "tenantId">
+): boolean {
+  if (!auth.isAuthenticated || !auth.role) return false;
+  return (
+    auth.role === "SUPER_ADMIN" ||
+    (auth.role === "OWNER" && auth.scopeLevel === "ORGANIZATION" && !auth.tenantId)
   );
 }
 

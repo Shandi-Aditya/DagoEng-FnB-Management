@@ -18,11 +18,22 @@ export interface ValidateSeatSelectionParams {
   occupiedSeats: Set<string>;
 }
 
+function formatMultiCharRowSuffix(rowIndex: number): string {
+  if (rowIndex < 26) {
+    return String.fromCharCode(65 + rowIndex);
+  }
+  const first = String.fromCharCode(65 + Math.floor(rowIndex / 26) - 1);
+  const second = String.fromCharCode(65 + (rowIndex % 26));
+  return `${first}${second}`;
+}
+
 /**
  * Generates an ordered list of seat codes for a given ticket tier.
- * If rowPrefix is given (e.g. "A"):
- *   - totalRows: number of rows (e.g. 2 -> A and B)
- *   - seatsPerRow: seats per row (e.g. 5 -> A1-A5, B1-B5)
+ * If rowPrefix is 1 char (e.g. "A"):
+ *   - Increments row letter per row (A1..An, B1..Bn)
+ * If rowPrefix is multi-char (e.g. "VIP"):
+ *   - totalRows === 1 -> VIP1..VIPn
+ *   - totalRows > 1 -> VIP-A1..VIP-An, VIP-B1..VIP-Bn
  * If rowPrefix is omitted:
  *   - Falls back to generic codes "K1", "K2", ..., "K{quota}"
  */
@@ -49,14 +60,35 @@ export function generateTierSeats(
       ? tier.totalRows
       : Math.max(1, Math.ceil(quota / seatsPerRow));
 
-  const baseCharCode = rawPrefix.charCodeAt(0);
   const seats: string[] = [];
 
-  for (let r = 0; r < totalRows; r++) {
-    const rowLetter = String.fromCharCode(baseCharCode + r);
+  if (rawPrefix.length === 1) {
+    const baseCharCode = rawPrefix.charCodeAt(0);
+    for (let r = 0; r < totalRows; r++) {
+      const rowLetter = String.fromCharCode(baseCharCode + r);
+      for (let s = 1; s <= seatsPerRow; s++) {
+        if (seats.length < quota || !tier.quota) {
+          seats.push(`${rowLetter}${s}`);
+        }
+      }
+    }
+    return seats;
+  }
+
+  if (totalRows === 1) {
     for (let s = 1; s <= seatsPerRow; s++) {
       if (seats.length < quota || !tier.quota) {
-        seats.push(`${rowLetter}${s}`);
+        seats.push(`${rawPrefix}${s}`);
+      }
+    }
+    return seats;
+  }
+
+  for (let r = 0; r < totalRows; r++) {
+    const rowLetter = formatMultiCharRowSuffix(r);
+    for (let s = 1; s <= seatsPerRow; s++) {
+      if (seats.length < quota || !tier.quota) {
+        seats.push(`${rawPrefix}-${rowLetter}${s}`);
       }
     }
   }
@@ -66,11 +98,12 @@ export function generateTierSeats(
 
 /**
  * Collects all currently occupied seats for an event from active bookings.
- * Automatically excludes CANCELLED, EXPIRED, and APPROVED refund bookings.
+ * Automatically excludes CANCELLED, EXPIRED, REFUNDED, APPROVED refund, and expired PENDING bookings.
  */
 export function getEventOccupiedSeats(
   eventId: string,
-  bookings: readonly EventTicketOrder[]
+  bookings: readonly EventTicketOrder[],
+  nowMs: number = Date.now()
 ): Set<string> {
   const occupied = new Set<string>();
 
@@ -78,9 +111,22 @@ export function getEventOccupiedSeats(
     if (b.eventId !== eventId) continue;
     if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED" || b.paymentStatus === "REFUNDED") continue;
     if (b.refundStatus === "APPROVED") continue;
+    if (b.paymentStatus === "PENDING" && !b.paymentProofUrl) {
+      const expiresAtMs = b.expiresAt ? Date.parse(b.expiresAt) : NaN;
+      const createdAtMs = b.createdAt ? Date.parse(b.createdAt) : NaN;
+      const isExpiredByExpiresAt = Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+      const isExpiredByFallback =
+        !Number.isFinite(expiresAtMs) &&
+        Number.isFinite(createdAtMs) &&
+        createdAtMs + 2 * 60 * 60 * 1000 <= nowMs;
+      if (isExpiredByExpiresAt || isExpiredByFallback) {
+        continue;
+      }
+    }
 
     if (Array.isArray(b.selectedSeats)) {
       for (const seat of b.selectedSeats) {
+        if (typeof seat !== "string") continue;
         const clean = seat.trim().toUpperCase();
         if (clean) {
           occupied.add(clean);
@@ -105,6 +151,16 @@ export function validateSeatSelection({
   // If seating chart is disabled for this event, seats are not required.
   if (!hasSeatingChart) {
     return { valid: true };
+  }
+
+  if (
+    Array.isArray(selectedSeats) &&
+    selectedSeats.some((s) => typeof s !== "string" || s.trim().length === 0)
+  ) {
+    return {
+      valid: false,
+      error: "Format nomor kursi tidak valid. Setiap kursi harus berupa kode teks yang valid.",
+    };
   }
 
   const cleanSeats = Array.isArray(selectedSeats)

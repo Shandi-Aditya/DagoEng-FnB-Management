@@ -17,6 +17,7 @@ import {
   buildReportSignatories,
   isNumericOrCurrencyCell,
   formatReportHeaderBadge,
+  computeReportColumnWidths,
 } from "./report-pdf-domain";
 import type { ReportType } from "./reports-domain";
 
@@ -58,6 +59,10 @@ export default function StructuredReportPDFModal({
 
   if (!isOpen) return null;
 
+  const isLandscape = data.tableHeaders.length >= 10;
+  const colWidths = computeReportColumnWidths(data.tableHeaders);
+  const pageSizeDirective = isLandscape ? "A4 landscape" : "A4 portrait";
+
   const handlePrint = () => {
     const reportEl = document.getElementById("structured-pdf-report");
     if (!reportEl) {
@@ -69,8 +74,8 @@ export default function StructuredReportPDFModal({
     iframe.style.position = "fixed";
     iframe.style.left = "-9999px";
     iframe.style.top = "0";
-    iframe.style.width = "210mm";
-    iframe.style.height = "297mm";
+    iframe.style.width = isLandscape ? "297mm" : "210mm";
+    iframe.style.height = isLandscape ? "210mm" : "297mm";
     iframe.style.border = "none";
     iframe.style.visibility = "hidden";
     document.body.appendChild(iframe);
@@ -93,14 +98,14 @@ export default function StructuredReportPDFModal({
 <head>
   <meta charset="utf-8" />
   <base href="${window.location.origin}/" />
-  <title>Pratinjau Dokumen Laporan - ${outletName}</title>
+  <title>Pratinjau dokumen laporan - ${outletName}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
   ${styles}
   <style>
     @page {
-      size: A4 portrait;
+      size: ${pageSizeDirective};
       margin: 8mm 10mm;
     }
     * {
@@ -187,7 +192,7 @@ export default function StructuredReportPDFModal({
       <style jsx global>{`
         @media print {
           @page {
-            size: A4 portrait;
+            size: ${pageSizeDirective};
             margin: 10mm 12mm;
           }
 
@@ -311,7 +316,7 @@ export default function StructuredReportPDFModal({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <DialogTitle className="text-sm font-semibold truncate">
-                  Pratinjau Dokumen Laporan
+                  Pratinjau dokumen laporan
                 </DialogTitle>
                 <StatusBadge status="neutral">{badgeLabel}</StatusBadge>
               </div>
@@ -345,12 +350,14 @@ export default function StructuredReportPDFModal({
         {/* Printable Document Body with min-h-0 for proper flexbox scroll isolation */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0 print:p-0 print:bg-white print:overflow-visible print:max-h-none"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0 print:p-0 print:bg-background print:overflow-visible print:max-h-none"
         >
           <div
             id="structured-pdf-report"
             ref={printRef}
-            className="w-full max-w-5xl min-w-0 bg-card text-card-foreground p-6 sm:p-8 rounded-lg shadow-xs border border-border space-y-6 my-2 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:text-slate-900"
+            className={`w-full ${
+              isLandscape ? "max-w-7xl" : "max-w-5xl"
+            } min-w-0 bg-card text-card-foreground p-6 sm:p-8 rounded-lg shadow-xs border border-border space-y-6 my-2 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-background print:text-foreground`}
           >
             {/* Header & Logo */}
             <div className="flex items-start justify-between border-b pb-5 gap-4">
@@ -367,21 +374,21 @@ export default function StructuredReportPDFModal({
                   </div>
                   <div>
                     <h1 className="text-lg font-semibold tracking-tight text-foreground leading-tight">
-                      DAGO CREATIVE HUB
+                      Dago Creative Hub
                     </h1>
                     <p className="text-xs text-muted-foreground">
-                      Manajemen Terpadu F&B, Co-working & Komersial
+                      Manajemen terpadu F&B, co-working & komersial
                     </p>
                   </div>
                 </div>
 
                 <div className="text-xs text-muted-foreground space-y-0.5 pt-1">
                   <p>
-                    <span className="font-medium text-foreground">Gerai / Outlet:</span>{" "}
+                    <span className="font-medium text-foreground">Gerai / outlet:</span>{" "}
                     {outletName}
                   </p>
                   <p>
-                    <span className="font-medium text-foreground">Periode Laporan:</span>{" "}
+                    <span className="font-medium text-foreground">Periode laporan:</span>{" "}
                     {periodLabel}
                   </p>
                 </div>
@@ -407,7 +414,7 @@ export default function StructuredReportPDFModal({
                 <p className="text-muted-foreground text-xs">{data.subtitle}</p>
               </div>
               <div className="font-mono text-xs text-muted-foreground shrink-0">
-                Dokumen Resmi Sistem
+                Dokumen resmi sistem
               </div>
             </div>
 
@@ -430,16 +437,23 @@ export default function StructuredReportPDFModal({
 
             {/* Table Data */}
             <div className="border rounded-lg overflow-x-auto w-full">
-              <table className="w-full min-w-[760px] sm:min-w-0 text-left text-xs border-collapse">
+              <table className="table-fixed w-full min-w-[760px] sm:min-w-0 text-left text-xs border-collapse">
+                <colgroup>
+                  {colWidths.map((widthPct, idx) => (
+                    <col key={idx} style={{ width: `${widthPct}%` }} />
+                  ))}
+                </colgroup>
                 <thead className="bg-muted/50 text-foreground font-medium border-b">
                   <tr>
                     {data.tableHeaders.map((th, i) => {
                       const isLast = i === data.tableHeaders.length - 1;
+                      const isRightAligned =
+                        isLast || th.includes("(Rp)") || th.includes("(%)");
                       return (
                         <th
                           key={i}
-                          className={`px-3 py-2 text-xs font-semibold ${
-                            isLast ? "text-right" : ""
+                          className={`px-2 py-2 text-xs font-semibold break-words ${
+                            isRightAligned ? "text-right" : ""
                           }`}
                         >
                           {th}
@@ -461,11 +475,11 @@ export default function StructuredReportPDFModal({
                         return (
                           <td
                             key={cIdx}
-                            className={`px-3 py-2 text-xs text-foreground break-words ${
+                            className={`px-2 py-2 text-xs text-foreground break-words ${
                               isNumeric
-                                ? "text-right font-mono tabular-nums whitespace-nowrap font-medium"
+                                ? "text-right font-mono tabular-nums font-medium"
                                 : isCode
-                                ? "font-mono whitespace-nowrap"
+                                ? "font-mono"
                                 : ""
                             }`}
                           >
@@ -483,7 +497,7 @@ export default function StructuredReportPDFModal({
             {data.reconciliationInfo && (
               <div className="bg-muted/30 border rounded-lg p-3.5 space-y-2 text-xs">
                 <p className="font-semibold text-foreground text-xs">
-                  Catatan Rekonsiliasi & Validasi Integritas Data
+                  Catatan rekonsiliasi & validasi integritas data
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {data.reconciliationInfo.map((item, idx) => (

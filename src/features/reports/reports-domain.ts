@@ -15,17 +15,9 @@ import { toWitaDateKey } from "@/contexts/DateFilterContext";
 import { bookingCheckInStatusLabel } from "@/features/coworking/coworking-domain";
 import { ingredientCategoryLabel } from "@/features/inventory/inventory-reorder";
 import { filterOrdersByTenant, orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
-import {
-  calculateSettlement,
-  getTenantPayoutAccount,
-  maskAccountNumber,
-  resolveItemTenantId,
-} from "@/lib/settlement";
-import {
-  getStoredSettlementReceiptPolicy,
-  settlementBasisLabel,
-  type SettlementBasisMode,
-} from "@/lib/settlement-receipt-policy";
+import type { OutletItem } from "@/lib/receipt-publisher";
+import { resolveItemTenantId } from "@/lib/settlement";
+import type { SettlementBasisMode } from "@/lib/settlement-receipt-policy";
 import {
   aggregateOrdersTaxAndRevenue,
   getOrderTaxBreakdown,
@@ -45,6 +37,8 @@ import {
   countVoidRefundDiscountEntries,
 } from "./void-refund-discount-domain";
 import {
+  buildConsolidatedSettlementReportDataset,
+  buildSettlementReportDataset,
   calculateWeeklyTenantSettlement,
   calculateConsolidatedWeeklySettlement,
   getWeeklySettlementPeriod,
@@ -55,6 +49,8 @@ import {
 export {
   buildVoidRefundDiscountReport,
   countVoidRefundDiscountEntries,
+  buildSettlementReportDataset,
+  buildConsolidatedSettlementReportDataset,
   calculateWeeklyTenantSettlement,
   calculateConsolidatedWeeklySettlement,
   getWeeklySettlementPeriod,
@@ -352,6 +348,7 @@ export interface BuildReportParams {
   companyName?: string;
   mdrBearer?: MdrBearerMode;
   referenceDate?: Date | string;
+  outlets?: readonly OutletItem[];
 }
 
 export interface ReportCategoryMeta {
@@ -435,7 +432,7 @@ export function getReportCategories(params: {
     },
     {
       id: "SETTLEMENT_CONSOLIDATED",
-      label: "Konsolidasi mitra (#11)",
+      label: "Konsolidasi mitra",
       count: `${params.tenantsCount} Tenant`,
       rawCount: params.tenantsCount,
     },
@@ -560,6 +557,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     companyName,
     mdrBearer,
     referenceDate,
+    outlets,
   } = params;
 
   const tenantOrders = tenantId ? projectOrdersForTenant(rawOrders, tenantId) : rawOrders;
@@ -1012,261 +1010,27 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     }
 
     case "SETTLEMENT": {
-      const effectiveBasis = settlementBasis ?? getStoredSettlementReceiptPolicy().settlementBasis;
-
-      if (!mdrBearer) {
-        const rawSettlementData = calculateSettlement(orders, undefined, customSplits, {
-          settlementBasis: effectiveBasis,
-        });
-        const settlementData = tenantId
-          ? rawSettlementData.filter((s) => s.tenantId === tenantId)
-          : rawSettlementData;
-        const totalNetSettlement = settlementData.reduce(
-          (sum, s) => sum + (s.dpp ?? (s.grossRevenue - s.discount)),
-          0
-        );
-        const totalTenantShare = settlementData.reduce((sum, s) => sum + (s.tenantShareAmount || 0), 0);
-        const totalDagoShare = settlementData.reduce((sum, s) => sum + (s.dagoShareAmount || 0), 0);
-        const totalDiscount = settlementData.reduce((sum, s) => sum + s.discount, 0);
-
-        const tableRows = settlementData.map((s) => {
-          const payout = getTenantPayoutAccount(s.tenantId);
-          const payoutDisplay =
-            s.tenantId === "DAGO_HUB"
-              ? "Rekening pusat DAGO"
-              : `${payout.bankName} ${maskAccountNumber(payout.accountNumber)}`;
-          const splitDisplay =
-            s.tenantId === "DAGO_HUB"
-              ? "100% DAGO"
-              : `${s.tenantSharePercent}% Mitra / ${s.dagoSharePercent}% DAGO`;
-
-          return [
-            s.tenantId,
-            s.tenantName,
-            payoutDisplay,
-            splitDisplay,
-            s.transactionCount,
-            `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
-            `Rp ${(s.tenantShareAmount || 0).toLocaleString("id-ID")}`,
-            `Rp ${(s.dagoShareAmount || 0).toLocaleString("id-ID")}`,
-            `Rp ${(s.dpp ?? (s.grossRevenue - s.discount)).toLocaleString("id-ID")}`,
-          ];
-        });
-
-        return {
-          title: "Laporan settlement mitra",
-          subtitle: `Rincian bagi hasil tenant dan rekonsiliasi pembayaran di ${scopeName}`,
-          summaryCards: [
-            { label: "Settlement bersih", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
-            { label: "Bagian mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
-            { label: "Bagian DAGO", value: `Rp ${totalDagoShare.toLocaleString("id-ID")}` },
-            { label: "Diskon (prorata)", value: `Rp ${totalDiscount.toLocaleString("id-ID")}` },
-          ],
-          tableHeaders: [
-            "ID mitra",
-            "Mitra",
-            "Rekening pencairan",
-            "Bagi hasil",
-            "Transaksi",
-            "Kotor (Rp)",
-            "Bagian mitra (Rp)",
-            "Bagian DAGO (Rp)",
-            "Bersih (Rp)",
-          ],
-          tableRows,
-          reconciliationInfo: [
-            { label: "Dasar bagi hasil", value: settlementBasisLabel(effectiveBasis) },
-          ],
-        };
-      }
-
-      const period = getWeeklySettlementPeriod(referenceDate);
-      const effectiveMdrBearer: MdrBearerMode = mdrBearer || "MITRA";
-
-      const consolidated = calculateConsolidatedWeeklySettlement(orders, {
-        mdrBearer: effectiveMdrBearer,
+      return buildSettlementReportDataset({
+        scopeName,
+        orders,
+        tenantId,
+        settlementBasis,
         customSplits,
+        mdrBearer,
         referenceDate,
+        outlets,
       });
-
-      const activeTenants = consolidated.tenants.filter((s) => s.transactionCount > 0);
-      const settlementData = tenantId
-        ? consolidated.tenants.filter((s) => s.tenantId === tenantId)
-        : activeTenants.length > 0
-        ? activeTenants
-        : consolidated.tenants;
-
-      const totalNetSettlement = settlementData.reduce((sum, s) => sum + s.totalNetSales, 0);
-      const totalTenantShare = settlementData.reduce((sum, s) => sum + s.tenantGrossShare, 0);
-      const totalDagoShare = settlementData.reduce((sum, s) => sum + s.dagoGrossShare, 0);
-      const totalDiscount = settlementData.reduce((sum, s) => sum + s.totalDiscount, 0);
-
-      const tableRows = settlementData.map((s) => {
-        const payoutDisplay =
-          s.tenantId === "DAGO_HUB"
-            ? "Rekening pusat DAGO"
-            : `${s.bankName} ${s.accountNumber !== "-" ? maskAccountNumber(s.accountNumber) : "-"}`;
-        const splitDisplay =
-          s.tenantId === "DAGO_HUB"
-            ? "100% DAGO"
-            : `${s.tenantSharePercent}% Mitra / ${s.dagoSharePercent}% DAGO`;
-        const statusLabel = s.status === "PAID" ? "Lunas" : "Belum lunas";
-
-        return [
-          s.tenantId,
-          s.tenantName,
-          payoutDisplay,
-          splitDisplay,
-          s.transactionCount,
-          `Rp ${s.totalGrossSales.toLocaleString("id-ID")}`,
-          `Rp ${s.tenantGrossShare.toLocaleString("id-ID")}`,
-          `Rp ${s.dagoGrossShare.toLocaleString("id-ID")}`,
-          `Rp ${s.totalNetSales.toLocaleString("id-ID")}`,
-          `Rp ${s.cashNetSales.toLocaleString("id-ID")}`,
-          `Rp ${s.cashDagoShare.toLocaleString("id-ID")}`,
-          `Rp ${s.qrisNetSales.toLocaleString("id-ID")}`,
-          `Rp ${s.qrisTenantShare.toLocaleString("id-ID")}`,
-          s.actionLabel,
-          statusLabel,
-        ];
-      });
-
-      const mdrLabel =
-        effectiveMdrBearer === "MITRA"
-          ? "Ditanggung mitra"
-          : effectiveMdrBearer === "DAGO"
-          ? "Ditanggung DAGO"
-          : "Dibagi proporsional (85/15)";
-
-      return {
-        title: "Laporan settlement mitra",
-        subtitle: `Laporan #10: Rincian bagi hasil mingguan per metode bayar (Tunai vs QRIS) dan rekening pencairan di ${scopeName}`,
-        summaryCards: [
-          { label: "Settlement bersih", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
-          { label: "Bagian mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
-          { label: "Bagian DAGO", value: `Rp ${totalDagoShare.toLocaleString("id-ID")}` },
-          { label: "Diskon (prorata)", value: `Rp ${totalDiscount.toLocaleString("id-ID")}` },
-        ],
-        tableHeaders: [
-          "ID mitra",
-          "Mitra",
-          "Rekening pencairan",
-          "Bagi hasil",
-          "Transaksi",
-          "Kotor (Rp)",
-          "Bagian mitra (Rp)",
-          "Bagian DAGO (Rp)",
-          "Bersih (Rp)",
-          "Tunai (Rp)",
-          "Setor tunai ke DAGO (Rp)",
-          "QRIS (Rp)",
-          "Transfer QRIS ke mitra (Rp)",
-          "Aliran kas akhir",
-          "Status",
-        ],
-        tableRows,
-        reconciliationInfo: [
-          { label: "Periode cut-off", value: period.periodLabel },
-          { label: "Batas setor/transfer", value: period.paymentDueLabel },
-          { label: "Dasar bagi hasil", value: settlementBasisLabel(effectiveBasis) },
-          { label: "Beban MDR QRIS (0.7%)", value: mdrLabel },
-        ],
-      };
     }
 
     case "SETTLEMENT_CONSOLIDATED": {
-      const period = getWeeklySettlementPeriod(referenceDate);
-      const effectiveMdrBearer: MdrBearerMode = mdrBearer || "MITRA";
-
-      const consolidated = calculateConsolidatedWeeklySettlement(orders, {
-        mdrBearer: effectiveMdrBearer,
+      return buildConsolidatedSettlementReportDataset({
+        scopeName,
+        orders,
         customSplits,
+        mdrBearer,
         referenceDate,
+        outlets,
       });
-
-      const tenantRows = consolidated.tenants.map((s) => {
-        const payoutDisplay = `${s.bankName} ${s.accountNumber !== "-" ? maskAccountNumber(s.accountNumber) : "-"}`;
-        const statusLabel = s.status === "PAID" ? "Lunas" : "Belum lunas";
-        const netTransferStr =
-          s.netTransferAmount > 0
-            ? `+Rp ${s.netTransferAmount.toLocaleString("id-ID")}`
-            : s.netTransferAmount < 0
-            ? `-Rp ${Math.abs(s.netTransferAmount).toLocaleString("id-ID")}`
-            : "Rp 0";
-
-        return [
-          s.tenantId,
-          s.tenantName,
-          payoutDisplay,
-          `Rp ${s.totalNetSales.toLocaleString("id-ID")}`,
-          `Rp ${s.cashNetSales.toLocaleString("id-ID")}`,
-          `Rp ${s.cashDagoShare.toLocaleString("id-ID")}`,
-          `Rp ${s.qrisNetSales.toLocaleString("id-ID")}`,
-          `Rp ${s.qrisTenantShare.toLocaleString("id-ID")}`,
-          `Rp ${s.qrisMdrFee.toLocaleString("id-ID")}`,
-          `Rp ${s.dagoTotalRevenue.toLocaleString("id-ID")}`,
-          netTransferStr,
-          statusLabel,
-        ];
-      });
-
-      const totalNetTransfer =
-        consolidated.totalNetTransferDagoToMitra - consolidated.totalNetSetoranMitraToDago;
-      const totalNetTransferStr =
-        totalNetTransfer > 0
-          ? `+Rp ${totalNetTransfer.toLocaleString("id-ID")}`
-          : totalNetTransfer < 0
-          ? `-Rp ${Math.abs(totalNetTransfer).toLocaleString("id-ID")}`
-          : "Rp 0";
-
-      const totalRow = [
-        "TOTAL",
-        "TOTAL KONSOLIDASI SEMUA MITRA",
-        "—",
-        `Rp ${consolidated.totalNetSales.toLocaleString("id-ID")}`,
-        `Rp ${consolidated.totalCashNetSales.toLocaleString("id-ID")}`,
-        `Rp ${consolidated.totalCashDagoShare.toLocaleString("id-ID")}`,
-        `Rp ${consolidated.totalQrisNetSales.toLocaleString("id-ID")}`,
-        `Rp ${consolidated.totalQrisTenantShare.toLocaleString("id-ID")}`,
-        `Rp ${consolidated.totalMdrFee.toLocaleString("id-ID")}`,
-        `Rp ${consolidated.totalDagoRevenue.toLocaleString("id-ID")}`,
-        totalNetTransferStr,
-        `${consolidated.paidCount}/${consolidated.tenants.length} Lunas`,
-      ];
-
-      const tableRows = [...tenantRows, totalRow];
-
-      return {
-        title: "Laporan konsolidasi semua mitra (#11)",
-        subtitle: `Laporan #11: Konsolidasi omzet, bagi hasil per metode bayar, dan total pendapatan DAGO di ${scopeName}`,
-        summaryCards: [
-          { label: "Omzet bersih konsolidasi", value: `Rp ${consolidated.totalNetSales.toLocaleString("id-ID")}` },
-          { label: "Transfer QRIS ke mitra", value: `Rp ${consolidated.totalQrisTenantShare.toLocaleString("id-ID")}` },
-          { label: "Setoran tunai mitra", value: `Rp ${consolidated.totalCashDagoShare.toLocaleString("id-ID")}` },
-          { label: "Total pendapatan DAGO", value: `Rp ${consolidated.totalDagoRevenue.toLocaleString("id-ID")}` },
-        ],
-        tableHeaders: [
-          "ID mitra",
-          "Mitra & Outlet",
-          "Rekening bank",
-          "Omzet bersih (Rp)",
-          "Tunai (Rp)",
-          "Setor tunai ke DAGO (Rp)",
-          "QRIS (Rp)",
-          "Transfer QRIS ke mitra (Rp)",
-          "MDR QRIS (Rp)",
-          "Pendapatan DAGO (Rp)",
-          "Net transfer (Rp)",
-          "Status",
-        ],
-        tableRows,
-        reconciliationInfo: [
-          { label: "Periode cut-off", value: period.periodLabel },
-          { label: "Batas setor/transfer", value: period.paymentDueLabel },
-          { label: "Total transaksi", value: `${consolidated.totalTransactions} pesanan` },
-          { label: "Status pelunasan", value: `${consolidated.paidCount} lunas, ${consolidated.pendingCount} menunggu` },
-        ],
-      };
     }
 
     case "EVENTS": {
@@ -1549,5 +1313,143 @@ export function extractAvailableReportCompanies(
     }
   });
   return Array.from(set).sort();
+}
+
+function parseReportCellAmount(cell: string | number | undefined): number {
+  if (typeof cell === "number") return Math.round(cell);
+  if (typeof cell !== "string") return 0;
+  const trimmed = cell.trim();
+  if (!trimmed || trimmed === "-" || trimmed === "—") return 0;
+  const isNegative = trimmed.startsWith("-");
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (!digits) return 0;
+  const parsed = parseInt(digits, 10);
+  return isNegative ? -parsed : parsed;
+}
+
+/**
+ * Menghitung ulang kartu ringkasan berdasarkan baris tabel yang sedang tersaring pencarian.
+ */
+export function recalculateReportSummaryCards(
+  report: ReportDataset,
+  filteredRows: readonly (readonly (string | number)[])[],
+  reportType: ReportType
+): ReportSummaryCard[] {
+  const dataRows = filteredRows.filter((row) => String(row[0]).toLowerCase() !== "total");
+  const sumByHeader = (headerName: string): number => {
+    const colIdx = report.tableHeaders.indexOf(headerName);
+    if (colIdx < 0) return 0;
+    return dataRows.reduce((sum, row) => sum + parseReportCellAmount(row[colIdx]), 0);
+  };
+  const formatRp = (val: number) =>
+    val < 0
+      ? `-Rp ${Math.abs(val).toLocaleString("id-ID")}`
+      : `Rp ${val.toLocaleString("id-ID")}`;
+
+  switch (reportType) {
+    case "SALES": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Omzet") return { ...card, value: formatRp(sumByHeader("Total (Rp)")) };
+        if (card.label === "Transaksi") return { ...card, value: `${dataRows.length} transaksi` };
+        if (card.label === "Diskon promo") {
+          return { ...card, value: formatRp(Math.abs(sumByHeader("Diskon"))) };
+        }
+        if (card.label === "Total PB1") return { ...card, value: formatRp(sumByHeader("PB1 (Rp)")) };
+        if (card.label === "Total service") {
+          return { ...card, value: formatRp(sumByHeader("Service (Rp)")) };
+        }
+        return card;
+      });
+    }
+    case "SETTLEMENT": {
+      const net = sumByHeader("Bersih (Rp)");
+      const gross = sumByHeader("Kotor (Rp)");
+      return report.summaryCards.map((card) => {
+        if (card.label === "Settlement bersih") return { ...card, value: formatRp(net) };
+        if (card.label === "Bagian mitra") {
+          return { ...card, value: formatRp(sumByHeader("Bagian mitra (Rp)")) };
+        }
+        if (card.label === "Bagian DAGO") {
+          return { ...card, value: formatRp(sumByHeader("Bagian DAGO (Rp)")) };
+        }
+        if (card.label === "Diskon (prorata)") {
+          return { ...card, value: formatRp(Math.max(0, gross - net)) };
+        }
+        return card;
+      });
+    }
+    case "SETTLEMENT_CONSOLIDATED": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Omzet bersih konsolidasi") {
+          return { ...card, value: formatRp(sumByHeader("Omzet bersih (Rp)")), sub: undefined };
+        }
+        if (card.label === "Transfer QRIS ke mitra") {
+          return { ...card, value: formatRp(sumByHeader("Transfer QRIS ke mitra (Rp)")) };
+        }
+        if (card.label === "Setoran tunai mitra") {
+          return { ...card, value: formatRp(sumByHeader("Setor tunai ke DAGO (Rp)")) };
+        }
+        if (card.label === "Total pendapatan DAGO") {
+          return { ...card, value: formatRp(sumByHeader("Pendapatan DAGO (Rp)")) };
+        }
+        return card;
+      });
+    }
+    case "CLOSING": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Shift ditutup") return { ...card, value: `${dataRows.length} shift` };
+        if (card.label === "Kas fisik") return { ...card, value: formatRp(sumByHeader("Kas fisik")) };
+        if (card.label === "Selisih kas") return { ...card, value: formatRp(sumByHeader("Selisih")) };
+        return card;
+      });
+    }
+    case "PRODUCTS": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Menu terdaftar") return { ...card, value: `${dataRows.length} menu` };
+        if (card.label === "Total terjual") return { ...card, value: `${sumByHeader("Terjual")} pcs` };
+        return card;
+      });
+    }
+    case "INVENTORY": {
+      const critical = dataRows.filter((row) => Number(row[2]) <= Number(row[3])).length;
+      return report.summaryCards.map((card) => {
+        if (card.label === "Bahan terdaftar") return { ...card, value: `${dataRows.length} bahan` };
+        if (card.label === "Kritis atau habis") return { ...card, value: `${critical} bahan` };
+        if (card.label === "Nilai stok") return { ...card, value: formatRp(sumByHeader("Nilai stok")) };
+        return card;
+      });
+    }
+    case "EVENTS": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Omzet tiket") return { ...card, value: formatRp(sumByHeader("Omzet (Rp)")) };
+        if (card.label === "Tiket terjual") return { ...card, value: `${sumByHeader("Jumlah tiket")} tiket` };
+        if (card.label === "Fee DAGO (20%)") {
+          return { ...card, value: formatRp(sumByHeader("Fee DAGO 20% (Rp)")) };
+        }
+        if (card.label === "Bagian komunitas (80%)") {
+          return { ...card, value: formatRp(sumByHeader("Bagian komunitas 80% (Rp)")) };
+        }
+        return card;
+      });
+    }
+    case "FINANCE_AUDIT": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Aktivitas tercatat") {
+          return { ...card, value: `${dataRows.length} entri` };
+        }
+        return card;
+      });
+    }
+    case "RECONCILIATION": {
+      return report.summaryCards.map((card) => {
+        if (card.label === "Transaksi bermasalah") {
+          return { ...card, value: `${dataRows.length} transaksi` };
+        }
+        return card;
+      });
+    }
+    default:
+      return report.summaryCards;
+  }
 }
 

@@ -10,6 +10,7 @@ import {
   History,
   Key,
   MoreHorizontal,
+  Pencil,
   Plus,
   Power,
   Save,
@@ -74,6 +75,7 @@ export interface PartnersAdminTabProps {
   organizers: CommunityOrganizerProfile[];
   onOpenAddOrganizer: () => void;
   onOpenAddTenant: () => void;
+  onEditTenant?: (tenantId: string) => void;
   onSelectPartnerDetail: (partner: UnifiedPartnerRow) => void;
   onToggleOrganizerStatus: (orgId: string, status: "ACTIVE" | "INACTIVE") => void;
   onGenerateActivationLink: (orgId: string) => void;
@@ -132,6 +134,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
     organizers,
     onOpenAddOrganizer,
     onOpenAddTenant,
+    onEditTenant,
     onSelectPartnerDetail,
     onToggleOrganizerStatus,
     onGenerateActivationLink,
@@ -186,7 +189,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
       status: prof.status || status,
       serviceModule: "FNB",
       scopeLevel: "TENANT",
-      roleName: prof.partnerType === "INTERNAL" ? "Unit Internal F&B" : "Pemilik mitra F&B",
+      roleName: prof.partnerType === "INTERNAL" ? "Unit internal F&B" : "Pemilik mitra F&B",
       permissions: [
         "dashboard:view",
         "orders:view",
@@ -442,6 +445,19 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                               <span className="hidden sm:inline">Detail</span>
                             </Button>
 
+                            {p.type === "FNB" && onEditTenant ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onEditTenant(p.id)}
+                                aria-label={`Edit ${p.name}`}
+                              >
+                                <Pencil />
+                                <span className="hidden sm:inline">Edit</span>
+                              </Button>
+                            ) : null}
+
                             {p.type === "EVENT" ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger
@@ -509,7 +525,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
               <div>
                 <h3 className="text-sm font-medium text-foreground">Jam operasional & status mitra</h3>
                 <p className="text-xs text-muted-foreground">
-                  Atur jam operasional rutin. Tombol Buka/Tutup manual mengalahkan jadwal operasional.
+                  Atur jam operasional rutin. Tombol buka/tutup manual mengalahkan jadwal operasional.
                 </p>
               </div>
               {onSaveTenantOperations && (
@@ -579,9 +595,9 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                         <TableCell>
                           <StatusBadge status={isAccepting ? "success" : "destructive"}>
                             {op.manualOverride === "OPEN"
-                              ? "Buka (Manual)"
+                              ? "Buka (manual)"
                               : op.manualOverride === "CLOSED"
-                                ? "Tutup (Manual)"
+                                ? "Tutup (manual)"
                                 : isAccepting
                                   ? "Buka"
                                   : "Tutup sementara"}
@@ -662,7 +678,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                 </div>
                 {!canEditSettlementPolicy ? (
                   <p className="text-xs text-muted-foreground">
-                    Hanya Owner organisasi atau Super Admin yang dapat mengubah kebijakan bagi hasil.
+                    Hanya pemilik organisasi atau super admin yang dapat mengubah kebijakan bagi hasil.
                   </p>
                 ) : null}
               </div>
@@ -741,18 +757,20 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle>Kebijakan komisi event (Template)</CardTitle>
+                <CardTitle>Kebijakan komisi event (bawaan)</CardTitle>
                 <CardDescription>
                   Komisi standar platform dikelola secara terpusat di Events Admin.
                 </CardDescription>
               </div>
-              <Link
-                href="/events-admin?tab=SETTINGS"
-                className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link href="/events-admin?tab=SETTINGS" />}
+                nativeButton={false}
               >
-                <ExternalLink className="size-3.5" />
+                <ExternalLink />
                 <span>Kelola kebijakan di Events Admin</span>
-              </Link>
+              </Button>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -766,7 +784,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                     className="font-mono tabular-nums bg-muted"
                   />
                   <span className="text-xs text-muted-foreground">
-                    Diatur di halaman Events Admin &bull; Settings.
+                    Diatur di halaman Events Admin pada tab pengaturan.
                   </span>
                 </div>
                 <div className="flex flex-col gap-1.5">
