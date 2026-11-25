@@ -283,6 +283,29 @@ export function setTenantStatus(tenantId: string, status: TenantStatus, reason?:
   );
 }
 
+export function getWitaDateKey(referenceDate: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(referenceDate);
+}
+
+export function recordTenantSettlementDeposit(
+  tenantId: string,
+  depositDate: string = getWitaDateKey()
+): void {
+  const existing = getTenantProfile(tenantId);
+  saveTenantProfile({
+    ...existing,
+    tenantId,
+    status: "ACTIVE",
+    suspendedReason: undefined,
+    lastSettlementDepositDate: depositDate,
+  });
+}
+
 /**
  * Checks whether a tenant must be automatically suspended due to overdue settlement deposit (> 14 days / 2 weeks).
  */
@@ -290,18 +313,35 @@ export function checkTenantAutoSuspension(
   profile: TenantProfileData,
   referenceDate: Date = new Date()
 ): { shouldSuspend: boolean; reason?: string } {
-  if (profile.status === "INACTIVE" || profile.status === "SUSPENDED") {
+  if (
+    profile.status === "INACTIVE" ||
+    profile.status === "SUSPENDED" ||
+    profile.partnerType === "INTERNAL"
+  ) {
     return { shouldSuspend: false };
   }
 
   if (profile.lastSettlementDepositDate) {
-    const lastDate = new Date(profile.lastSettlementDepositDate);
-    if (!isNaN(lastDate.getTime())) {
-      const diffDays = (referenceDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+    const rawDate = profile.lastSettlementDepositDate.trim();
+    let depositKey: string | null = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      depositKey = rawDate;
+    } else {
+      const parsed = new Date(rawDate);
+      if (!isNaN(parsed.getTime())) {
+        depositKey = getWitaDateKey(parsed);
+      }
+    }
+    if (depositKey) {
+      const todayKey = getWitaDateKey(referenceDate);
+      const diffDays = Math.floor(
+        (Date.parse(`${todayKey}T00:00:00Z`) - Date.parse(`${depositKey}T00:00:00Z`)) /
+          (1000 * 60 * 60 * 24)
+      );
       if (diffDays > 14) {
         return {
           shouldSuspend: true,
-          reason: `Otomatis ditangguhkan: Setoran telat lebih dari 2 minggu (${Math.floor(diffDays)} hari).`,
+          reason: `Otomatis ditangguhkan: Setoran telat lebih dari 2 minggu (${diffDays} hari).`,
         };
       }
     }

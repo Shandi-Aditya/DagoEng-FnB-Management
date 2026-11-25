@@ -26,7 +26,8 @@ import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import type { POSCartItem, POSPaymentMethod, POSReceiptData, SplitGuestBill } from "@/features/pos/types";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
-import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import { getOrderTaxBreakdown, normalizeTenantId } from "@/lib/tax-breakdown";
+import { getTenantName, getTenantStatus } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { OrderRecord } from "@/types/order";
 import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
@@ -151,9 +152,30 @@ export default function OrdersPage() {
     downloadExcel(`Daftar_Pesanan_Transaksi_${Date.now()}`, "Riwayat Pesanan", headers, rows);
   };
 
+  const findSuspendedOrInactiveTenantForOrder = (order: OrderRecord): string | null => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    for (const item of items) {
+      if (item.itemType === "COWORKING") continue;
+      const tid = normalizeTenantId(item.tenantId || order.tenantId || "tenant-ks") || "tenant-ks";
+      const status = getTenantStatus(tid);
+      if (status === "SUSPENDED" || status === "INACTIVE") {
+        return getTenantName(tid) || tid;
+      }
+    }
+    return null;
+  };
+
   const handleOpenPayment = (order: OrderRecord) => {
     if (order.paymentStatus === "PAID") {
       notify.warning("Pesanan sudah lunas");
+      return;
+    }
+    const blockedTenantName = findSuspendedOrInactiveTenantForOrder(order);
+    if (blockedTenantName) {
+      notify.error(
+        "Mitra ditangguhkan",
+        `Pembayaran untuk gerai ${blockedTenantName} ditolak karena status mitra sedang ditangguhkan atau nonaktif.`
+      );
       return;
     }
     if (!canProcessPayment) {
@@ -205,6 +227,15 @@ export default function OrdersPage() {
     qrisVerification?: QRISVerificationDetail;
   }) => {
     if (!paymentOrder || paymentSubmittingRef.current) return;
+    const blockedTenantName = findSuspendedOrInactiveTenantForOrder(paymentOrder);
+    if (blockedTenantName) {
+      setIsPaymentModalOpen(false);
+      notify.error(
+        "Mitra ditangguhkan",
+        `Pembayaran untuk gerai ${blockedTenantName} ditolak karena status mitra sedang ditangguhkan atau nonaktif.`
+      );
+      return;
+    }
     if (!activeShift) {
       setIsPaymentModalOpen(false);
       notify.warning(

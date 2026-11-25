@@ -622,6 +622,18 @@ export interface OrganizerAuthResult {
  *    Any mismatch between request target email and server session email is REJECTED (HTTP 403).
  * 4. NEVER trusts raw client headers (x-user-role, x-user-id, etc.).
  */
+export function isHubAdminOrManager(
+  auth: Pick<ServerAuthResult, "isAuthenticated" | "role" | "scopeLevel" | "tenantId">
+): boolean {
+  if (!auth.isAuthenticated || !auth.role) return false;
+  return (
+    (auth.role === "SUPER_ADMIN" && auth.scopeLevel === "PLATFORM") ||
+    ((auth.role === "OWNER" || auth.role === "MANAGER") &&
+      auth.scopeLevel === "ORGANIZATION" &&
+      !auth.tenantId)
+  );
+}
+
 export async function assertOrganizerAuth(
   req: NextRequest,
   targetEmailOrId?: string | null

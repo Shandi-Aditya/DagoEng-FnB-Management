@@ -16,6 +16,7 @@ import {
   verifyUnifiedUserPassword,
   syncOrganizerCredentials,
 } from "@/lib/unified-account";
+import { verifyTenantOwnerCredentials } from "@/lib/tenant-activation";
 import { syncStorageFromDb } from "@/lib/data-storage";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
         syncStorageFromDb("organizers.json"),
         syncStorageFromDb("unified_users.json"),
         syncStorageFromDb("organizer_credentials.json"),
+        syncStorageFromDb("tenant_owner_accounts.json"),
       ]);
     }
 
@@ -412,6 +414,74 @@ export async function POST(req: NextRequest) {
         },
         { status: 403 }
       );
+    }
+
+    // 2b. Check Activated Tenant Owner Account
+    const tenantOwnerAuth = await verifyTenantOwnerCredentials(normalizedEmail, password);
+    if (tenantOwnerAuth.found) {
+      if (!tenantOwnerAuth.authenticated || !tenantOwnerAuth.account) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: tenantOwnerAuth.error || "Kredensial pemilik mitra tidak valid.",
+          },
+          { status: 401 }
+        );
+      }
+
+      const acc = tenantOwnerAuth.account;
+      const edgeToken = signEdgeSessionToken({
+        userId: acc.id,
+        role: "OWNER",
+        scopeLevel: "TENANT",
+        tenantId: acc.tenantId,
+        email: acc.email,
+        maxAgeSeconds: OPERATIONAL_MAX_AGE_SECONDS,
+      });
+
+      const res = NextResponse.json({
+        success: true,
+        redirectUrl: "/dashboard",
+        user: {
+          id: acc.id,
+          name: acc.name,
+          email: acc.email,
+          role: "OWNER",
+          scopeLevel: "TENANT",
+          tenantId: acc.tenantId,
+          tenant: {
+            id: acc.tenantId,
+            name: acc.tenantName,
+            code: acc.tenantId.toUpperCase(),
+            businessModule: "FNB",
+          },
+          allowedModules: ["FNB"],
+          permissions: TRUSTED_PERSONAS.TENANT_OWNER_KS.permissions,
+          redirectTo: "/dashboard",
+        },
+      });
+
+      res.cookies.set({
+        name: SESSION_COOKIE_NAME,
+        value: "",
+        path: "/",
+        httpOnly: true,
+        maxAge: 0,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      res.cookies.set({
+        name: EDGE_SESSION_COOKIE_NAME,
+        value: edgeToken,
+        path: "/",
+        httpOnly: true,
+        maxAge: OPERATIONAL_MAX_AGE_SECONDS,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      res.cookies.delete("dagoeng_active_persona");
+      res.cookies.delete("dagoeng_session_role");
+      return res;
     }
 
     // 3. Check Unified Customer / User Account

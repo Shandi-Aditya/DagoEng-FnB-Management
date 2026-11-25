@@ -63,8 +63,15 @@ export interface PartnerModalsProps {
   onFormTenantBankAccountNumberChange?: (val: string) => void;
   formTenantBankAccountHolder?: string;
   onFormTenantBankAccountHolderChange?: (val: string) => void;
+  isEditingTenant?: boolean;
   formTenantPksNumber?: string;
   onFormTenantPksNumberChange?: (val: string) => void;
+  formTenantContractStart?: string;
+  onFormTenantContractStartChange?: (val: string) => void;
+  formTenantContractEnd?: string;
+  onFormTenantContractEndChange?: (val: string) => void;
+  formTenantPksFile?: string;
+  onFormTenantPksFileChange?: (val: string) => void;
   onSaveNewTenant: (e: React.FormEvent) => void;
   // Add Organizer
   isAddOrgOpen: boolean;
@@ -104,6 +111,8 @@ export interface PartnerModalsProps {
   isGeneratingInvite: boolean;
   onToggleTenantStatus?: (tenantId: string, status: TenantStatus, reason?: string) => void;
   onGenerateTenantActivationLink?: (tenantId: string) => void;
+  onEditTenant?: (tenantId: string) => void;
+  onRecordTenantDeposit?: (tenantId: string) => void;
 }
 
 export function PartnerModals(props: PartnerModalsProps) {
@@ -132,8 +141,15 @@ export function PartnerModals(props: PartnerModalsProps) {
     onFormTenantBankAccountNumberChange,
     formTenantBankAccountHolder = "",
     onFormTenantBankAccountHolderChange,
+    isEditingTenant = false,
     formTenantPksNumber = "",
     onFormTenantPksNumberChange,
+    formTenantContractStart = "",
+    onFormTenantContractStartChange,
+    formTenantContractEnd = "",
+    onFormTenantContractEndChange,
+    formTenantPksFile = "",
+    onFormTenantPksFileChange,
     onSaveNewTenant,
     isAddOrgOpen,
     onAddOrgOpenChange,
@@ -165,6 +181,8 @@ export function PartnerModals(props: PartnerModalsProps) {
     isGeneratingInvite,
     onToggleTenantStatus,
     onGenerateTenantActivationLink,
+    onEditTenant,
+    onRecordTenantDeposit,
   } = props;
 
   return (
@@ -173,9 +191,11 @@ export function PartnerModals(props: PartnerModalsProps) {
       <Dialog open={isAddTenantOpen} onOpenChange={onAddTenantOpenChange}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Tambah mitra F&B</DialogTitle>
+            <DialogTitle>{isEditingTenant ? "Edit mitra F&B" : "Tambah mitra F&B"}</DialogTitle>
             <DialogDescription>
-              Mitra baru tersedia untuk pengelompokan menu, transaksi POS, dan skema bagi hasil.
+              {isEditingTenant
+                ? "Perbarui profil kemitraan, rekening settlement, dan detail kontrak PKS."
+                : "Mitra baru tersedia untuk pengelompokan menu, transaksi POS, dan skema bagi hasil."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSaveNewTenant} className="flex flex-col gap-3">
@@ -317,6 +337,56 @@ export function PartnerModals(props: PartnerModalsProps) {
                 onChange={(e) => onFormTenantBankAccountHolderChange?.(e.target.value)}
                 placeholder="Atas nama di buku tabungan"
               />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantContractStart">Mulai kontrak PKS</Label>
+                <Input
+                  id="tenantContractStart"
+                  type="date"
+                  value={formTenantContractStart}
+                  onChange={(e) => onFormTenantContractStartChange?.(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantContractEnd">Akhir kontrak PKS</Label>
+                <Input
+                  id="tenantContractEnd"
+                  type="date"
+                  value={formTenantContractEnd}
+                  onChange={(e) => onFormTenantContractEndChange?.(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tenantPksFileUpload">Dokumen PKS (PDF/gambar)</Label>
+              <Input
+                id="tenantPksFileUpload"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size <= 512 * 1024) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      if (typeof reader.result === "string") {
+                        onFormTenantPksFileChange?.(`${file.name}|${reader.result}`);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  } else {
+                    onFormTenantPksFileChange?.(file.name);
+                  }
+                }}
+              />
+              {formTenantPksFile ? (
+                <p className="text-xs text-muted-foreground font-mono truncate">
+                  Berkas terpilih: {formTenantPksFile.split("|")[0]}
+                </p>
+              ) : null}
             </div>
 
             <DialogFooter className="gap-2 pt-2">
@@ -571,7 +641,28 @@ export function PartnerModals(props: PartnerModalsProps) {
                   {selectedPartner.contractPksFile ? (
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Berkas dokumen</span>
-                      <span className="font-mono text-primary">{selectedPartner.contractPksFile}</span>
+                      {(() => {
+                        const pipeIdx = selectedPartner.contractPksFile.indexOf("|data:");
+                        const fileName =
+                          pipeIdx >= 0
+                            ? selectedPartner.contractPksFile.slice(0, pipeIdx)
+                            : selectedPartner.contractPksFile;
+                        const dataUrl =
+                          pipeIdx >= 0 ? selectedPartner.contractPksFile.slice(pipeIdx + 1) : "";
+                        const isSafeMime =
+                          /^data:(application\/pdf|image\/(png|jpeg|jpg));base64,/i.test(dataUrl);
+                        return isSafeMime ? (
+                          <a
+                            href={dataUrl}
+                            download={fileName || "dokumen-pks"}
+                            className="font-mono text-primary underline underline-offset-2"
+                          >
+                            {fileName}
+                          </a>
+                        ) : (
+                          <span className="font-mono text-primary">{fileName}</span>
+                        );
+                      })()}
                     </div>
                   ) : null}
                 </div>
@@ -634,15 +725,39 @@ export function PartnerModals(props: PartnerModalsProps) {
                   </Button>
                 </SheetFooter>
               ) : (
-                <SheetFooter className="mt-auto border-t pt-4 gap-2 flex-wrap sm:flex-nowrap">
+                <SheetFooter className="mt-auto border-t pt-4 gap-2 flex-wrap">
+                  {onEditTenant ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEditTenant(selectedPartner.id)}
+                    >
+                      <span>Edit mitra</span>
+                    </Button>
+                  ) : null}
+                  {onRecordTenantDeposit && selectedPartner.partnerType !== "INTERNAL" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onRecordTenantDeposit(selectedPartner.id);
+                        onClosePartnerDetail();
+                      }}
+                    >
+                      <span>Catat setoran kas</span>
+                    </Button>
+                  ) : null}
                   {onGenerateTenantActivationLink ? (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => onGenerateTenantActivationLink(selectedPartner.id)}
+                      disabled={isGeneratingInvite}
                     >
-                      <Key className="size-3.5" />
+                      <Key />
                       <span>Undang Owner</span>
                     </Button>
                   ) : null}
@@ -654,13 +769,12 @@ export function PartnerModals(props: PartnerModalsProps) {
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="border-warning text-warning hover:bg-warning/10"
                             onClick={() => {
                               onToggleTenantStatus(selectedPartner.id, "SUSPENDED", "Ditangguhkan administratif oleh admin.");
                               onClosePartnerDetail();
                             }}
                           >
-                            <Power className="size-3.5" />
+                            <Power />
                             <span>Tangguhkan</span>
                           </Button>
                           <Button
@@ -672,7 +786,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                               onClosePartnerDetail();
                             }}
                           >
-                            <Power className="size-3.5" />
+                            <Power />
                             <span>Nonaktifkan</span>
                           </Button>
                         </>
@@ -686,8 +800,8 @@ export function PartnerModals(props: PartnerModalsProps) {
                             onClosePartnerDetail();
                           }}
                         >
-                          <Power className="size-3.5" />
-                          <span>Buka Kunci (Aktifkan)</span>
+                          <Power />
+                          <span>Buka kunci (Aktifkan)</span>
                         </Button>
                       ) : (
                         <Button
@@ -699,7 +813,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                             onClosePartnerDetail();
                           }}
                         >
-                          <Power className="size-3.5" />
+                          <Power />
                           <span>Aktifkan</span>
                         </Button>
                       )}

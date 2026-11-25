@@ -116,6 +116,15 @@ export const SEED_FNB_TENANTS: FnbPartnerInfo[] = [
   },
 ];
 
+function getTodayWitaDateKey(referenceDate: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(referenceDate);
+}
+
 export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = {
   "tenant-ks": {
     brandName: "Kopi Senja",
@@ -137,7 +146,7 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/2024/001",
     contractPksFile: "pks-kopi-senja-2024.pdf",
-    lastSettlementDepositDate: "2024-11-20",
+    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
   "tenant-kitchen": {
     brandName: "Dapur Mama",
@@ -159,7 +168,7 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/2024/002",
     contractPksFile: "pks-dapur-mama-2024.pdf",
-    lastSettlementDepositDate: "2024-11-20",
+    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
   "tenant-bakery": {
     brandName: "Manis Bakery",
@@ -181,7 +190,7 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/INT/2024/001",
     contractPksFile: "pks-manis-bakery-internal.pdf",
-    lastSettlementDepositDate: "2024-11-20",
+    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
   "tenant-tea": {
     brandName: "Warung Bu Narti",
@@ -203,7 +212,7 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     contractEndDate: "2025-12-31",
     contractPksNumber: "PKS/DCH/2024/004",
     contractPksFile: "pks-warung-bu-narti-2024.pdf",
-    lastSettlementDepositDate: "2024-11-20",
+    lastSettlementDepositDate: getTodayWitaDateKey(),
   },
 };
 
@@ -1132,7 +1141,7 @@ export function buildTenantProfileWithDefaults(
     contractEndDate: "2025-12-31",
     contractPksNumber: `PKS/DCH/${new Date().getFullYear()}/${tenantId.replace(/\D+/g, "") || "001"}`,
     contractPksFile: `pks-${tenantId}.pdf`,
-    lastSettlementDepositDate: new Date().toISOString().slice(0, 10),
+    lastSettlementDepositDate: getTodayWitaDateKey(),
   };
 
   const status: TenantStatus =
@@ -1255,14 +1264,14 @@ export function applyTenantsCommand(
     case "UPSERT_PROFILE": {
       const tid = command.profile.tenantId;
       const existing = current.profiles[tid];
-      const preservedBankNumber =
-        command.profile.bankAccountNumber?.includes("•") &&
-        existing?.bankAccountNumber &&
-        !existing.bankAccountNumber.includes("•")
+      const isAdmin = auth ? isSuperAdminOrOrgOwner(auth) : true;
+      const preservedBankNumber = !isAdmin && existing
+        ? existing.bankAccountNumber
+        : command.profile.bankAccountNumber?.includes("•") &&
+            existing?.bankAccountNumber &&
+            !existing.bankAccountNumber.includes("•")
           ? existing.bankAccountNumber
           : command.profile.bankAccountNumber;
-
-      const isAdmin = auth ? isSuperAdminOrOrgOwner(auth) : true;
       const safeProfile = isAdmin
         ? command.profile
         : {
@@ -1275,6 +1284,10 @@ export function applyTenantsCommand(
             contractEndDate: existing?.contractEndDate,
             contractPksNumber: existing?.contractPksNumber,
             contractPksFile: existing?.contractPksFile,
+            bankName: existing?.bankName ?? command.profile.bankName,
+            bankAccountNumber: existing?.bankAccountNumber ?? command.profile.bankAccountNumber,
+            bankAccountHolder: existing?.bankAccountHolder ?? command.profile.bankAccountHolder,
+            npwp: existing?.npwp ?? command.profile.npwp,
           };
 
       const merged = buildTenantProfileWithDefaults(
@@ -1311,6 +1324,10 @@ export function applyTenantsCommand(
               command.status === "SUSPENDED"
                 ? command.reason || existing.suspendedReason || "Mitra ditangguhkan oleh sistem."
                 : undefined,
+            lastSettlementDepositDate:
+              command.status === "ACTIVE"
+                ? getTodayWitaDateKey()
+                : existing.lastSettlementDepositDate,
           },
         },
       };
@@ -1347,6 +1364,10 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
         if (isSuperAdminOrOrgOwner(auth)) {
           return state;
         }
+        const isHubManager =
+          auth.isAuthenticated &&
+          auth.role === "MANAGER" &&
+          auth.scopeLevel !== "TENANT";
         const maskedProfiles: Record<string, TenantProfileData> = {};
         for (const [tenantId, profile] of Object.entries(state.profiles || {})) {
           const isOwnTenant =
@@ -1355,21 +1376,27 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
             ? { ...profile }
             : {
                 ...profile,
-                bankAccountNumber: maskTenantBankAccountNumber(
-                  profile.bankAccountNumber
-                ),
+                bankName: "",
+                bankAccountNumber: "",
+                bankAccountHolder: "",
                 npwp: undefined,
                 contactPhone: profile.contactPhone ? "••••••••" : "",
                 contactEmail: undefined,
                 contactPerson: undefined,
+                contractStartDate: undefined,
+                contractEndDate: undefined,
                 contractPksNumber: undefined,
+                contractPksFile: undefined,
+                lastSettlementDepositDate: undefined,
+                suspendedReason: undefined,
               };
         }
         return {
           customTenants: (state.customTenants || []).map((t) => ({ ...t })),
           profiles: maskedProfiles,
-          revenueSplits:
-            isTenantOwner(auth) && auth.tenantId && state.revenueSplits?.[auth.tenantId]
+          revenueSplits: isHubManager
+            ? { ...state.revenueSplits }
+            : isTenantOwner(auth) && auth.tenantId && state.revenueSplits?.[auth.tenantId]
               ? { [auth.tenantId]: state.revenueSplits[auth.tenantId] }
               : {},
         };

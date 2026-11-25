@@ -12,7 +12,13 @@ import {
   isOrderBeforeCooking,
   deductPersistentOrderBOM,
   restorePersistentOrderBOMIfBeforeCooking,
+  readPersistentDomainState,
 } from "@/lib/persistent-storage";
+import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
+import {
+  findBlockedOrderTenant,
+  formatBlockedTenantError,
+} from "@/lib/tenant-order-guard";
 import {
   applyPersistentOrderRefundEffects,
   buildManualDiscountAuditEntry,
@@ -294,6 +300,8 @@ async function executeAuthorizedOrderWrite(params: {
       ? normalizeTenantId(auth.tenantId)
       : undefined;
 
+  const tenantsState = await readPersistentDomainState(tenantsDomainSpec);
+
   const outcome = await mutatePersistentOrders<OrderMutationOutcome>(async (existingOrders) => {
     const targetId =
       action.mode === "UPSERT" ? action.initialOrderData.id : action.targetId;
@@ -305,6 +313,28 @@ async function executeAuthorizedOrderWrite(params: {
     }
 
     let orderData = candidate.orderData;
+    const isCancelOrRefundAttempt =
+      orderData.status === "CANCELLED" || orderData.paymentStatus === "REFUNDED";
+    const isWorkflowProgressionOnPaidOrder = existingOrder?.paymentStatus === "PAID";
+    if (!isCancelOrRefundAttempt && !isWorkflowProgressionOnPaidOrder) {
+      const blockedTenant = findBlockedOrderTenant(
+        orderData.items,
+        tenantsState.profiles,
+        orderData.tenantId
+      );
+      if (blockedTenant.blocked) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              { error: formatBlockedTenantError(blockedTenant) },
+              { status: 403 }
+            ),
+          },
+        };
+      }
+    }
     const validation = validateOrderPayload(orderData);
     if (!validation.ok) {
       return {

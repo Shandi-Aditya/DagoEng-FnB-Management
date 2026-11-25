@@ -291,7 +291,12 @@ export function computeDashboardFnbRevenue(
   options: { isTenantOwner?: boolean; tenantId?: string }
 ): number {
   if (options.isTenantOwner && options.tenantId) {
-    const settlements = calculateSettlement(paidOrders as OrderRecord[]);
+    const settlements = calculateSettlement(
+      paidOrders as OrderRecord[],
+      undefined,
+      undefined,
+      { includeInternal: true }
+    );
     return settlements.find((s) => s.tenantId === options.tenantId)?.tenantShareAmount ?? 0;
   }
   return partitionOrderRevenueByUnit(paidOrders).fnbRevenue;
@@ -302,7 +307,12 @@ export function projectDashboardOrdersForTenant(
   tenantId: string
 ): OrderRecord[] {
   return paidOrders.map((order) => {
-    const tenantSettlement = calculateSettlement([order]).find((s) => s.tenantId === tenantId);
+    const tenantSettlement = calculateSettlement(
+      [order],
+      undefined,
+      undefined,
+      { includeInternal: true }
+    ).find((s) => s.tenantId === tenantId);
     return {
       ...order,
       total: tenantSettlement?.tenantShareAmount ?? 0,

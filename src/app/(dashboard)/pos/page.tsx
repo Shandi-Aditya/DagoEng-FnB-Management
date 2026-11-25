@@ -54,6 +54,7 @@ import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 import {
   isTenantActive,
   isTenantSuspended,
+  getTenantStatus,
   getTenantProfile,
   DEFAULT_FNB_TENANTS,
   getAllFnbTenants,
@@ -187,7 +188,9 @@ export default function POSPage() {
   const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace, cancelBooking: cwCancelBooking } = useCoworking();
   const { shifts, activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
-  const isTenantScoped = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const isTenantScoped =
+    (user?.scopeLevel === "TENANT" || user?.scopeLevel === "OUTLET") &&
+    Boolean(user?.tenant?.id);
   const lockedTenantId = isTenantScoped ? user?.tenant?.id : undefined;
 
   const isSubmittingOrderRef = useRef(false);
@@ -803,10 +806,11 @@ export default function POSPage() {
   const handleAddToCart = (item: POSCartItem) => {
     const meta = resolveCartItemMetadata(item, posProducts);
     if (!meta.isCw) {
-      if (isTenantSuspended(meta.resolvedTenantId)) {
+      const tenantStatus = getTenantStatus(meta.resolvedTenantId);
+      if (tenantStatus === "SUSPENDED" || tenantStatus === "INACTIVE") {
         notify.error(
-          "Mitra ditangguhkan",
-          `Menu dari gerai ${getTenantName(meta.resolvedTenantId) || "Mitra F&B"} tidak dapat dipesan karena status mitra sedang ditangguhkan.`
+          tenantStatus === "SUSPENDED" ? "Mitra ditangguhkan" : "Mitra nonaktif",
+          `Menu dari gerai ${getTenantName(meta.resolvedTenantId) || "Mitra F&B"} tidak dapat dipesan karena status mitra sedang ${tenantStatus === "SUSPENDED" ? "ditangguhkan" : "nonaktif"}.`
         );
         return;
       }
@@ -1868,8 +1872,25 @@ export default function POSPage() {
       ? `Belum mencapai minimum belanja Rp ${activePromo.minimumAmount.toLocaleString("id-ID")}.`
       : null;
   const cartCount = cartItemCount(cartItems);
+  const blockedCartTenant = useMemo(() => {
+    for (const item of cartItems) {
+      if (item.itemType === "COWORKING") continue;
+      const tid = item.tenantId || lockedTenantId || "tenant-ks";
+      const status = getTenantStatus(tid);
+      if (status === "SUSPENDED" || status === "INACTIVE") {
+        return {
+          tenantId: tid,
+          status,
+          brandName: getTenantName(tid) || item.tenantName || tid,
+        };
+      }
+    }
+    return null;
+  }, [cartItems, lockedTenantId, tenantSettingsVersion]);
+
   const canPay =
     !isLockedTenantSuspended &&
+    !blockedCartTenant &&
     cartItems.length > 0 &&
     !(orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0));
 
@@ -1891,6 +1912,13 @@ export default function POSPage() {
       notify.error(
         "Kasir outlet terkunci",
         `Mitra gerai sedang ditangguhkan: ${lockedTenantSuspendedReason}. Transaksi tidak dapat diproses.`
+      );
+      return;
+    }
+    if (blockedCartTenant) {
+      notify.error(
+        blockedCartTenant.status === "SUSPENDED" ? "Mitra ditangguhkan" : "Mitra nonaktif",
+        `Keranjang berisi item dari gerai ${blockedCartTenant.brandName} yang sedang ${blockedCartTenant.status === "SUSPENDED" ? "ditangguhkan" : "nonaktif"}.`
       );
       return;
     }

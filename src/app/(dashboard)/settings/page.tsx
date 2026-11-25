@@ -68,6 +68,8 @@ import {
   getTenantName,
   getTenantProfile,
   getTenantStatus,
+  getWitaDateKey,
+  recordTenantSettlementDeposit,
   saveCustomTenant,
   saveTenantProfile,
   setTenantStatus,
@@ -259,7 +261,11 @@ export default function SettingsPage() {
   const [formTenantBankName, setFormTenantBankName] = useState("BCA");
   const [formTenantBankAccountNumber, setFormTenantBankAccountNumber] = useState("");
   const [formTenantBankAccountHolder, setFormTenantBankAccountHolder] = useState("");
+  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [formTenantPksNumber, setFormTenantPksNumber] = useState("");
+  const [formTenantContractStart, setFormTenantContractStart] = useState("");
+  const [formTenantContractEnd, setFormTenantContractEnd] = useState("");
+  const [formTenantPksFile, setFormTenantPksFile] = useState("");
   const [isAddOrganizerModalOpen, setIsAddOrganizerModalOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgCategory, setNewOrgCategory] = useState("Komunitas Kreatif");
@@ -375,13 +381,15 @@ export default function SettingsPage() {
     const statuses: Record<string, TenantStatus> = {};
     tenants.forEach((t) => {
       const prof = getTenantProfile(t.id);
-      const autoCheck = checkTenantAutoSuspension(prof);
-      if (autoCheck.shouldSuspend) {
-        setTenantStatus(t.id, "SUSPENDED", autoCheck.reason);
-        statuses[t.id] = "SUSPENDED";
-      } else {
-        statuses[t.id] = getTenantStatus(t.id);
+      if (!isTenantOwner) {
+        const autoCheck = checkTenantAutoSuspension(prof);
+        if (autoCheck.shouldSuspend) {
+          setTenantStatus(t.id, "SUSPENDED", autoCheck.reason);
+          statuses[t.id] = "SUSPENDED";
+          return;
+        }
       }
+      statuses[t.id] = getTenantStatus(t.id);
     });
     setAllTenantStatuses(statuses);
   };
@@ -814,9 +822,78 @@ export default function SettingsPage() {
     notify.success("Meja dihapus", `Meja ${deletingTable.number} dihapus.`);
   };
 
+  const resetTenantModalForm = () => {
+    setEditingTenantId(null);
+    setFormTenantName("");
+    setFormTenantCode("");
+    setFormTenantBadge("");
+    setFormTenantPIC("");
+    setFormTenantPhone("");
+    setFormTenantEmail("");
+    setFormTenantNPWP("");
+    setFormTenantBankName("BCA");
+    setFormTenantBankAccountNumber("");
+    setFormTenantBankAccountHolder("");
+    setFormTenantPksNumber("");
+    setFormTenantContractStart("");
+    setFormTenantContractEnd("");
+    setFormTenantPksFile("");
+    setFormTenantPartnerType("EXTERNAL");
+  };
+
+  const handleOpenEditTenant = (tenantId: string) => {
+    const prof = getTenantProfile(tenantId);
+    const meta = localTenants.find((t) => t.id === tenantId);
+    setEditingTenantId(tenantId);
+    setFormTenantName(prof.brandName || meta?.name || "");
+    setFormTenantCode(meta?.code || "");
+    setFormTenantBadge(meta?.badge || "");
+    setFormTenantPartnerType(prof.partnerType || "EXTERNAL");
+    setFormTenantPIC(prof.contactPerson || "");
+    setFormTenantPhone(prof.contactPhone || "");
+    setFormTenantEmail(prof.contactEmail || "");
+    setFormTenantNPWP(prof.npwp || "");
+    setFormTenantBankName(prof.bankName || "BCA");
+    setFormTenantBankAccountNumber(prof.bankAccountNumber || "");
+    setFormTenantBankAccountHolder(prof.bankAccountHolder || "");
+    setFormTenantPksNumber(prof.contractPksNumber || "");
+    setFormTenantContractStart(prof.contractStartDate || "");
+    setFormTenantContractEnd(prof.contractEndDate || "");
+    setFormTenantPksFile(prof.contractPksFile || "");
+    setSelectedPartnerDetail(null);
+    setIsAddTenantModalOpen(true);
+  };
+
   const handleSaveNewTenant = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTenantName.trim()) return;
+
+    if (editingTenantId) {
+      const existingProf = getTenantProfile(editingTenantId);
+      saveTenantProfile({
+        ...existingProf,
+        tenantId: editingTenantId,
+        brandName: formTenantName.trim(),
+        contactPerson: formTenantPIC.trim(),
+        contactPhone: formTenantPhone.trim() || existingProf.contactPhone || OFFICIAL_CS_DISPLAY_PHONE,
+        contactEmail: formTenantEmail.trim(),
+        npwp: formTenantNPWP.trim(),
+        bankName: formTenantBankName.trim() || "BCA",
+        bankAccountNumber: formTenantBankAccountNumber.trim(),
+        bankAccountHolder: formTenantBankAccountHolder.trim() || formTenantName.trim(),
+        partnerType: formTenantPartnerType || "EXTERNAL",
+        contractStartDate: formTenantContractStart.trim() || undefined,
+        contractEndDate: formTenantContractEnd.trim() || undefined,
+        contractPksNumber: formTenantPksNumber.trim() || undefined,
+        contractPksFile: formTenantPksFile.trim() || undefined,
+      });
+      refreshAllTenantStatuses();
+      setIsAddTenantModalOpen(false);
+      resetTenantModalForm();
+      notify.success("Mitra diperbarui", `Profil ${formTenantName.trim()} berhasil diperbarui.`);
+      return;
+    }
+
     const newId = `tenant-${Date.now()}`;
     const newCode = formTenantCode.trim().toUpperCase() || `TENANT-${Math.floor(100 + Math.random() * 900)}`;
     const newTenant = {
@@ -846,29 +923,28 @@ export default function SettingsPage() {
       bankAccountHolder: formTenantBankAccountHolder.trim() || formTenantName.trim(),
       status: "ACTIVE",
       partnerType: formTenantPartnerType || "EXTERNAL",
-      contractStartDate: new Date().toISOString().slice(0, 10),
-      contractEndDate: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString().slice(0, 10),
-      contractPksNumber: formTenantPksNumber.trim() || `PKS/DCH/${new Date().getFullYear()}/${newId.replace(/\D+/g, "").slice(-3)}`,
-      contractPksFile: formTenantPksNumber.trim() ? `pks-${newCode.toLowerCase()}.pdf` : "",
-      lastSettlementDepositDate: new Date().toISOString().slice(0, 10),
+      contractStartDate: formTenantContractStart.trim() || undefined,
+      contractEndDate: formTenantContractEnd.trim() || undefined,
+      contractPksNumber: formTenantPksNumber.trim() || undefined,
+      contractPksFile: formTenantPksFile.trim() || undefined,
+      lastSettlementDepositDate: getWitaDateKey(),
     });
     setTenantRevenueSplit(newId, 85);
     refreshAllTenantStatuses();
     refreshRevenueSplits();
     setIsAddTenantModalOpen(false);
-    setFormTenantName("");
-    setFormTenantCode("");
-    setFormTenantBadge("");
-    setFormTenantPIC("");
-    setFormTenantPhone("");
-    setFormTenantEmail("");
-    setFormTenantNPWP("");
-    setFormTenantBankName("BCA");
-    setFormTenantBankAccountNumber("");
-    setFormTenantBankAccountHolder("");
-    setFormTenantPksNumber("");
-    setFormTenantPartnerType("EXTERNAL");
+    resetTenantModalForm();
     notify.success("Mitra ditambahkan", `${newTenant.name} berhasil disimpan ke server.`);
+  };
+
+  const handleRecordTenantDeposit = (tenantId: string) => {
+    const todayWita = getWitaDateKey();
+    recordTenantSettlementDeposit(tenantId, todayWita);
+    refreshAllTenantStatuses();
+    notify.success(
+      "Setoran kas dicatat",
+      `Tanggal setoran ${getTenantName(tenantId)} diperbarui ke ${todayWita} dan status mitra aktif.`
+    );
   };
 
   const handleToggleTenantStatusFromModal = (
@@ -890,20 +966,31 @@ export default function SettingsPage() {
     );
   };
 
-  const handleGenerateTenantActivationLink = (tenantId: string) => {
-    const prof = getTenantProfile(tenantId);
-    const tenantName = prof.brandName || getTenantName(tenantId);
-    const email = prof.contactEmail || "";
-    const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-    const token = `inv_${tenantId}_${Date.now()}`;
-    const fullUrl = `${window.location.origin}/login?invite=${token}&tenantId=${tenantId}&role=owner`;
-    setActivationModalData({
-      organizerName: `Pemilik Gerai: ${tenantName}`,
-      organizerEmail: email,
-      activationUrl: fullUrl,
-      expiresAt: expires,
-    });
-    notify.success("Tautan dibuat", `Tautan undangan akun Owner untuk ${tenantName} siap dibagikan.`);
+  const handleGenerateTenantActivationLink = async (tenantId: string) => {
+    setIsGeneratingInvite(true);
+    try {
+      const res = await fetch("/api/tenants/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.data) {
+        notify.error("Gagal membuat undangan", data.error || "Tidak dapat menerbitkan tautan undangan Owner.");
+        return;
+      }
+      setActivationModalData({
+        organizerName: `Pemilik Gerai: ${data.data.tenantName}`,
+        organizerEmail: data.data.contactEmail || "",
+        activationUrl: data.data.activationUrl,
+        expiresAt: data.data.expiresAt,
+      });
+      notify.success("Tautan dibuat", `Tautan undangan akun Owner untuk ${data.data.tenantName} siap dibagikan.`);
+    } catch {
+      notify.error("Kendala jaringan", "Gagal menghubungi server saat membuat undangan Owner.");
+    } finally {
+      setIsGeneratingInvite(false);
+    }
   };
 
   const handleToggleOrganizerStatus = async (orgId: string, currentStatus: "ACTIVE" | "INACTIVE") => {
@@ -2165,7 +2252,11 @@ export default function SettingsPage() {
       {/* Modal-modal Partner & Penyelenggara */}
       <PartnerModals
         isAddTenantOpen={isAddTenantModalOpen}
-        onAddTenantOpenChange={setIsAddTenantModalOpen}
+        onAddTenantOpenChange={(open) => {
+          setIsAddTenantModalOpen(open);
+          if (!open) resetTenantModalForm();
+        }}
+        isEditingTenant={Boolean(editingTenantId)}
         formTenantName={formTenantName}
         onFormTenantNameChange={setFormTenantName}
         formTenantCode={formTenantCode}
@@ -2190,6 +2281,12 @@ export default function SettingsPage() {
         onFormTenantBankAccountHolderChange={setFormTenantBankAccountHolder}
         formTenantPksNumber={formTenantPksNumber}
         onFormTenantPksNumberChange={setFormTenantPksNumber}
+        formTenantContractStart={formTenantContractStart}
+        onFormTenantContractStartChange={setFormTenantContractStart}
+        formTenantContractEnd={formTenantContractEnd}
+        onFormTenantContractEndChange={setFormTenantContractEnd}
+        formTenantPksFile={formTenantPksFile}
+        onFormTenantPksFileChange={setFormTenantPksFile}
         onSaveNewTenant={handleSaveNewTenant}
         isAddOrgOpen={isAddOrganizerModalOpen}
         onAddOrgOpenChange={setIsAddOrganizerModalOpen}
@@ -2221,6 +2318,8 @@ export default function SettingsPage() {
         isGeneratingInvite={isGeneratingInvite}
         onToggleTenantStatus={handleToggleTenantStatusFromModal}
         onGenerateTenantActivationLink={handleGenerateTenantActivationLink}
+        onEditTenant={handleOpenEditTenant}
+        onRecordTenantDeposit={handleRecordTenantDeposit}
       />
     </div>
   );

@@ -19,6 +19,14 @@ import {
   setTenantRevenueSplit,
   calculateSettlement,
 } from "@/lib/settlement";
+import { findBlockedOrderTenant } from "@/lib/tenant-order-guard";
+import { computeDashboardFnbRevenue } from "@/features/dashboard/dashboard-metrics";
+import {
+  generateTenantOwnerInviteToken,
+  validateTenantOwnerInviteToken,
+  consumeTenantOwnerInviteToken,
+  verifyTenantOwnerCredentials,
+} from "@/lib/tenant-activation";
 import type { OrderRecord } from "@/types/order";
 import type { ServerAuthResult } from "@/lib/server-auth";
 
@@ -368,8 +376,193 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
         const transformed = decision.transform!(state);
         expect(transformed.profiles["tenant-ks"].npwp).toBeUndefined();
         expect(transformed.profiles["tenant-ks"].contactPhone).toBe("••••••••");
+        expect(transformed.profiles["tenant-ks"].bankName).toBe("");
+        expect(transformed.profiles["tenant-ks"].bankAccountNumber).toBe("");
+        expect(transformed.profiles["tenant-ks"].bankAccountHolder).toBe("");
+        expect(transformed.profiles["tenant-ks"].contactPerson).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].contactEmail).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].contractStartDate).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].contractEndDate).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].contractPksNumber).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].contractPksFile).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].lastSettlementDepositDate).toBeUndefined();
         expect(transformed.revenueSplits).toEqual({});
       }
+    });
+  });
+
+  describe("7. Audit Fix Tahap 3 (S-38 Hardening & Flow)", () => {
+    it("mengizinkan MANAGER non-tenant membaca revenueSplits dan mencegah Tenant Owner mengubah bank/NPWP", () => {
+      const state = defaultTenantsState();
+      const managerAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        userId: "usr-mgr",
+        email: "manager.commercial@dagoeng.com",
+        name: "Commercial Manager",
+        role: "MANAGER",
+        scopeLevel: "ORGANIZATION",
+        tenantId: null,
+      };
+      const readDecision = tenantsDomainSpec.authorizeRead(managerAuth);
+      expect(readDecision.allowed).toBe(true);
+      if (readDecision.allowed) {
+        const transformed = readDecision.transform!(state);
+        expect(transformed.revenueSplits?.["tenant-ks"]).toBeDefined();
+        expect(transformed.profiles["tenant-ks"].bankAccountNumber).toBe("");
+      }
+
+      const tenantOwnerAuth: ServerAuthResult = {
+        isAuthenticated: true,
+        userId: "usr-ks-owner",
+        email: "owner@kopisenja.com",
+        name: "Owner Kopi Senja",
+        role: "OWNER",
+        scopeLevel: "TENANT",
+        tenantId: "tenant-ks",
+      };
+      const originalBank = state.profiles["tenant-ks"].bankAccountNumber;
+      const originalNpwp = state.profiles["tenant-ks"].npwp;
+      const updated = tenantsDomainSpec.applyCommand(
+        state,
+        {
+          op: "UPSERT_PROFILE",
+          profile: {
+            ...state.profiles["tenant-ks"],
+            bankName: "Mandiri",
+            bankAccountNumber: "9999999999",
+            bankAccountHolder: "Attacker",
+            npwp: "99.999.999.9-999.000",
+          },
+        },
+        tenantOwnerAuth
+      );
+      expect(updated.profiles["tenant-ks"].bankAccountNumber).toBe(originalBank);
+      expect(updated.profiles["tenant-ks"].npwp).toBe(originalNpwp);
+    });
+
+    it("mengecualikan mitra INTERNAL dari auto-suspension dan menghitung selisih hari kalender WITA", () => {
+      const internalOverdue: TenantProfileData = {
+        ...getTenantProfile("tenant-bakery"),
+        partnerType: "INTERNAL",
+        status: "ACTIVE",
+        lastSettlementDepositDate: "2024-01-01",
+      };
+      expect(checkTenantAutoSuspension(internalOverdue, new Date("2026-11-25T10:00:00Z")).shouldSuspend).toBe(
+        false
+      );
+
+      const externalExact14Days: TenantProfileData = {
+        ...getTenantProfile("tenant-ks"),
+        partnerType: "EXTERNAL",
+        status: "ACTIVE",
+        lastSettlementDepositDate: "2026-11-10",
+      };
+      expect(
+        checkTenantAutoSuspension(externalExact14Days, new Date("2026-11-24T17:00:00Z")).shouldSuspend
+      ).toBe(true); // 2026-11-25 WITA -> 15 hari kalender
+      expect(
+        checkTenantAutoSuspension(externalExact14Days, new Date("2026-11-24T15:00:00Z")).shouldSuspend
+      ).toBe(false); // 2026-11-24 WITA -> 14 hari kalender
+    });
+
+    it("memblokir order F&B untuk mitra SUSPENDED/INACTIVE sementara COWORKING tetap diizinkan", () => {
+      const state = defaultTenantsState();
+      state.profiles["tenant-ks"] = {
+        ...state.profiles["tenant-ks"],
+        status: "SUSPENDED",
+        suspendedReason: "Menunggak setoran",
+      };
+      const blockedRes = findBlockedOrderTenant(
+        [{ tenantId: "tenant-ks", itemType: "FNB", productName: "Es Kopi" }],
+        state.profiles
+      );
+      expect(blockedRes.blocked).toBe(true);
+
+      const coworkOnly = findBlockedOrderTenant(
+        [{ tenantId: "tenant-ks", itemType: "COWORKING", productName: "Hot Desk" }],
+        state.profiles
+      );
+      expect(coworkOnly.blocked).toBe(false);
+    });
+
+    it("menyertakan pendapatan mitra INTERNAL di dashboard-metrics", () => {
+      const state = defaultTenantsState();
+      state.profiles["tenant-bakery"].partnerType = "INTERNAL";
+      saveTenantProfile(state.profiles["tenant-bakery"]);
+      const paidOrder: OrderRecord = {
+        id: "ord-dash-internal",
+        orderNumber: "ORD-INT-1",
+        organizationId: "org-dago",
+        outletId: "outlet-sgr",
+        outletName: "Dago Creative Hub",
+        tableNumber: "T1",
+        customerName: "Tamu",
+        orderType: "DINE_IN",
+        status: "COMPLETED",
+        paymentStatus: "PAID",
+        paymentMethod: "CASH",
+        subtotal: 100000,
+        discount: 0,
+        tax: 10000,
+        serviceCharge: 0,
+        total: 110000,
+        createdAt: new Date().toISOString(),
+        targetServiceMinutes: 15,
+        statusHistory: [],
+        items: [
+          {
+            id: "it-1",
+            productId: "p-bakery",
+            tenantId: "tenant-bakery",
+            productName: "Croissant",
+            quantity: 2,
+            unitPrice: 50000,
+          },
+        ],
+      };
+
+      const rev = computeDashboardFnbRevenue([paidOrder], {
+        isTenantOwner: true,
+        tenantId: "tenant-bakery",
+      });
+      expect(rev).toBeGreaterThan(0);
+    });
+
+    it("mendukung alur undangan & aktivasi akun Owner mitra sekali pakai", async () => {
+      const invite = await generateTenantOwnerInviteToken("tenant-ks", "Admin Hub");
+      const token = new URL(`http://localhost${invite.activationUrl}`).searchParams.get("invite")!;
+      const validBefore = await validateTenantOwnerInviteToken(token);
+      expect(validBefore.valid).toBe(true);
+
+      const activated = await consumeTenantOwnerInviteToken({
+        token,
+        email: "new.owner.ks@dagoeng.com",
+        name: "Owner Baru KS",
+        password: "PasswordAman123!",
+      });
+      expect(activated.tenantId).toBe("tenant-ks");
+
+      const validAfter = await validateTenantOwnerInviteToken(token);
+      expect(validAfter.valid).toBe(false);
+
+      const loginCheck = await verifyTenantOwnerCredentials(
+        "new.owner.ks@dagoeng.com",
+        "PasswordAman123!"
+      );
+      expect(loginCheck.authenticated).toBe(true);
+      expect(loginCheck.account?.tenantId).toBe("tenant-ks");
+
+      // Email collision with another tenant must be rejected
+      const secondInvite = await generateTenantOwnerInviteToken("tenant-kitchen", "Admin Hub");
+      const secondToken = new URL(`http://localhost${secondInvite.activationUrl}`).searchParams.get("invite")!;
+      await expect(
+        consumeTenantOwnerInviteToken({
+          token: secondToken,
+          email: "new.owner.ks@dagoeng.com",
+          name: "Attacker",
+          password: "PasswordAman123!",
+        })
+      ).rejects.toThrow(/sudah terdaftar/i);
     });
   });
 });
