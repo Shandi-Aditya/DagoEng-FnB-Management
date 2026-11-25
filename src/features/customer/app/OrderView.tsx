@@ -1,12 +1,13 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { Minus, Plus, Search, ShoppingBag, UtensilsCrossed } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { CustomerCartItem } from "@/features/customer/customer-domain";
+import { resolveCustomerProductOptions, type CustomerCartItem } from "@/features/customer/customer-domain";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import type { MasterProduct } from "@/types/product";
 
@@ -40,6 +41,37 @@ interface OrderViewProps {
   onOpenCheckout: () => void;
 }
 
+function ProductThumbnail({ src, name }: { src?: string; name: string }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const imageRef = useCallback(
+    (node: HTMLImageElement | null) => {
+      if (src && node?.complete && node.naturalWidth === 0) {
+        setFailedSrc(src);
+      }
+    },
+    [src],
+  );
+  const showImage = Boolean(src) && failedSrc !== src;
+
+  return (
+    <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-border/60 sm:size-20">
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element -- menu photos come from arbitrary tenant hosts
+        <img
+          ref={imageRef}
+          src={src}
+          alt={name}
+          loading="lazy"
+          onError={() => src && setFailedSrc(src)}
+          className="size-full object-cover"
+        />
+      ) : (
+        <UtensilsCrossed className="size-5 text-muted-foreground/50" aria-hidden />
+      )}
+    </div>
+  );
+}
+
 function Stepper({ quantity, onAdd, onRemove, name }: { quantity: number; onAdd: () => void; onRemove: () => void; name: string }) {
   if (quantity === 0) {
     return (
@@ -65,7 +97,8 @@ function Stepper({ quantity, onAdd, onRemove, name }: { quantity: number; onAdd:
 export function OrderView(props: OrderViewProps) {
   const { partners, activePartnerId, products, cart } = props;
   const activePartner = partners.find((partner) => partner.id === activePartnerId);
-  const quantityOf = (id: string) => cart.find((item) => item.product.id === id)?.quantity ?? 0;
+  const quantityOf = (id: string) =>
+    cart.filter((item) => item.product.id === id).reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -124,25 +157,48 @@ export function OrderView(props: OrderViewProps) {
         />
       ) : (
         <ul className="flex flex-col divide-y rounded-xl border bg-card">
-          {products.map((product) => (
-            <li key={product.id} className={cn("flex items-center gap-4 p-4", !product.isAvailable && "opacity-50")}>
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="font-medium">{product.name}</span>
-                {product.description ? <span className="line-clamp-2 text-xs text-muted-foreground">{product.description}</span> : null}
-                <span className="font-mono text-sm tabular-nums">{formatCurrencyIDR(product.basePrice)}</span>
-              </div>
-              {product.isAvailable ? (
-                <Stepper
-                  name={product.name}
-                  quantity={quantityOf(product.id)}
-                  onAdd={() => props.onAdd(product)}
-                  onRemove={() => props.onRemove(product.id)}
-                />
-              ) : (
-                <span className="text-xs text-muted-foreground">Habis</span>
-              )}
-            </li>
-          ))}
+          {products.map((product) => {
+            const { hasOptions } = resolveCustomerProductOptions(product);
+            const qty = quantityOf(product.id);
+            return (
+              <li key={product.id} className={cn("flex items-center gap-3.5 p-3.5 sm:gap-4 sm:p-4", !product.isAvailable && "opacity-50")}>
+                <ProductThumbnail src={product.imageUrl} name={product.name} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="font-medium leading-snug">{product.name}</span>
+                  {product.description ? <span className="line-clamp-2 text-xs text-muted-foreground">{product.description}</span> : null}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="font-mono text-sm tabular-nums">{formatCurrencyIDR(product.basePrice)}</span>
+                    {hasOptions ? (
+                      <span className="text-xs text-muted-foreground">Tersedia pilihan</span>
+                    ) : null}
+                  </div>
+                </div>
+                {product.isAvailable ? (
+                  hasOptions && qty === 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => props.onAdd(product)}
+                      aria-label={`Pilih opsi ${product.name}`}
+                      className="shrink-0"
+                    >
+                      Pilih
+                    </Button>
+                  ) : (
+                    <Stepper
+                      name={product.name}
+                      quantity={qty}
+                      onAdd={() => props.onAdd(product)}
+                      onRemove={() => props.onRemove(product.id)}
+                    />
+                  )
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground">Habis</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

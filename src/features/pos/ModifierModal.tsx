@@ -271,40 +271,43 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
         </div>
 
         {/* Footer */}
-        <DialogFooter className="flex-row items-center justify-between gap-3 border-t border-border bg-muted/20 p-4 shrink-0 sm:space-x-0">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-lg"
-              disabled={quantity <= 1}
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              aria-label="Kurangi jumlah"
-            >
-              <Minus />
-            </Button>
-            <span className="w-6 text-center font-mono text-sm font-medium tabular-nums text-foreground">
-              {quantity}
-            </span>
-            <Button
-              type="button"
-              variant="default"
-              size="icon-lg"
-              onClick={() => setQuantity((q) => q + 1)}
-              aria-label="Tambah jumlah"
-            >
-              <Plus />
-            </Button>
+        <DialogFooter className="flex-col items-stretch gap-3 border-t border-border bg-muted/20 p-4 shrink-0 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
+          <div className="flex items-center justify-between gap-2 sm:justify-start">
+            <span className="text-xs font-medium text-muted-foreground sm:sr-only">Jumlah</span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-lg"
+                disabled={quantity <= 1}
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                aria-label="Kurangi jumlah"
+              >
+                <Minus />
+              </Button>
+              <span className="w-6 text-center font-mono text-sm font-medium tabular-nums text-foreground">
+                {quantity}
+              </span>
+              <Button
+                type="button"
+                variant="default"
+                size="icon-lg"
+                onClick={() => setQuantity((q) => q + 1)}
+                aria-label="Tambah jumlah"
+              >
+                <Plus />
+              </Button>
+            </div>
           </div>
 
           <Button
             type="button"
             size="lg"
             onClick={handleConfirmAdd}
-            className="flex-1"
+            className="w-full min-w-0 sm:w-auto sm:flex-1"
           >
-            <span>Tambahkan ke keranjang</span>
-            <span className="font-mono tabular-nums opacity-90">
+            <span className="truncate">Tambahkan ke keranjang</span>
+            <span className="shrink-0 font-mono tabular-nums opacity-90">
               ({formatCurrencyIDR(itemGrandTotal)})
             </span>
           </Button>
