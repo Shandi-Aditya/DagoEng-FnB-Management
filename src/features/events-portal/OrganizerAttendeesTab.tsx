@@ -42,6 +42,11 @@ import {
   paymentStatusTone,
 } from "./events-portal-domain";
 import { checkedInGuests } from "./events-portal-groups";
+import {
+  formatCheckInTime,
+  getBookingAttendance,
+} from "@/features/events-checkin/events-checkin-domain";
+import { getSubTicketDetails } from "@/features/events-tickets/ticket-pass-domain";
 import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
 
 interface OrganizerAttendeesTabProps {
@@ -122,7 +127,7 @@ export function OrganizerAttendeesTab({
     );
   }, [selectedEventId, selectedEvent, approvedEvents, inviteApprovedEventId]);
   const paidSeats = bookings
-    .filter((b) => b.eventId === selectedEventId && b.paymentStatus === "PAID")
+    .filter((b) => (selectedEventId === "ALL" || b.eventId === selectedEventId) && b.paymentStatus === "PAID")
     .reduce((sum, b) => sum + (b.ticketCount || 1), 0);
   const checkedIn = checkedInGuests(selectedEventId, bookings);
 
@@ -266,19 +271,19 @@ export function OrganizerAttendeesTab({
         </div>
       </div>
 
-      {selectedEvent ? (
-        <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:gap-6">
-          <span className="min-w-0 flex-1 truncate font-medium">{selectedEvent.title}</span>
-          <span className="text-sm tabular-nums text-muted-foreground">
-            {checkedIn} dari {paidSeats} peserta sudah check-in
-          </span>
-          <Progress
-            value={paidSeats > 0 ? Math.round((checkedIn / paidSeats) * 100) : 0}
-            className="sm:w-40"
-            aria-label="Peserta sudah check-in"
-          />
-        </div>
-      ) : null}
+      <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row sm:items-center sm:gap-6">
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {selectedEvent ? selectedEvent.title : "Semua event"}
+        </span>
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {checkedIn} dari {paidSeats} peserta sudah check-in
+        </span>
+        <Progress
+          value={paidSeats > 0 ? Math.round((checkedIn / paidSeats) * 100) : 0}
+          className="sm:w-40"
+          aria-label="Peserta sudah check-in"
+        />
+      </div>
 
       {/* 2. Table */}
       {filteredAttendees.length === 0 ? (
@@ -306,15 +311,7 @@ export function OrganizerAttendeesTab({
               <TableBody>
                 {paginatedAttendees.map((b) => {
                   const isExpanded = expandedBookingIds.has(b.id);
-                  const qty = b.ticketCount || 1;
-                  const checkedQty =
-                    typeof b.checkedInQty === "number"
-                      ? b.checkedInQty
-                      : b.checkInStatus === "CHECKED_IN"
-                      ? qty
-                      : 0;
-                  const isCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= qty;
-                  const isPartial = !isCheckedIn && checkedQty > 0;
+                  const { ticketCount: qty, checkedInQty, isCheckedIn, isPartial } = getBookingAttendance(b);
                   const waUrl = formatWhatsAppUrl(b.guestPhone);
 
                   return (
@@ -327,6 +324,17 @@ export function OrganizerAttendeesTab({
                           <div className="font-mono font-medium text-foreground">
                             {b.ticketCode}
                           </div>
+                          {b.selectedSeats && b.selectedSeats.length > 0 && (
+                            <div className="font-mono text-xs text-primary font-medium">
+                              Kursi: {b.selectedSeats.join(", ")}
+                            </div>
+                          )}
+                          {(isCheckedIn || isPartial) && b.checkInTime ? (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {formatCheckInTime(b.checkInTime)}
+                              {b.checkedInBy ? ` · ${b.checkedInBy}` : ""}
+                            </div>
+                          ) : null}
                           {b.ticketCount > 1 ? (
                             <button
                               type="button"
@@ -405,7 +413,7 @@ export function OrganizerAttendeesTab({
                           ) : isPartial ? (
                             <StatusBadge status="info">
                               <Clock className="size-3 mr-1" />
-                              <span>Hadir {checkedQty}/{qty}</span>
+                              <span>Hadir {checkedInQty}/{qty}</span>
                             </StatusBadge>
                           ) : (
                             <StatusBadge status="neutral">
@@ -429,8 +437,11 @@ export function OrganizerAttendeesTab({
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
                                 {Array.from({ length: b.ticketCount }).map((_, idx) => {
-                                  const seatCode = `${b.ticketCode}-${String(idx + 1).padStart(2, "0")}`;
-                                  const isSeatCheckedIn = idx < (b.checkedInQty || (isCheckedIn ? b.ticketCount : 0));
+                                  const seatNum = idx + 1;
+                                  const { subTicketCode: seatCode, isCheckedIn: isSeatCheckedIn } =
+                                    getSubTicketDetails(b, seatNum);
+                                  const seatTime = b.seatCheckInTimes?.[String(seatNum)] || (isSeatCheckedIn ? b.checkInTime : null);
+                                  const seatOfficer = b.seatCheckInBy?.[String(seatNum)] || (isSeatCheckedIn ? b.checkedInBy : null);
 
                                   return (
                                     <div
@@ -440,9 +451,14 @@ export function OrganizerAttendeesTab({
                                       <div>
                                         <span className="font-mono font-medium block">
                                           {seatCode}
+                                          {b.selectedSeats?.[idx] ? ` (Kursi ${b.selectedSeats[idx]})` : ""}
                                         </span>
                                         <span className="text-muted-foreground text-xs block">
-                                          Tiket #{idx + 1}
+                                          Tiket #{seatNum}
+                                          {seatTime ? <> · {formatCheckInTime(seatTime)}</> : null}
+                                          {seatOfficer ? (
+                                            <> · {seatOfficer}</>
+                                          ) : null}
                                         </span>
                                       </div>
                                       <StatusBadge status={isSeatCheckedIn ? "success" : "neutral"}>

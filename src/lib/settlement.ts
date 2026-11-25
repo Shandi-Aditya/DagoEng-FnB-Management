@@ -2,6 +2,7 @@ import { OrderRecord } from "@/types/order";
 import {
   allocateCategoryDiscounts,
   allocateCategoryTaxAndService,
+  allocateIntegerProRata,
   getOrderTaxBreakdown,
   isCoworkingOrderItem,
   normalizeTenantId,
@@ -13,6 +14,14 @@ import {
   syncSettlementReceiptPolicyToServer,
   type SettlementBasisMode,
 } from "@/lib/settlement-receipt-policy";
+import {
+  tenantsSyncClient,
+  tenantsStorageMirror,
+  applyTenantsCommand,
+  mutateConfigDomain,
+} from "@/lib/sync-domains/config-spec";
+import type { TenantsDomainState } from "@/lib/domain-sync-types";
+import { getTenantProfile } from "@/lib/tenant";
 
 export interface SettlementSummary {
   tenantId: string | "DAGO_HUB";
@@ -54,6 +63,10 @@ export const DEFAULT_TENANT_REVENUE_SPLITS: Record<string, TenantRevenueSplitCon
 };
 
 export function getAllTenantRevenueSplits(): Record<string, TenantRevenueSplitConfig> {
+  const syncedSplits = tenantsSyncClient.getSnapshot().revenueSplits;
+  if (syncedSplits && Object.keys(syncedSplits).length > 0) {
+    return { ...DEFAULT_TENANT_REVENUE_SPLITS, ...syncedSplits };
+  }
   if (typeof window === "undefined") return DEFAULT_TENANT_REVENUE_SPLITS;
   try {
     const raw = window.localStorage?.getItem(REVENUE_SPLIT_STORAGE_KEY) ?? null;
@@ -101,18 +114,39 @@ export function setTenantRevenueSplit(
     return { success: false, error: "Total persentase pembagian (Tenant + DAGO) harus berjumlah 100%." };
   }
 
+  const all = getAllTenantRevenueSplits();
+  const existing = all[tenantId] || { tenantId, tenantName: tenantId, status: "ACTIVE" };
+  const updatedEntry: TenantRevenueSplitConfig = {
+    ...existing,
+    tenantId,
+    tenantSharePercent,
+    dagoSharePercent: calcDago,
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    const command = {
+      op: "SET_REVENUE_SPLIT" as const,
+      tenantId,
+      split: updatedEntry,
+    };
+    mutateConfigDomain(
+      tenantsSyncClient,
+      tenantsStorageMirror,
+      (prev: TenantsDomainState) => applyTenantsCommand(prev, command),
+      {
+        id: `tenant-split-${tenantId}`,
+        command,
+      }
+    );
+  } catch (e) {
+    console.warn("Could not mutate tenantsSyncClient for revenue split", e);
+  }
+
   if (typeof window === "undefined") return { success: true };
 
   try {
-    const all = getAllTenantRevenueSplits();
-    const existing = all[tenantId] || { tenantId, tenantName: tenantId, status: "ACTIVE" };
-    all[tenantId] = {
-      ...existing,
-      tenantId,
-      tenantSharePercent,
-      dagoSharePercent: calcDago,
-      updatedAt: new Date().toISOString(),
-    };
+    all[tenantId] = updatedEntry;
     window.localStorage?.setItem(REVENUE_SPLIT_STORAGE_KEY, JSON.stringify(all));
     const nextPolicy = saveStoredSettlementReceiptPolicy({ revenueSplits: all });
     if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
@@ -222,7 +256,7 @@ export function calculateSettlement(
   orders: OrderRecord[],
   tenantMap?: Record<string, string>,
   customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>,
-  options?: { settlementBasis?: SettlementBasisMode }
+  options?: { settlementBasis?: SettlementBasisMode; includeInternal?: boolean }
 ): SettlementSummary[] {
   const settlementMap = new Map<string, SettlementSummary>();
   const activeSplits = customSplits || getAllTenantRevenueSplits();
@@ -368,6 +402,16 @@ export function calculateSettlement(
       const tenantEntries = Array.from(tenantGrosses.entries());
 
       tenantEntries.forEach(([tenantId, data]) => {
+        // Requirement S-38: Mitra internal dilewati saat settlement tetapi tetap muncul di laporan penjualan
+        if (tenantId !== "DAGO_HUB") {
+          try {
+            const profile = getTenantProfile(tenantId);
+            if (profile?.partnerType === "INTERNAL" && !options?.includeInternal) {
+              return;
+            }
+          } catch {}
+        }
+
         const allocatedDiscount = discountByTenant.get(tenantId) ?? 0;
         const allocated = taxByTenant.get(tenantId) || { tax: 0, serviceCharge: 0 };
         const allocatedTax = allocated.tax;
@@ -543,8 +587,24 @@ export function calculateTenantProfitSharing(
       const tenantDpp = Math.max(0, tenantGross - allocatedDiscount);
       totalDiscount += allocatedDiscount;
       totalDpp += tenantDpp;
-      if (order.paymentMethod === "QRIS") {
+      const method = (order.paymentMethod || "").toUpperCase();
+      if (method === "QRIS") {
         qrisDpp += tenantDpp;
+      } else if (
+        method === "SPLIT" &&
+        Array.isArray(order.splitDetails) &&
+        order.splitDetails.length > 0
+      ) {
+        const weights = order.splitDetails.map((s) => Math.max(0, Number(s.amount) || 0));
+        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+        if (totalWeight > 0) {
+          const allocatedBySplit = allocateIntegerProRata(Math.round(tenantDpp), weights);
+          order.splitDetails.forEach((s, idx) => {
+            if ((s.method || "").toUpperCase() === "QRIS") {
+              qrisDpp += allocatedBySplit[idx] ?? 0;
+            }
+          });
+        }
       }
     }
   });

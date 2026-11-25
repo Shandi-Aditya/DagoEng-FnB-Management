@@ -1,5 +1,5 @@
 import type { EventCategory, EventSubmissionPayload, EventTicketTier, EventRefundPolicy } from "@/types/event";
-import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
+import { validateEventPrice, validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 
 export const EVENT_CATEGORIES: readonly { value: EventCategory; label: string }[] = [
   { value: "WORKSHOP", label: "Workshop" },
@@ -70,6 +70,7 @@ export interface SubmissionForm {
   honeypot: string;
   ticketTiers?: EventTicketTier[];
   refundPolicy?: EventRefundPolicy;
+  hasSeatingChart?: boolean;
 }
 
 export type SubmissionField = keyof SubmissionForm;
@@ -101,6 +102,7 @@ export function emptySubmissionForm(organizer: { name?: string; email?: string; 
     honeypot: "",
     ticketTiers: [],
     refundPolicy: { policyType: "NO_REFUND" },
+    hasSeatingChart: false,
   };
 }
 
@@ -156,6 +158,12 @@ export function validateSubmissionForm(form: SubmissionForm, options: { needsPas
   let effectiveIsPaid = form.isPaid;
   let effectivePrice = form.price;
   if (Array.isArray(form.ticketTiers) && form.ticketTiers.length > 0) {
+    const tierValidation = validateEventTicketTiers(form.ticketTiers, {
+      hasSeatingChart: Boolean(form.hasSeatingChart),
+    });
+    if (!tierValidation.valid) {
+      errors.ticketTiers = tierValidation.error || "Konfigurasi jenis tiket tidak valid.";
+    }
     const paidTiers = form.ticketTiers.filter((t) => Number(t.price) > 0);
     effectiveIsPaid = paidTiers.length > 0;
     if (effectiveIsPaid) {
@@ -215,6 +223,7 @@ export function buildSubmissionPayload(form: SubmissionForm): EventSubmissionPay
     maxCapacity: (tierCap > 0 ? tierCap : Number(form.maxCapacity)) || DEFAULT_CAPACITY,
     ticketTiers: hasTiers ? form.ticketTiers : undefined,
     refundPolicy: isPaid ? (form.refundPolicy || { policyType: "NO_REFUND" }) : { policyType: "NO_REFUND" },
+    hasSeatingChart: Boolean(form.hasSeatingChart),
     proposedOrganizerPercent: organizerPercent,
     proposedPlatformPercent: 100 - organizerPercent,
     collaborationFacilities: isHubVenue(form.location) ? form.collaborationFacilities : [],

@@ -11,7 +11,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { generateTierSeats } from "@/lib/event-seating";
 import type { PublicCommunityEvent } from "@/types/event";
 
 export interface BookingFormData {
@@ -21,6 +25,7 @@ export interface BookingFormData {
   institution: string;
   ticketCount: number;
   ticketTierId?: string;
+  selectedSeats?: string[];
   promoCode?: string;
 }
 
@@ -92,6 +97,64 @@ export function EventBookingDialog({
       ? Number(event?.price || 0)
       : 0;
 
+  const selectedSeats = React.useMemo(
+    () => (Array.isArray(form.selectedSeats) ? form.selectedSeats : []),
+    [form.selectedSeats]
+  );
+
+  const occupiedSet = React.useMemo(
+    () => new Set((event?.occupiedSeats || []).map((s) => s.toUpperCase())),
+    [event?.occupiedSeats]
+  );
+
+  const tierSeats = React.useMemo(() => {
+    if (!event?.hasSeatingChart) return [];
+    if (selectedTier) {
+      return generateTierSeats(selectedTier);
+    }
+    return generateTierSeats({ quota: event?.maxCapacity || 20 });
+  }, [event?.hasSeatingChart, event?.maxCapacity, selectedTier]);
+
+  const handleToggleSeat = (seatCode: string) => {
+    const clean = seatCode.trim().toUpperCase();
+    if (occupiedSet.has(clean)) return;
+
+    setForm((prev) => {
+      const current = Array.isArray(prev.selectedSeats) ? [...prev.selectedSeats] : [];
+      const isAlreadySelected = current.includes(clean);
+
+      if (isAlreadySelected) {
+        return {
+          ...prev,
+          selectedSeats: current.filter((s) => s !== clean),
+        };
+      }
+
+      if (current.length < prev.ticketCount) {
+        return {
+          ...prev,
+          selectedSeats: [...current, clean],
+        };
+      }
+
+      if (prev.ticketCount === 1) {
+        return {
+          ...prev,
+          selectedSeats: [clean],
+        };
+      }
+
+      return {
+        ...prev,
+        selectedSeats: [...current.slice(1), clean],
+      };
+    });
+  };
+
+  const isSeatSelectionIncomplete = Boolean(
+    event?.hasSeatingChart && selectedSeats.length !== form.ticketCount
+  );
+
   const subtotalPrice = unitPrice * form.ticketCount;
 
   // Promo code validation via secure server endpoint
@@ -148,12 +211,12 @@ export function EventBookingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-unit="event" className="max-w-md max-h-[90vh] overflow-y-auto p-6">
-        <DialogHeader>
+      <DialogContent data-unit="event" className="max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b shrink-0">
           <div className="flex items-center gap-2">
             <Ticket className="size-5 text-primary" />
             <DialogTitle className="text-base font-medium">
-              Pendaftaran Tiket Acara
+              Pendaftaran tiket acara
             </DialogTitle>
           </div>
           <DialogDescription className="text-xs text-muted-foreground truncate">
@@ -161,20 +224,21 @@ export function EventBookingDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
-            <AlertCircle className="size-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-        <form onSubmit={onSubmit} className="space-y-4 text-xs">
+          <form onSubmit={onSubmit} className="space-y-4 text-xs">
           {/* Ticket Tier Selection */}
           {hasTiers && (
             <div className="space-y-2">
-              <label className="font-medium text-foreground block">
+              <Label className="text-xs font-medium text-foreground block">
                 Pilih jenis tiket <span className="text-destructive">*</span>
-              </label>
+              </Label>
               <div className="grid grid-cols-1 gap-2">
                 {tiers.map((tier) => {
                   const avail = tierAvailabilities.find((a) => a.tierId === tier.id);
@@ -194,6 +258,7 @@ export function EventBookingDialog({
                           ...prev,
                           ticketTierId: tier.id,
                           ticketCount: 1,
+                          selectedSeats: [],
                         }));
                       }}
                       className={`w-full text-left p-3 rounded-lg border transition-colors flex flex-col gap-1.5 ${isSelected
@@ -244,61 +309,65 @@ export function EventBookingDialog({
 
           {/* Guest Name */}
           <div className="space-y-1.5">
-            <label className="font-medium text-foreground">
+            <Label htmlFor="booking-guest-name" className="text-xs">
               Nama lengkap <span className="text-destructive">*</span>
-            </label>
-            <input
+            </Label>
+            <Input
+              id="booking-guest-name"
               type="text"
               required
               value={form.guestName}
               onChange={(e) => setForm((prev) => ({ ...prev, guestName: e.target.value }))}
               placeholder="Contoh: Rian Pratama"
-              className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="h-9 text-xs"
             />
           </div>
 
           {/* Email & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="font-medium text-foreground">
+              <Label htmlFor="booking-guest-email" className="text-xs">
                 Alamat email <span className="text-destructive">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
+                id="booking-guest-email"
                 type="email"
                 required
                 value={form.guestEmail}
                 onChange={(e) => setForm((prev) => ({ ...prev, guestEmail: e.target.value }))}
                 placeholder="nama@email.com"
-                className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                className="h-9 text-xs"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-foreground">
+              <Label htmlFor="booking-guest-phone" className="text-xs">
                 No. WhatsApp <span className="text-destructive">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
+                id="booking-guest-phone"
                 type="tel"
                 required
                 value={form.guestPhone}
                 onChange={(e) => setForm((prev) => ({ ...prev, guestPhone: e.target.value }))}
                 placeholder="08123456789"
-                className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                className="h-9 text-xs"
               />
             </div>
           </div>
 
           {/* Institution */}
           <div className="space-y-1.5">
-            <label className="font-medium text-foreground">
-              Institusi / Komunitas (opsional)
-            </label>
-            <input
+            <Label htmlFor="booking-institution" className="text-xs">
+              Institusi / komunitas (opsional)
+            </Label>
+            <Input
+              id="booking-institution"
               type="text"
               value={form.institution}
               onChange={(e) => setForm((prev) => ({ ...prev, institution: e.target.value }))}
               placeholder="Contoh: Komunitas Barista / Mahasiswa / Umum"
-              className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="h-9 text-xs"
             />
           </div>
 
@@ -317,7 +386,13 @@ export function EventBookingDialog({
                 type="button"
                 variant="outline"
                 size="icon-lg"
-                onClick={() => setForm((prev) => ({ ...prev, ticketCount: Math.max(1, prev.ticketCount - 1) }))}
+                onClick={() =>
+                  setForm((prev) => {
+                    const nextCount = Math.max(1, prev.ticketCount - 1);
+                    const nextSeats = (prev.selectedSeats || []).slice(0, nextCount);
+                    return { ...prev, ticketCount: nextCount, selectedSeats: nextSeats };
+                  })
+                }
                 disabled={form.ticketCount <= 1}
                 aria-label="Kurangi jumlah tiket"
               >
@@ -338,14 +413,94 @@ export function EventBookingDialog({
             </div>
           </div>
 
+          {/* Interactive Seating Chart */}
+          {event.hasSeatingChart && (
+            <div className="rounded-xl border bg-muted/20 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-foreground block">Pilih nomor kursi</span>
+                  <span className="text-xs text-muted-foreground block mt-0.5">
+                    Pilih {form.ticketCount} kursi ({selectedSeats.length}/{form.ticketCount} terpilih)
+                  </span>
+                </div>
+                {selectedSeats.length === form.ticketCount ? (
+                  <Badge variant="default" className="text-xs">
+                    Kursi lengkap
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs text-warning border-warning/40">
+                    Kurang {form.ticketCount - selectedSeats.length} kursi
+                  </Badge>
+                )}
+              </div>
+
+              {/* Seating Grid */}
+              <div className="bg-background rounded-lg border p-3">
+                <div className="text-center text-xs text-muted-foreground pb-2 border-b mb-3 font-medium">
+                  Area panggung / layar utama
+                </div>
+
+                <div className="grid grid-cols-5 sm:grid-cols-8 gap-1.5 max-h-48 overflow-y-auto p-1">
+                  {tierSeats.map((seat) => {
+                    const isOccupied = occupiedSet.has(seat.toUpperCase());
+                    const isSelected = selectedSeats.includes(seat.toUpperCase());
+
+                    return (
+                      <button
+                        key={seat}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => handleToggleSeat(seat)}
+                        title={isOccupied ? `Kursi ${seat} sudah terisi` : `Pilih kursi ${seat}`}
+                        className={`h-8 rounded text-xs font-mono font-medium transition-colors flex items-center justify-center ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground shadow-xs font-semibold ring-2 ring-primary ring-offset-1"
+                            : isOccupied
+                            ? "bg-muted text-muted-foreground/40 border border-muted cursor-not-allowed line-through"
+                            : "bg-card border border-border hover:border-primary/60 hover:bg-primary/5 text-foreground cursor-pointer"
+                        }`}
+                      >
+                        {seat}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-3 border-t mt-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-3 rounded border border-border bg-card" />
+                    <span>Tersedia</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-3 rounded bg-primary" />
+                    <span>Dipilih</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-3 rounded bg-muted border border-muted line-through" />
+                    <span>Terisi</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedSeats.length > 0 && (
+                <div className="text-xs text-foreground bg-card rounded border p-2 flex items-center justify-between">
+                  <span className="text-muted-foreground">Kursi pilihan Anda:</span>
+                  <span className="font-mono font-semibold text-primary">{selectedSeats.join(", ")}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Promo Code Input (for paid bookings) */}
           {subtotalPrice > 0 && (
             <div className="space-y-1.5">
-              <label className="font-medium text-foreground block">
+              <Label htmlFor="booking-promo-code" className="text-xs">
                 Kode promo (opsional)
-              </label>
+              </Label>
               <div className="relative">
-                <input
+                <Input
+                  id="booking-promo-code"
                   type="text"
                   value={form.promoCode || ""}
                   onChange={(e) => {
@@ -353,7 +508,7 @@ export function EventBookingDialog({
                     setForm((prev) => ({ ...prev, promoCode: val }));
                   }}
                   placeholder="Contoh: DISKON10 / VIPGUEST"
-                  className="w-full h-9 rounded-md border bg-background px-3 text-xs font-mono text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="h-9 text-xs font-mono"
                 />
               </div>
               {isValidatingPromo ? (
@@ -408,6 +563,7 @@ export function EventBookingDialog({
                 size="lg"
                 disabled={
                   isSubmitting ||
+                  isSeatSelectionIncomplete ||
                   (hasTiers &&
                     (!form.ticketTierId ||
                       !selectedTier ||
@@ -419,13 +575,16 @@ export function EventBookingDialog({
               >
                 {isSubmitting
                   ? "Memproses..."
-                  : totalPrice > 0
-                    ? "Lanjut ke pembayaran"
-                    : "Dapatkan tiket"}
+                  : isSeatSelectionIncomplete
+                    ? `Pilih ${form.ticketCount - selectedSeats.length} kursi lagi`
+                    : totalPrice > 0
+                      ? "Lanjut ke pembayaran"
+                      : "Dapatkan tiket"}
               </Button>
             </DialogFooter>
           </div>
-        </form>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -5,10 +5,16 @@ import {
   getPersistentQrisSession,
   isVerifiedQrisStatus,
   mutatePersistentOrders,
+  readPersistentDomainState,
   readSeededPersistentData,
   savePersistentQrisSession,
   upsertOrderInList,
 } from "@/lib/persistent-storage";
+import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
+import {
+  findBlockedOrderTenant,
+  formatBlockedTenantError,
+} from "@/lib/tenant-order-guard";
 import { POS_PRODUCTS } from "@/features/pos/mock-data";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import { calculateOrderPricing } from "@/lib/promo";
@@ -288,6 +294,18 @@ export async function POST(req: NextRequest) {
     });
 
     const subtotal = sanitizedItems.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
+
+    const tenantsState = await readPersistentDomainState(tenantsDomainSpec);
+    const blockedTenant = findBlockedOrderTenant(sanitizedItems, tenantsState.profiles);
+    if (blockedTenant.blocked) {
+      return NextResponse.json(
+        {
+          error: formatBlockedTenantError(blockedTenant),
+          code: "TENANT_BLOCKED",
+        },
+        { status: 403 }
+      );
+    }
     const orderType: OrderRecord["orderType"] =
       rawOrder.orderType === "TAKEAWAY" || rawOrder.orderType === "DELIVERY"
         ? rawOrder.orderType

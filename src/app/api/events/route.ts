@@ -17,7 +17,11 @@ import {
   isCheckInStaffRole,
   CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
 } from "@/lib/event-validation";
-import { getOrganizerByEmail, createOrganizer } from "@/lib/organizers";
+import {
+  getOrganizerByEmail,
+  createOrganizer,
+  isTenantOwnerEmailAsync,
+} from "@/lib/organizers";
 import { createOrganizerSession } from "@/lib/organizer-activation";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 import { decideSubmitterAccount } from "@/lib/event-submitter-account";
@@ -149,6 +153,16 @@ export async function POST(req: NextRequest) {
     });
     if (decision.kind === "reject") {
       return NextResponse.json({ success: false, error: decision.error }, { status: decision.status });
+    }
+
+    if (await isTenantOwnerEmailAsync(normalizedEmail)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Email tersebut sudah terdaftar sebagai akun pemilik mitra. Gunakan email lain.",
+        },
+        { status: 409 }
+      );
     }
 
     // 6. Create submission with status PENDING

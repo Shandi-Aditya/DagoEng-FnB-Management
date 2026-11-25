@@ -172,7 +172,7 @@ describe("QR Code Scanner Hardening & Event Check-in Suite", () => {
           seatNumber: 1,
           bypassWindow: true,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       // Pastikan kuota tidak bertambah
       const bookings = await getEventBookings(eventId);

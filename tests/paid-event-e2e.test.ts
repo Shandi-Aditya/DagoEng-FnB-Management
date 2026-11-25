@@ -381,7 +381,7 @@ describe("TASK S-07 — End-to-End Paid Event Lifecycle Test Suite", () => {
           currentTimestamp: operationalTimestamp,
           enforceDateWindow: true,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       // Verifikasi kehadiran tidak bertambah
       const verified = await getBookingById(booking.id);
@@ -444,7 +444,7 @@ describe("TASK S-07 — End-to-End Paid Event Lifecycle Test Suite", () => {
           currentTimestamp: operationalTimestamp,
           enforceDateWindow: true,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
   });
 
@@ -553,7 +553,7 @@ describe("TASK S-07 — End-to-End Paid Event Lifecycle Test Suite", () => {
       }
 
       expect(thrownError).not.toBeNull();
-      expect(thrownError?.message).toMatch(/sudah digunakan untuk check-in sebelumnya/);
+      expect(thrownError?.message).toMatch(/sudah dipakai, check-in pukul/i);
 
       // Verifikasi state booking di database tidak terkorupsi setelah penolakan
       const freshBooking = await getBookingById(booking.id);

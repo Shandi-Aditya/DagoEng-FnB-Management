@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Building2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { notify } from "@/components/app/notify";
 import { Button } from "@/components/ui/button";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
-import { useDateFilter } from "@/contexts/DateFilterContext";
+import { getTodayWitaDateString, useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { useOrders } from "@/contexts/OrderContext";
@@ -25,20 +25,33 @@ import {
   extractAvailableReportCompanies,
   filterReportRows,
   getReportCategories,
+  getWeeklySettlementPeriod,
   isSettledPaidOrder,
   projectOrdersForTenant,
+  recalculateReportSummaryCards,
+  type MdrBearerMode,
   type ReportType,
 } from "@/features/reports/reports-domain";
+import {
+  buildSettlementReportDataset,
+  calculateConsolidatedWeeklySettlement,
+  calculateWeeklyTenantSettlement,
+  fetchWeeklySettlementStatuses,
+  getSettlementPaymentStatus,
+  persistWeeklySettlementStatus,
+  shiftWeeklyPeriodDate,
+  type SettlementActionDirection,
+  type SettlementPaymentStatus,
+} from "@/features/reports/settlement-weekly-domain";
 import { analyzeTransactionDiscrepancies } from "@/features/reports/reconciliation-domain";
 import StructuredReportPDFModal from "@/features/reports/StructuredReportPDFModal";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { exportTransactionReportExcel } from "@/lib/transaction-export-template";
-import { calculateSettlement } from "@/lib/settlement";
 import type { EventTicketOrder } from "@/types/event";
 
 export default function ReportsPage() {
   const { formattedRangeLabel, startDate, endDate, isDateInRange } = useDateFilter();
-  const { activeOutlet, activeOutletId } = useOutlet();
+  const { activeOutlet, activeOutletId, allOutlets } = useOutlet();
   const { user } = useAuth();
   const { orders } = useOrders();
   const { bookings: coworkingBookings } = useCoworking();
@@ -55,6 +68,20 @@ export default function ReportsPage() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>("ALL");
+  const [mdrBearer, setMdrBearer] = useState<MdrBearerMode>("MITRA");
+  const [settlementReferenceDate, setSettlementReferenceDate] = useState<string>(() =>
+    getTodayWitaDateString()
+  );
+  const [settlementRefreshTrigger, setSettlementRefreshTrigger] = useState(0);
+  const [pendingSettlementAction, setPendingSettlementAction] = useState<{
+    tenantId: string;
+    tenantName: string;
+    nextStatus: SettlementPaymentStatus;
+    direction: SettlementActionDirection;
+    actionLabel: string;
+  } | null>(null);
+  const [isUpdatingSettlementStatus, setIsUpdatingSettlementStatus] = useState(false);
+  const isUpdatingSettlementRef = useRef(false);
 
   const isTenantScope = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
   const tenantId = isTenantScope ? user?.tenant?.id : undefined;
@@ -66,24 +93,80 @@ export default function ReportsPage() {
   const roleSlug = user?.role?.slug || (typeof user?.role === "string" ? user.role : "");
   const canViewUnmaskedEvents =
     roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
+  const canManageWeeklySettlement =
+    roleSlug === "SUPER_ADMIN" || (roleSlug === "OWNER" && !isTenantScope);
+
+  const selectedSettlementPeriod = useMemo(
+    () => getWeeklySettlementPeriod(settlementReferenceDate),
+    [settlementReferenceDate]
+  );
+  const currentWeekKey = useMemo(
+    () => getWeeklySettlementPeriod(getTodayWitaDateString()).periodKey,
+    []
+  );
+  const lastWeekRefDate = useMemo(
+    () => shiftWeeklyPeriodDate(getTodayWitaDateString(), -1),
+    []
+  );
+  const lastWeekKey = useMemo(
+    () => getWeeklySettlementPeriod(lastWeekRefDate).periodKey,
+    [lastWeekRefDate]
+  );
 
   useEffect(() => {
-    if (canAccessEvents) {
-      const endpoint = canViewUnmaskedEvents
-        ? "/api/events/bookings?unmasked=true"
-        : "/api/events/bookings";
-      fetch(endpoint)
-        .then((res) => res.json())
-        .then((json) => {
-          if (json.success && json.data) {
-            setEventBookings(json.data);
-          }
-        })
-        .catch(() => {});
-    } else {
+    if (!canAccessEvents) {
       setEventBookings([]);
+      return;
     }
+    let cancelled = false;
+    const endpoint = canViewUnmaskedEvents
+      ? "/api/events/bookings?unmasked=true"
+      : "/api/events/bookings";
+    fetch(endpoint)
+      .then(async (res) => {
+        const json = (await res.json().catch(() => null)) as
+          | { success?: boolean; data?: EventTicketOrder[]; error?: string }
+          | null;
+        if (!res.ok || !json?.success || !Array.isArray(json.data)) {
+          throw new Error(json?.error || "Gagal memuat data tiket event.");
+        }
+        if (!cancelled) {
+          setEventBookings(json.data);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          notify.error(
+            "Gagal memuat data tiket event",
+            err instanceof Error ? err.message : "Periksa koneksi lalu muat ulang halaman."
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [canAccessEvents, canViewUnmaskedEvents]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchWeeklySettlementStatuses(selectedSettlementPeriod.periodKey)
+      .then(() => {
+        if (!cancelled) {
+          setSettlementRefreshTrigger((prev) => prev + 1);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          notify.error(
+            "Gagal memuat status settlement",
+            err instanceof Error ? err.message : "Periksa koneksi lalu muat ulang halaman."
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSettlementPeriod.periodKey]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -99,6 +182,13 @@ export default function ReportsPage() {
       ? projectOrdersForTenant(outletAndDateOrders, tenantId)
       : outletAndDateOrders;
   }, [orders, activeOutletId, isDateInRange, tenantId]);
+
+  const settlementScopedOrders = useMemo(() => {
+    const outletOrders = orders.filter(
+      (o) => activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId
+    );
+    return tenantId ? projectOrdersForTenant(outletOrders, tenantId) : outletOrders;
+  }, [orders, activeOutletId, tenantId]);
 
   const reconciliationOrders = useMemo(() => {
     const outletAndDateOrRefundOrders = orders.filter(
@@ -202,9 +292,40 @@ export default function ReportsPage() {
       !b.billedViaPosOrder
   ).length;
   const settlementRowsCount = useMemo(() => {
-    const rows = calculateSettlement(filteredOrders);
-    return tenantId ? rows.filter((s) => s.tenantId === tenantId).length : rows.length;
-  }, [filteredOrders, tenantId]);
+    void settlementRefreshTrigger;
+    return buildSettlementReportDataset({
+      scopeName,
+      orders: settlementScopedOrders,
+      tenantId,
+      mdrBearer,
+      referenceDate: settlementReferenceDate,
+      outlets: allOutlets,
+    }).tableRows.length;
+  }, [
+    settlementRefreshTrigger,
+    scopeName,
+    settlementScopedOrders,
+    tenantId,
+    mdrBearer,
+    settlementReferenceDate,
+    allOutlets,
+  ]);
+
+  const consolidatedSettlementRowsCount = useMemo(() => {
+    void settlementRefreshTrigger;
+    return calculateConsolidatedWeeklySettlement(settlementScopedOrders, {
+      mdrBearer,
+      referenceDate: settlementReferenceDate,
+      outlets: allOutlets,
+      includeInternal: true,
+    }).tenants.length;
+  }, [
+    settlementRefreshTrigger,
+    settlementScopedOrders,
+    mdrBearer,
+    settlementReferenceDate,
+    allOutlets,
+  ]);
 
   const voidRefundDiscountCount = useMemo(
     () =>
@@ -230,7 +351,15 @@ export default function ReportsPage() {
       reconAnalysis.discrepancies.length + pendingCoworkingQrisCount + discountedCoworkingCount,
     voidRefundDiscountCount,
     isTenantScope,
-  });
+  }).map((cat) =>
+    cat.id === "SETTLEMENT_CONSOLIDATED"
+      ? {
+          ...cat,
+          count: `${consolidatedSettlementRowsCount} Tenant`,
+          rawCount: consolidatedSettlementRowsCount,
+        }
+      : cat
+  );
 
   useEffect(() => {
     if (!categories.some((c) => c.id === selectedReportType)) {
@@ -244,43 +373,153 @@ export default function ReportsPage() {
     ? selectedReportType
     : "SALES";
 
+  const isWeeklySettlementView =
+    effectiveReportType === "SETTLEMENT" || effectiveReportType === "SETTLEMENT_CONSOLIDATED";
+
+  const activePeriodLabel = isWeeklySettlementView
+    ? selectedSettlementPeriod.periodLabel
+    : formattedRangeLabel;
+
   const availableCompanies = useMemo(
     () => extractAvailableReportCompanies(orders, coworkingBookings),
     [orders, coworkingBookings]
   );
 
-  const currentReport = buildReportData({
-    type: effectiveReportType,
-    scopeName,
-    orders:
-      effectiveReportType === "RECONCILIATION" || effectiveReportType === "VOID_REFUND_DISCOUNT"
+  const currentReport = useMemo(() => {
+    void settlementRefreshTrigger;
+    return buildReportData({
+      type: effectiveReportType,
+      scopeName,
+      orders: isWeeklySettlementView
+        ? settlementScopedOrders
+        : effectiveReportType === "RECONCILIATION" || effectiveReportType === "VOID_REFUND_DISCOUNT"
         ? reconciliationOrders
         : filteredOrders,
-    products: filteredProducts,
-    shifts: filteredShifts,
-    ingredients: filteredMaterials,
-    logs: effectiveReportType === "VOID_REFUND_DISCOUNT" ? logs : filteredFinanceLogs,
-    promos: settings.promos,
-    eventBookings: filteredEventBookings,
-    coworkingBookings: filteredCoworkingBookings,
+      products: filteredProducts,
+      shifts: filteredShifts,
+      ingredients: filteredMaterials,
+      logs: effectiveReportType === "VOID_REFUND_DISCOUNT" ? logs : filteredFinanceLogs,
+      promos: settings.promos,
+      eventBookings: filteredEventBookings,
+      coworkingBookings: filteredCoworkingBookings,
+      tenantId,
+      operatorName: user?.name,
+      isTimestampInRange: isDateInRange,
+      companyName: selectedCompany,
+      mdrBearer,
+      referenceDate: settlementReferenceDate,
+      outlets: allOutlets,
+    });
+  }, [
+    settlementRefreshTrigger,
+    effectiveReportType,
+    scopeName,
+    isWeeklySettlementView,
+    settlementScopedOrders,
+    reconciliationOrders,
+    filteredOrders,
+    filteredProducts,
+    filteredShifts,
+    filteredMaterials,
+    logs,
+    filteredFinanceLogs,
+    settings.promos,
+    filteredEventBookings,
+    filteredCoworkingBookings,
     tenantId,
-    operatorName: user?.name,
-    isTimestampInRange: isDateInRange,
-    companyName: selectedCompany,
-  });
+    user?.name,
+    isDateInRange,
+    selectedCompany,
+    mdrBearer,
+    settlementReferenceDate,
+    allOutlets,
+  ]);
+
+  const handleRequestToggleSettlementStatus = (targetTenantId: string) => {
+    if (!canManageWeeklySettlement) return;
+    const weekly = calculateWeeklyTenantSettlement(settlementScopedOrders, targetTenantId, {
+      referenceDate: settlementReferenceDate,
+      mdrBearer,
+      outlets: allOutlets,
+    });
+    const current = getSettlementPaymentStatus(selectedSettlementPeriod.periodKey, targetTenantId);
+    const nextStatus: SettlementPaymentStatus = current.status === "PAID" ? "PENDING" : "PAID";
+    setPendingSettlementAction({
+      tenantId: weekly.tenantId,
+      tenantName: weekly.tenantName,
+      nextStatus,
+      direction: weekly.actionDirection,
+      actionLabel: weekly.actionLabel,
+    });
+  };
+
+  const handleConfirmToggleSettlementStatus = async () => {
+    if (!pendingSettlementAction || isUpdatingSettlementRef.current) return;
+    const target = pendingSettlementAction;
+    isUpdatingSettlementRef.current = true;
+    setIsUpdatingSettlementStatus(true);
+    try {
+      const result = await persistWeeklySettlementStatus({
+        periodKey: selectedSettlementPeriod.periodKey,
+        tenantId: target.tenantId,
+        status: target.nextStatus,
+        direction: target.direction,
+        notes: `Diperbarui dari halaman laporan (${target.actionLabel})`,
+      });
+
+      if (!result.success) {
+        notify.error(
+          "Gagal menyimpan status settlement",
+          result.error || "Periksa izin akses dan coba lagi."
+        );
+        setPendingSettlementAction(target);
+        return;
+      }
+
+      setSettlementRefreshTrigger((prev) => prev + 1);
+      setPendingSettlementAction(null);
+      if (target.nextStatus === "PAID") {
+        notify.success(
+          "Settlement ditandai lunas",
+          `${target.tenantName} · ${selectedSettlementPeriod.periodLabel}`
+        );
+      } else {
+        notify.info(
+          "Status settlement dikembalikan",
+          `${target.tenantName} · Belum lunas`
+        );
+      }
+    } catch (err) {
+      notify.error(
+        "Gagal menyimpan status settlement",
+        err instanceof Error ? err.message : "Periksa koneksi lalu coba lagi."
+      );
+      setPendingSettlementAction(target);
+    } finally {
+      isUpdatingSettlementRef.current = false;
+      setIsUpdatingSettlementStatus(false);
+    }
+  };
 
   const exportableReportRows = useMemo(
     () => filterReportRows(currentReport.tableRows, searchQuery),
     [currentReport.tableRows, searchQuery]
   );
 
-  const exportableReportData = useMemo(
-    () => ({
+  const exportableReportData = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return currentReport;
+    }
+    return {
       ...currentReport,
+      summaryCards: recalculateReportSummaryCards(
+        currentReport,
+        exportableReportRows,
+        effectiveReportType
+      ),
       tableRows: exportableReportRows,
-    }),
-    [currentReport, exportableReportRows]
-  );
+    };
+  }, [currentReport, exportableReportRows, searchQuery, effectiveReportType]);
 
   const handleSelectReportType = (nextType: ReportType) => {
     setSelectedReportType(nextType);
@@ -369,7 +608,7 @@ export default function ReportsPage() {
       <div className="flex flex-col gap-4">
         <ReportsToolbar
           scopeName={scopeName}
-          periodLabel={formattedRangeLabel}
+          periodLabel={activePeriodLabel}
           isTemplateXlsx={effectiveReportType === "SALES"}
           onExportExcel={handleExportExcel}
           onExportCSV={handleExportCSV}
@@ -381,13 +620,78 @@ export default function ReportsPage() {
           selectedType={effectiveReportType}
           onSelectType={handleSelectReportType}
         />
+
+        {isWeeklySettlementView && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
+            <div className="flex items-center gap-2.5 text-sm">
+              <Calendar className="size-4 text-muted-foreground" aria-hidden />
+              <div>
+                <p className="font-medium text-foreground">
+                  Periode minggu: {selectedSettlementPeriod.periodLabel}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Batas setor/transfer: {selectedSettlementPeriod.paymentDueLabel}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedSettlementPeriod.periodKey === lastWeekKey ? "secondary" : "outline"}
+                onClick={() => {
+                  setSettlementReferenceDate(lastWeekRefDate);
+                  setCurrentPage(1);
+                }}
+              >
+                Minggu lalu
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedSettlementPeriod.periodKey === currentWeekKey ? "secondary" : "outline"}
+                onClick={() => {
+                  setSettlementReferenceDate(getTodayWitaDateString());
+                  setCurrentPage(1);
+                }}
+              >
+                Minggu ini
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                aria-label="Minggu sebelumnya"
+                onClick={() => {
+                  setSettlementReferenceDate((prev) => shiftWeeklyPeriodDate(prev, -1));
+                  setCurrentPage(1);
+                }}
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                aria-label="Minggu berikutnya"
+                onClick={() => {
+                  setSettlementReferenceDate((prev) => shiftWeeklyPeriodDate(prev, 1));
+                  setCurrentPage(1);
+                }}
+              >
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <ReportsPreviewTable
-        report={currentReport}
+        report={{ ...currentReport, summaryCards: exportableReportData.summaryCards }}
         reportType={effectiveReportType}
         scopeName={scopeName}
-        periodLabel={formattedRangeLabel}
+        periodLabel={activePeriodLabel}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         currentPage={currentPage}
@@ -410,6 +714,19 @@ export default function ReportsPage() {
               }
             : undefined
         }
+        mdrBearerFilter={
+          isWeeklySettlementView
+            ? {
+                selected: mdrBearer,
+                onChange: (mode) => setMdrBearer(mode),
+              }
+            : undefined
+        }
+        onToggleSettlementStatus={
+          canManageWeeklySettlement && isWeeklySettlementView
+            ? handleRequestToggleSettlementStatus
+            : undefined
+        }
       />
 
       {isPDFModalOpen && (
@@ -418,11 +735,41 @@ export default function ReportsPage() {
           onClose={() => setIsPDFModalOpen(false)}
           reportType={effectiveReportType}
           outletName={scopeName}
-          periodLabel={formattedRangeLabel}
+          periodLabel={activePeriodLabel}
           generatedBy={user?.name || "Staf operasional"}
           data={exportableReportData}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingSettlementAction)}
+        onOpenChange={(open) => {
+          if (!open && !isUpdatingSettlementRef.current) {
+            setPendingSettlementAction(null);
+          }
+        }}
+        title={
+          pendingSettlementAction?.nextStatus === "PAID"
+            ? "Tandai settlement lunas?"
+            : "Kembalikan status ke belum lunas?"
+        }
+        description={
+          pendingSettlementAction?.nextStatus === "PAID"
+            ? `Catat pelunasan settlement ${pendingSettlementAction.tenantName} untuk periode ${selectedSettlementPeriod.periodLabel} (${pendingSettlementAction.actionLabel}).`
+            : `Kembalikan status settlement ${pendingSettlementAction?.tenantName || "mitra"} periode ${selectedSettlementPeriod.periodLabel} menjadi belum lunas.`
+        }
+        confirmLabel={
+          isUpdatingSettlementStatus
+            ? "Menyimpan..."
+            : pendingSettlementAction?.nextStatus === "PAID"
+            ? "Tandai lunas"
+            : "Kembalikan status"
+        }
+        destructive={pendingSettlementAction?.nextStatus === "PENDING"}
+        onConfirm={() => {
+          void handleConfirmToggleSettlementStatus();
+        }}
+      />
     </div>
   );
 }

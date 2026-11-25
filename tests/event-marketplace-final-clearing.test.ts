@@ -119,7 +119,7 @@ describe("EVENT MARKETPLACE FINAL CLEARING — END-TO-END VERIFICATION", () => {
         // Third increment should fail (exceeding 2)
         await expect(
           updateBookingCheckIn(multiTicketBooking.id, "CHECKED_IN", { incrementQty: 1 })
-        ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+        ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
       } finally {
         saveBookingsToDisk(bookings);
       }
@@ -144,7 +144,7 @@ describe("EVENT MARKETPLACE FINAL CLEARING — END-TO-END VERIFICATION", () => {
         expect(fulfilled.length).toBe(1);
         expect(rejected.length).toBe(1);
         if (rejected[0].status === "rejected") {
-          expect(rejected[0].reason.message).toContain("Tiket sudah digunakan untuk check-in sebelumnya");
+          expect(rejected[0].reason.message).toMatch(/sudah dipakai, check-in pukul/i);
         }
 
         // Verify final state in disk

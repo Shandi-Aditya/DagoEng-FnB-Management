@@ -17,7 +17,7 @@ import {
   type POSPrintingSettings,
   type PrinterDeviceConfig,
 } from "@/types/printer";
-import type { FnbPartnerInfo, TenantProfileData } from "@/lib/tenant";
+import type { FnbPartnerInfo, TenantProfileData, TenantStatus, TenantPartnerType } from "@/lib/tenant";
 import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 import type {
   WifiCalculationBasis,
@@ -66,6 +66,7 @@ export type ConfigSyncDomainName =
 export const STORAGE_KEY_PLATFORM_SETTINGS = "dagoeng_platform_settings_v1";
 export const STORAGE_KEY_TENANT_SETTINGS = "dagoeng_tenant_settings_v1";
 export const STORAGE_KEY_CUSTOM_TENANTS = "dago_custom_tenants";
+export const STORAGE_KEY_TENANT_REVENUE_SPLITS = "dagoeng_tenant_revenue_splits_v1";
 export const STORAGE_KEY_WIFI_FNB_RULES = "dagoeng_wifi_fnb_rules_v1";
 export const STORAGE_KEY_WIFI_CW_RULES = "dagoeng_wifi_cw_rules_v1";
 export const STORAGE_KEY_WIFI_VOUCHERS = "dagoeng_wifi_vouchers_v1";
@@ -115,12 +116,24 @@ export const SEED_FNB_TENANTS: FnbPartnerInfo[] = [
   },
 ];
 
+function getTodayWitaDateKey(referenceDate: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(referenceDate);
+}
+
 export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = {
   "tenant-ks": {
     brandName: "Kopi Senja",
     tagline: "Specialty Coffee & Beverages",
     description: "Single origin espresso blend Kintamani, olahan susu segar & gula aren organik Bali.",
+    contactPerson: "Budi Santoso",
     contactPhone: OFFICIAL_CS_DISPLAY_PHONE,
+    contactEmail: "kopisenja@dagocreative.id",
+    npwp: "01.234.567.8-012.000",
     receiptHeader: "Kopi Senja — Specialty Coffee & Beverages",
     receiptFooter: "Terima kasih telah berkunjung ke Kopi Senja!",
     lowStockThresholdPercent: 35,
@@ -128,12 +141,20 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     bankAccountNumber: "8830192841",
     bankAccountHolder: "Kopi Senja Utama",
     status: "ACTIVE",
+    partnerType: "EXTERNAL",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2025-12-31",
+    contractPksNumber: "PKS/DCH/2024/001",
+    contractPksFile: "pks-kopi-senja-2024.pdf",
   },
   "tenant-kitchen": {
     brandName: "Dapur Mama",
     tagline: "Masakan Rumahan & Hidangan Utama",
     description: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
+    contactPerson: "Siti Rahmawati",
     contactPhone: "+62 813-2233-4411",
+    contactEmail: "dapurmama@dagocreative.id",
+    npwp: "02.345.678.9-013.000",
     receiptHeader: "Dapur Mama — Masakan Rumahan Lezat",
     receiptFooter: "Selamat menikmati sajian khas Dapur Mama!",
     lowStockThresholdPercent: 30,
@@ -141,12 +162,20 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     bankAccountNumber: "1420019283741",
     bankAccountHolder: "Dapur Mama Kuliner",
     status: "ACTIVE",
+    partnerType: "EXTERNAL",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2025-12-31",
+    contractPksNumber: "PKS/DCH/2024/002",
+    contractPksFile: "pks-dapur-mama-2024.pdf",
   },
   "tenant-bakery": {
     brandName: "Manis Bakery",
     tagline: "Roti, Kue & Pastry Segar",
     description: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
+    contactPerson: "Dewi Lestari",
     contactPhone: "+62 812-9988-7766",
+    contactEmail: "manisbakery@dagocreative.id",
+    npwp: "03.456.789.0-014.000",
     receiptHeader: "Manis Bakery — Fresh Baked Daily",
     receiptFooter: "Terima kasih telah berbelanja di Manis Bakery!",
     lowStockThresholdPercent: 25,
@@ -154,12 +183,20 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     bankAccountNumber: "7720194821",
     bankAccountHolder: "Manis Bakery Artisan",
     status: "ACTIVE",
+    partnerType: "EXTERNAL",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2025-12-31",
+    contractPksNumber: "PKS/DCH/INT/2024/001",
+    contractPksFile: "pks-manis-bakery-internal.pdf",
   },
   "tenant-tea": {
     brandName: "Warung Bu Narti",
     tagline: "Kuliner Tradisional & Minuman Nusantara",
     description: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
+    contactPerson: "Ni Made Narti",
     contactPhone: "+62 817-4455-6677",
+    contactEmail: "warungbunarti@dagocreative.id",
+    npwp: "04.567.890.1-015.000",
     receiptHeader: "Warung Bu Narti — Cita Rasa Nusantara",
     receiptFooter: "Matur suksma sampun mampir ring Warung Bu Narti!",
     lowStockThresholdPercent: 30,
@@ -167,6 +204,11 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     bankAccountNumber: "002101928374501",
     bankAccountHolder: "Warung Bu Narti",
     status: "ACTIVE",
+    partnerType: "EXTERNAL",
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2025-12-31",
+    contractPksNumber: "PKS/DCH/2024/004",
+    contractPksFile: "pks-warung-bu-narti-2024.pdf",
   },
 };
 
@@ -1066,8 +1108,8 @@ export function buildTenantProfileWithDefaults(
   const fnbInfo =
     SEED_FNB_TENANTS.find((t) => t.id === tenantId) ||
     customTenants.find((t) => t.id === tenantId) || {
-      id: tenantId,
-      code: tenantId.toUpperCase(),
+      id: tenantId || "unknown",
+      code: (tenantId || "UNKNOWN").toUpperCase(),
       name: tenantId,
       tagline: "Mitra Resmi Dago Creative Hub",
       desc: "Mitra kuliner terdaftar di Dago Creative Hub.",
@@ -1079,7 +1121,10 @@ export function buildTenantProfileWithDefaults(
     brandName: fnbInfo.name,
     tagline: fnbInfo.tagline,
     description: fnbInfo.desc,
+    contactPerson: "—",
     contactPhone: OFFICIAL_CS_DISPLAY_PHONE,
+    contactEmail: "—",
+    npwp: "—",
     receiptHeader: `${fnbInfo.name} — ${fnbInfo.tagline}`,
     receiptFooter: `Terima kasih telah berkunjung ke ${fnbInfo.name}!`,
     lowStockThresholdPercent: 30,
@@ -1087,7 +1132,22 @@ export function buildTenantProfileWithDefaults(
     bankAccountNumber: "-",
     bankAccountHolder: "-",
     status: "ACTIVE" as const,
+    partnerType: "EXTERNAL" as const,
+    contractStartDate: "2024-01-01",
+    contractEndDate: "2025-12-31",
+    contractPksNumber: `PKS/DCH/${new Date().getFullYear()}/${tenantId.replace(/\D+/g, "") || "001"}`,
+    contractPksFile: `pks-${tenantId}.pdf`,
+    lastSettlementDepositDate: getTodayWitaDateKey(),
   };
+
+  const status: TenantStatus =
+    partial?.status === "SUSPENDED"
+      ? "SUSPENDED"
+      : partial?.status === "INACTIVE"
+      ? "INACTIVE"
+      : partial?.status === "ACTIVE"
+      ? "ACTIVE"
+      : def.status || "ACTIVE";
 
   if (partial) {
     return {
@@ -1096,6 +1156,9 @@ export function buildTenantProfileWithDefaults(
       tagline: partial.tagline || def.tagline || "",
       description: partial.description || def.description || "",
       contactPhone: partial.contactPhone || def.contactPhone || "",
+      contactPerson: partial.contactPerson || def.contactPerson || "",
+      contactEmail: partial.contactEmail || def.contactEmail || "",
+      npwp: partial.npwp || def.npwp || "",
       receiptHeader: partial.receiptHeader || def.receiptHeader || "",
       receiptFooter: partial.receiptFooter || def.receiptFooter || "",
       lowStockThresholdPercent:
@@ -1109,7 +1172,15 @@ export function buildTenantProfileWithDefaults(
           : def.bankAccountNumber || "",
       bankAccountHolder:
         partial.bankAccountHolder || def.bankAccountHolder || "",
-      status: partial.status === "INACTIVE" ? "INACTIVE" : def.status || "ACTIVE",
+      status,
+      partnerType: partial.partnerType || def.partnerType || "EXTERNAL",
+      contractStartDate: partial.contractStartDate || def.contractStartDate || "",
+      contractEndDate: partial.contractEndDate || def.contractEndDate || "",
+      contractPksNumber: partial.contractPksNumber || def.contractPksNumber || "",
+      contractPksFile: partial.contractPksFile || def.contractPksFile || "",
+      lastSettlementDepositDate:
+        partial.lastSettlementDepositDate || def.lastSettlementDepositDate || getTodayWitaDateKey(),
+      suspendedReason: partial.suspendedReason || def.suspendedReason || "",
     };
   }
 
@@ -1119,6 +1190,9 @@ export function buildTenantProfileWithDefaults(
     tagline: def.tagline || "",
     description: def.description || "",
     contactPhone: def.contactPhone || "",
+    contactPerson: def.contactPerson || "",
+    contactEmail: def.contactEmail || "",
+    npwp: def.npwp || "",
     receiptHeader: def.receiptHeader || "",
     receiptFooter: def.receiptFooter || "",
     lowStockThresholdPercent: def.lowStockThresholdPercent || 30,
@@ -1126,17 +1200,33 @@ export function buildTenantProfileWithDefaults(
     bankAccountNumber: def.bankAccountNumber || "",
     bankAccountHolder: def.bankAccountHolder || "",
     status: def.status || "ACTIVE",
+    partnerType: def.partnerType || "EXTERNAL",
+    contractStartDate: def.contractStartDate || "",
+    contractEndDate: def.contractEndDate || "",
+    contractPksNumber: def.contractPksNumber || "",
+    contractPksFile: def.contractPksFile || "",
+    lastSettlementDepositDate: def.lastSettlementDepositDate || getTodayWitaDateKey(),
+    suspendedReason: def.suspendedReason || "",
   };
 }
 
 export function defaultTenantsState(): TenantsDomainState {
+  const todayWita = getTodayWitaDateKey();
   const profiles: Record<string, TenantProfileData> = {};
   for (const tenant of SEED_FNB_TENANTS) {
-    profiles[tenant.id] = buildTenantProfileWithDefaults(tenant.id);
+    profiles[tenant.id] = buildTenantProfileWithDefaults(tenant.id, {
+      lastSettlementDepositDate: todayWita,
+    });
   }
   return {
     customTenants: [],
     profiles,
+    revenueSplits: {
+      "tenant-ks": { tenantId: "tenant-ks", tenantName: "Kopi Senja", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
+      "tenant-kitchen": { tenantId: "tenant-kitchen", tenantName: "Dapur Mama", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
+      "tenant-bakery": { tenantId: "tenant-bakery", tenantName: "Manis Bakery", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
+      "tenant-tea": { tenantId: "tenant-tea", tenantName: "Warung Bu Narti", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
+    },
   };
 }
 
@@ -1152,7 +1242,8 @@ export function maskTenantBankAccountNumber(raw?: string): string {
 
 export function applyTenantsCommand(
   current: TenantsDomainState,
-  command: TenantsCommand
+  command: TenantsCommand,
+  auth?: ServerAuthResult
 ): TenantsDomainState {
   switch (command.op) {
     case "UPSERT_CUSTOM_TENANT": {
@@ -1172,18 +1263,37 @@ export function applyTenantsCommand(
     case "UPSERT_PROFILE": {
       const tid = command.profile.tenantId;
       const existing = current.profiles[tid];
-      const preservedBankNumber =
-        command.profile.bankAccountNumber?.includes("•") &&
-        existing?.bankAccountNumber &&
-        !existing.bankAccountNumber.includes("•")
+      const isAdmin = auth ? isSuperAdminOrOrgOwner(auth) : true;
+      const preservedBankNumber = !isAdmin
+        ? existing?.bankAccountNumber ?? ""
+        : command.profile.bankAccountNumber?.includes("•") &&
+            existing?.bankAccountNumber &&
+            !existing.bankAccountNumber.includes("•")
           ? existing.bankAccountNumber
           : command.profile.bankAccountNumber;
+      const safeProfile = isAdmin
+        ? command.profile
+        : {
+            ...command.profile,
+            status: existing?.status || "ACTIVE",
+            suspendedReason: existing?.suspendedReason,
+            lastSettlementDepositDate: existing?.lastSettlementDepositDate,
+            partnerType: existing?.partnerType || "EXTERNAL",
+            contractStartDate: existing?.contractStartDate,
+            contractEndDate: existing?.contractEndDate,
+            contractPksNumber: existing?.contractPksNumber,
+            contractPksFile: existing?.contractPksFile,
+            bankName: existing?.bankName ?? "",
+            bankAccountNumber: existing?.bankAccountNumber ?? "",
+            bankAccountHolder: existing?.bankAccountHolder ?? "",
+            npwp: existing?.npwp,
+          };
 
       const merged = buildTenantProfileWithDefaults(
         tid,
         {
           ...(existing || {}),
-          ...command.profile,
+          ...safeProfile,
           bankAccountNumber: preservedBankNumber,
         },
         current.customTenants
@@ -1209,6 +1319,28 @@ export function applyTenantsCommand(
             ...existing,
             tenantId: tid,
             status: command.status,
+            suspendedReason:
+              command.status === "SUSPENDED"
+                ? command.reason || existing.suspendedReason || "Mitra ditangguhkan oleh sistem."
+                : undefined,
+            lastSettlementDepositDate:
+              command.status === "ACTIVE"
+                ? getTodayWitaDateKey()
+                : existing.lastSettlementDepositDate,
+          },
+        },
+      };
+    }
+    case "SET_REVENUE_SPLIT": {
+      const tid = command.tenantId;
+      return {
+        ...current,
+        revenueSplits: {
+          ...(current.revenueSplits || {}),
+          [tid]: {
+            ...command.split,
+            tenantId: tid,
+            updatedAt: command.split.updatedAt || new Date().toISOString(),
           },
         },
       };
@@ -1231,22 +1363,44 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
         if (isSuperAdminOrOrgOwner(auth)) {
           return state;
         }
+        const isHubManager =
+          auth.isAuthenticated &&
+          auth.role === "MANAGER" &&
+          (auth.scopeLevel === "ORGANIZATION" || auth.scopeLevel === "BUSINESS_UNIT") &&
+          !auth.tenantId;
         const maskedProfiles: Record<string, TenantProfileData> = {};
         for (const [tenantId, profile] of Object.entries(state.profiles || {})) {
-          const canReadRawBank =
+          const isOwnTenant =
             isTenantOwner(auth) && Boolean(auth.tenantId) && auth.tenantId === tenantId;
-          maskedProfiles[tenantId] = canReadRawBank
+          const rawBankAcc = (profile.bankAccountNumber || "").trim();
+          const maskedBankAcc = rawBankAcc && rawBankAcc !== "-" ? "••••••••" : "";
+          maskedProfiles[tenantId] = isOwnTenant
             ? { ...profile }
             : {
                 ...profile,
-                bankAccountNumber: maskTenantBankAccountNumber(
-                  profile.bankAccountNumber
-                ),
+                bankName: "",
+                bankAccountNumber: maskedBankAcc,
+                bankAccountHolder: "",
+                npwp: undefined,
+                contactPhone: profile.contactPhone ? "••••••••" : "",
+                contactEmail: undefined,
+                contactPerson: undefined,
+                contractStartDate: undefined,
+                contractEndDate: undefined,
+                contractPksNumber: undefined,
+                contractPksFile: undefined,
+                lastSettlementDepositDate: undefined,
+                suspendedReason: undefined,
               };
         }
         return {
           customTenants: (state.customTenants || []).map((t) => ({ ...t })),
           profiles: maskedProfiles,
+          revenueSplits: isHubManager
+            ? { ...state.revenueSplits }
+            : isTenantOwner(auth) && auth.tenantId && state.revenueSplits?.[auth.tenantId]
+              ? { [auth.tenantId]: state.revenueSplits[auth.tenantId] }
+              : {},
         };
       },
     };
@@ -1274,7 +1428,10 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
         };
       }
       case "SET_TENANT_STATUS": {
-        if (!command.tenantId || (command.status !== "ACTIVE" && command.status !== "INACTIVE")) {
+        if (
+          !command.tenantId ||
+          (command.status !== "ACTIVE" && command.status !== "INACTIVE" && command.status !== "SUSPENDED")
+        ) {
           return { allowed: false, status: 400, error: "Status mitra tidak valid." };
         }
         if (isSuperAdminOrOrgOwner(auth)) {
@@ -1284,6 +1441,19 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
           allowed: false,
           status: 403,
           error: "FORBIDDEN: Hanya Super Admin atau Owner organisasi yang dapat mengubah status mitra.",
+        };
+      }
+      case "SET_REVENUE_SPLIT": {
+        if (!command.tenantId || !command.split) {
+          return { allowed: false, status: 400, error: "Data bagi hasil mitra tidak valid." };
+        }
+        if (isSuperAdminOrOrgOwner(auth)) {
+          return { allowed: true };
+        }
+        return {
+          allowed: false,
+          status: 403,
+          error: "FORBIDDEN: Hanya Super Admin atau Owner organisasi yang dapat mengatur bagi hasil mitra.",
         };
       }
       case "UPSERT_PROFILE": {
@@ -1308,8 +1478,8 @@ export const tenantsDomainSpec: ServerDomainSpec<"tenants"> = {
       }
     }
   },
-  applyCommand(current, command) {
-    return applyTenantsCommand(current, command);
+  applyCommand(current, command, auth) {
+    return applyTenantsCommand(current, command, auth);
   },
 };
 
@@ -1318,12 +1488,13 @@ function createTenantsMirror(): LocalStorageMirrorAdapter<TenantsDomainState> {
   let cachedState: TenantsDomainState | null = null;
 
   return {
-    keys: [STORAGE_KEY_TENANT_SETTINGS, STORAGE_KEY_CUSTOM_TENANTS],
-    legacyWindowEvents: ["tenant_settings_updated"],
+    keys: [STORAGE_KEY_TENANT_SETTINGS, STORAGE_KEY_CUSTOM_TENANTS, STORAGE_KEY_TENANT_REVENUE_SPLITS],
+    legacyWindowEvents: ["tenant_settings_updated", "tenant_revenue_splits_updated"],
     readFromStorage(fallback) {
       const rawProfiles = readStorageItem(STORAGE_KEY_TENANT_SETTINGS);
       const rawCustom = readStorageItem(STORAGE_KEY_CUSTOM_TENANTS);
-      const sig = `${rawProfiles ?? ""}\u0000${rawCustom ?? ""}`;
+      const rawSplits = readStorageItem(STORAGE_KEY_TENANT_REVENUE_SPLITS);
+      const sig = `${rawProfiles ?? ""}\u0000${rawCustom ?? ""}\u0000${rawSplits ?? ""}`;
       if (cachedState !== null && sig === cachedSig) {
         return cachedState;
       }
@@ -1361,16 +1532,31 @@ function createTenantsMirror(): LocalStorageMirrorAdapter<TenantsDomainState> {
         } catch {}
       }
 
-      cachedState = { customTenants, profiles };
+      let revenueSplits = fallback.revenueSplits || {};
+      if (rawSplits) {
+        try {
+          const parsedSplits = JSON.parse(rawSplits);
+          if (isPlainRecord(parsedSplits)) {
+            revenueSplits = {
+              ...revenueSplits,
+              ...(parsedSplits as Record<string, NonNullable<TenantsDomainState["revenueSplits"]>[string]>),
+            };
+          }
+        } catch {}
+      }
+
+      cachedState = { customTenants, profiles, revenueSplits };
       return cachedState;
     },
     writeToStorage(state) {
       const profilesJson = JSON.stringify(state.profiles);
       const customJson = JSON.stringify(state.customTenants);
-      cachedSig = `${profilesJson}\u0000${customJson}`;
+      const splitsJson = JSON.stringify(state.revenueSplits || {});
+      cachedSig = `${profilesJson}\u0000${customJson}\u0000${splitsJson}`;
       cachedState = state;
       writeStorageItem(STORAGE_KEY_TENANT_SETTINGS, profilesJson);
       writeStorageItem(STORAGE_KEY_CUSTOM_TENANTS, customJson);
+      writeStorageItem(STORAGE_KEY_TENANT_REVENUE_SPLITS, splitsJson);
     },
   };
 }

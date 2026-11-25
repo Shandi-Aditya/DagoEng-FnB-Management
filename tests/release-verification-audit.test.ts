@@ -126,7 +126,7 @@ describe("Release Verification & Security Regression Audit", () => {
       // Duplicate Check-in on Seat #1 -> Must be REJECTED
       await expect(
         organizerCheckInAttendee(orgEmail, `${booking.ticketCode}-01`, "PARTIALLY_CHECKED_IN")
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       // Check-in Seat #2 -> Must succeed
       const check2 = await organizerCheckInAttendee(
@@ -203,7 +203,7 @@ describe("Release Verification & Security Regression Audit", () => {
       expect(successes.length).toBe(1);
       expect(failures.length).toBe(1);
       if (failures[0].status === "rejected") {
-        expect(failures[0].reason.message).toContain("sudah digunakan untuk check-in sebelumnya");
+        expect(failures[0].reason.message).toMatch(/sudah dipakai, check-in pukul/i);
       }
     });
   });

@@ -1,16 +1,30 @@
 "use client";
 
 import type React from "react";
-import { Power, Save, Store } from "lucide-react";
+import { useState } from "react";
+import { Eye, EyeOff, KeyRound, Power, Save, Store } from "lucide-react";
 
+import { notify } from "@/components/app/notify";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+
+import type { TenantStatus } from "@/lib/domain-sync-types";
 
 export interface TenantProfileTabProps {
+  ownerEmail?: string;
   tenantBrandName: string;
   onTenantBrandNameChange: (val: string) => void;
   tenantTagline: string;
@@ -25,8 +39,8 @@ export interface TenantProfileTabProps {
   onTenantReceiptFooterChange: (val: string) => void;
   tenantLowStock: number;
   onTenantLowStockChange: (val: number) => void;
-  tenantStatus: "ACTIVE" | "INACTIVE";
-  onTenantStatusChange: (val: "ACTIVE" | "INACTIVE") => void;
+  tenantStatus: TenantStatus;
+  onTenantStatusChange: (val: TenantStatus) => void;
   tenantOpenTime: string;
   onTenantOpenTimeChange: (val: string) => void;
   tenantCloseTime: string;
@@ -39,12 +53,14 @@ export interface TenantProfileTabProps {
   onBankAccountNumberChange: (val: string) => void;
   bankAccountHolder: string;
   onBankAccountHolderChange: (val: string) => void;
+  tenantNpwp?: string;
   bankFormError: string;
   onSaveTenantSettings: (e: React.FormEvent) => void;
 }
 
 export function TenantProfileTab(props: TenantProfileTabProps) {
   const {
+    ownerEmail = "",
     tenantBrandName,
     onTenantBrandNameChange,
     tenantTagline,
@@ -73,13 +89,77 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
     onBankAccountNumberChange,
     bankAccountHolder,
     onBankAccountHolderChange,
+    tenantNpwp = "",
     bankFormError,
     onSaveTenantSettings,
   } = props;
 
   const isActive = tenantStatus === "ACTIVE";
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ownerEmail.trim()) {
+      notify.error("Email akun tidak ditemukan", "Muat ulang halaman atau masuk kembali.");
+      return;
+    }
+    if (!currentPassword.trim()) {
+      notify.error("Isi kata sandi saat ini");
+      return;
+    }
+    if (newPassword.trim().length < 6) {
+      notify.error("Kata sandi baru minimal 6 karakter");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      notify.error("Konfirmasi kata sandi baru tidak cocok");
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: ownerEmail.trim(),
+          currentPassword,
+          newPassword: newPassword.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        notify.error(
+          "Gagal mengubah kata sandi",
+          data?.error || "Periksa kembali kata sandi Anda."
+        );
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      notify.success(
+        "Kata sandi diperbarui",
+        "Masuk kembali dengan kata sandi baru jika sesi diminta ulang."
+      );
+    } catch {
+      notify.error(
+        "Kendala jaringan",
+        "Gagal menghubungi server saat mengubah kata sandi."
+      );
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
 
   return (
+    <div className="flex flex-col gap-6">
     <form onSubmit={onSaveTenantSettings} className="flex flex-col gap-6">
       {/* Status Gerai */}
       <Card>
@@ -162,7 +242,7 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Tagline</Label>
+              <Label>Slogan</Label>
               <Input
                 type="text"
                 value={tenantTagline}
@@ -173,11 +253,10 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
 
           <div className="flex flex-col gap-1.5">
             <Label>Deskripsi gerai</Label>
-            <textarea
+            <Textarea
               rows={2}
               value={tenantDesc}
               onChange={(e) => onTenantDescChange(e.target.value)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
 
@@ -196,18 +275,22 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
       {/* Rekening Pencairan */}
       <Card>
         <CardHeader>
-          <CardTitle>Rekening pencairan dana</CardTitle>
+          <CardTitle>Rekening pencairan dana & NPWP</CardTitle>
           <CardDescription>
-            Rekening tujuan untuk transfer settlement bagi hasil penjualan F&B.
+            Perubahan rekening pencairan dan NPWP memerlukan persetujuan Admin Hub.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {bankFormError ? <p className="text-xs text-destructive">{bankFormError}</p> : null}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label>Bank</Label>
-              <NativeSelect value={bankName} onChange={(e) => onBankNameChange(e.target.value)}>
+              <NativeSelect
+                value={bankName}
+                disabled
+                onChange={(e) => onBankNameChange(e.target.value)}
+              >
                 <NativeSelectOption value="BCA">BCA</NativeSelectOption>
                 <NativeSelectOption value="Mandiri">Bank Mandiri</NativeSelectOption>
                 <NativeSelectOption value="BNI">BNI</NativeSelectOption>
@@ -219,6 +302,7 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
               <Label>Nomor rekening</Label>
               <Input
                 type="text"
+                disabled
                 value={bankAccountNumber}
                 onChange={(e) => onBankAccountNumberChange(e.target.value)}
                 className="font-mono"
@@ -228,11 +312,24 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
               <Label>Atas nama</Label>
               <Input
                 type="text"
+                disabled
                 value={bankAccountHolder}
                 onChange={(e) => onBankAccountHolderChange(e.target.value)}
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>NPWP</Label>
+              <Input
+                type="text"
+                disabled
+                value={tenantNpwp || "—"}
+                className="font-mono"
+              />
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Hubungi Admin Hub apabila perlu mengubah data rekening bank atau NPWP gerai.
+          </p>
         </CardContent>
       </Card>
 
@@ -282,5 +379,100 @@ export function TenantProfileTab(props: TenantProfileTabProps) {
         </Button>
       </div>
     </form>
+
+      {/* Ubah Kata Sandi */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="size-4 text-muted-foreground" />
+            <span>Ubah kata sandi</span>
+          </CardTitle>
+          <CardDescription>
+            Perbarui kata sandi akun pemilik gerai untuk menjaga keamanan akses mitra.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handlePasswordSubmit} className="max-w-md">
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="tenantCurrentPassword">Kata sandi saat ini</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="tenantCurrentPassword"
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      type="button"
+                      size="icon-xs"
+                      onClick={() => setShowCurrentPassword((v) => !v)}
+                      aria-label={showCurrentPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+                    >
+                      {showCurrentPassword ? <EyeOff /> : <Eye />}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="tenantNewPassword">Kata sandi baru</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="tenantNewPassword"
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      type="button"
+                      size="icon-xs"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      aria-label={showNewPassword ? "Sembunyikan kata sandi baru" : "Tampilkan kata sandi baru"}
+                    >
+                      {showNewPassword ? <EyeOff /> : <Eye />}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="tenantConfirmPassword">Konfirmasi kata sandi baru</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="tenantConfirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      type="button"
+                      size="icon-xs"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      aria-label={showConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
+                    >
+                      {showConfirmPassword ? <EyeOff /> : <Eye />}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              </Field>
+              <div className="flex justify-end pt-1">
+                <Button type="submit" disabled={isUpdatingPassword}>
+                  {isUpdatingPassword ? <Spinner /> : <KeyRound />}
+                  <span>{isUpdatingPassword ? "Menyimpan" : "Simpan kata sandi"}</span>
+                </Button>
+              </div>
+            </FieldGroup>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

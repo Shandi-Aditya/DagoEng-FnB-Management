@@ -16,6 +16,7 @@ interface TicketSubTicketsListProps {
     checkedInSeats?: number[];
     checkedInQty?: number;
     checkInStatus?: string;
+    selectedSeats?: string[];
   };
   isPaid: boolean;
   selectedTicketIndex: number;
@@ -71,10 +72,15 @@ export function TicketSubTicketsList({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-0.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs text-muted-foreground">
                         Tiket #{ticketIndex}
                       </span>
+                      {ticket.selectedSeats?.[idx] && (
+                        <span className="font-mono text-xs font-semibold text-primary">
+                          · Kursi {ticket.selectedSeats[idx]}
+                        </span>
+                      )}
                       <StatusBadge status={subInfo.isCheckedIn ? "success" : "neutral"}>
                         {subInfo.isCheckedIn ? "Hadir" : "Belum hadir"}
                       </StatusBadge>

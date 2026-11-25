@@ -488,16 +488,25 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
             (verification.payload!.email &&
               p.email.toLowerCase() === verification.payload!.email.toLowerCase()))
       );
+      const resolvedScopeLevel: ScopeLevel =
+        verification.payload.scopeLevel || matchedPersona?.scopeLevel || "OUTLET";
+      const isActivatedTenantOwner =
+        !matchedPersona &&
+        verification.payload.role === "OWNER" &&
+        resolvedScopeLevel === "TENANT";
       return {
         isAuthenticated: true,
         role: verification.payload.role,
         userId: verification.payload.userId,
         email: verification.payload.email || matchedPersona?.email || null,
-        name: matchedPersona?.name,
-        scopeLevel: verification.payload.scopeLevel || matchedPersona?.scopeLevel || "OUTLET",
-        permissions: matchedPersona?.permissions || [],
+        name: matchedPersona?.name || (isActivatedTenantOwner ? "Pemilik Mitra" : undefined),
+        scopeLevel: resolvedScopeLevel,
+        permissions:
+          matchedPersona?.permissions ||
+          (isActivatedTenantOwner ? TRUSTED_PERSONAS.TENANT_OWNER_KS.permissions : []),
         tenantId: verification.payload.tenantId ?? matchedPersona?.tenantId ?? null,
-        businessModule: matchedPersona?.businessModule ?? null,
+        businessModule:
+          matchedPersona?.businessModule ?? (isActivatedTenantOwner ? "FNB" : null),
       };
     }
   }
@@ -622,6 +631,28 @@ export interface OrganizerAuthResult {
  *    Any mismatch between request target email and server session email is REJECTED (HTTP 403).
  * 4. NEVER trusts raw client headers (x-user-role, x-user-id, etc.).
  */
+export function isHubAdminOrManager(
+  auth: Pick<ServerAuthResult, "isAuthenticated" | "role" | "scopeLevel" | "tenantId">
+): boolean {
+  if (!auth.isAuthenticated || !auth.role) return false;
+  return (
+    (auth.role === "SUPER_ADMIN" && auth.scopeLevel === "PLATFORM") ||
+    ((auth.role === "OWNER" || auth.role === "MANAGER") &&
+      auth.scopeLevel === "ORGANIZATION" &&
+      !auth.tenantId)
+  );
+}
+
+export function isSuperAdminOrOrgOwner(
+  auth: Pick<ServerAuthResult, "isAuthenticated" | "role" | "scopeLevel" | "tenantId">
+): boolean {
+  if (!auth.isAuthenticated || !auth.role) return false;
+  return (
+    auth.role === "SUPER_ADMIN" ||
+    (auth.role === "OWNER" && auth.scopeLevel === "ORGANIZATION" && !auth.tenantId)
+  );
+}
+
 export async function assertOrganizerAuth(
   req: NextRequest,
   targetEmailOrId?: string | null
@@ -822,9 +853,42 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
  * 4. F&B Tenant Owners and Tenant Staff are STRICTLY EXCLUDED (HTTP 403).
  * 5. Other roles (unauthenticated, unrelated guests, customers) are rejected with HTTP 403.
  */
+export function validateCheckInCandidateSession(auth: ServerAuthResult): {
+  allowed: boolean;
+  error?: string;
+} {
+  if (!auth.isAuthenticated || !auth.userId) {
+    return {
+      allowed: false,
+      error: "UNAUTHORIZED: Autentikasi sesi server diperlukan untuk melakukan check-in peserta.",
+    };
+  }
+
+  if (
+    auth.scopeLevel === "TENANT" ||
+    Boolean(auth.tenantId) ||
+    auth.businessModule === "FNB"
+  ) {
+    return {
+      allowed: false,
+      error: "FORBIDDEN: Mitra F&B / Tenant tidak memiliki wewenang untuk operasional Event Hub.",
+    };
+  }
+
+  if (auth.role === "CUSTOMER" && !auth.permissions?.includes("events:manage_own")) {
+    return {
+      allowed: false,
+      error: "FORBIDDEN: Akun pelanggan tidak memiliki wewenang untuk operasional Event Check-in.",
+    };
+  }
+
+  return { allowed: true };
+}
+
 export async function assertCheckInAuth(
   req: NextRequest,
-  eventId?: string
+  eventId?: string,
+  preResolvedAuth?: ServerAuthResult
 ): Promise<{
   authorized: boolean;
   error?: string;
@@ -833,35 +897,15 @@ export async function assertCheckInAuth(
   userId?: string;
   name?: string;
   isFieldOfficer?: boolean;
+  isHubAdmin?: boolean;
+  isOrganizer?: boolean;
 }> {
-  const auth = await getRequestAuthUser(req);
-
-  if (!auth.isAuthenticated || !auth.userId) {
+  const auth = preResolvedAuth ?? (await getRequestAuthUser(req));
+  const sessionCheck = validateCheckInCandidateSession(auth);
+  if (!sessionCheck.allowed || !auth.userId) {
     return {
       authorized: false,
-      error: "UNAUTHORIZED: Autentikasi sesi server diperlukan untuk melakukan check-in peserta.",
-    };
-  }
-
-  // Strict Tenant & F&B Exclusion:
-  // Strictly attribute-based, no email domain substring checks.
-  // F&B Tenant Owners and Staff MUST NEVER access event check-in.
-  if (
-    auth.scopeLevel === "TENANT" ||
-    Boolean(auth.tenantId) ||
-    auth.businessModule === "FNB"
-  ) {
-    return {
-      authorized: false,
-      error: "FORBIDDEN: Mitra F&B / Tenant tidak memiliki wewenang untuk operasional Event Hub.",
-    };
-  }
-
-  // Customers without organizer rights are excluded
-  if (auth.role === "CUSTOMER" && !auth.permissions?.includes("events:manage_own")) {
-    return {
-      authorized: false,
-      error: "FORBIDDEN: Akun pelanggan tidak memiliki wewenang untuk operasional Event Check-in.",
+      error: sessionCheck.error,
     };
   }
 
@@ -920,6 +964,7 @@ export async function assertCheckInAuth(
       email: auth.email || undefined,
       userId: auth.userId,
       name: auth.name,
+      isHubAdmin: true,
     };
   }
 
@@ -935,6 +980,8 @@ export async function assertCheckInAuth(
       email: auth.email || undefined,
       userId: auth.userId,
       name: auth.name,
+      isHubAdmin: false,
+      isOrganizer: true,
     };
   }
 
@@ -947,6 +994,7 @@ export async function assertCheckInAuth(
       userId: auth.userId,
       name: auth.name,
       isFieldOfficer: true,
+      isHubAdmin: false,
     };
   }
 
@@ -962,6 +1010,7 @@ export async function assertCheckInAuth(
       userId: auth.userId,
       name: auth.name,
       isFieldOfficer: true,
+      isHubAdmin: false,
     };
   }
 
@@ -997,6 +1046,23 @@ export function maskPhoneNumber(phone: string): string {
   const clean = phone.trim();
   if (clean.length < 8) return "••••••••";
   return `${clean.slice(0, 4)}••••${clean.slice(-4)}`;
+}
+
+/**
+ * Removes sensitive guestToken from ticket responses and masks guest PII for non-admin callers.
+ */
+export function sanitizeBookingForResponse<
+  T extends { guestToken?: string; guestEmail?: string; guestPhone?: string }
+>(booking: T, options: { maskPii: boolean }): Omit<T, "guestToken"> {
+  const { guestToken: _token, ...rest } = booking;
+  if (!options.maskPii) {
+    return rest;
+  }
+  return {
+    ...rest,
+    guestEmail: maskEmail(booking.guestEmail || ""),
+    guestPhone: maskPhoneNumber(booking.guestPhone || ""),
+  };
 }
 
 // Alias for getRequestAuthUser

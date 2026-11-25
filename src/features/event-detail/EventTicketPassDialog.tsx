@@ -137,11 +137,18 @@ export function EventTicketPassDialog({
                 <span className="text-muted-foreground block text-xs truncate">
                   {ticket.guestEmail}
                 </span>
-                {ticket.ticketTierName && (
-                  <Badge variant="outline" className="mt-1 text-xs font-medium">
-                    {ticket.ticketTierName}
-                  </Badge>
-                )}
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  {ticket.ticketTierName && (
+                    <Badge variant="outline" className="text-xs font-medium">
+                      {ticket.ticketTierName}
+                    </Badge>
+                  )}
+                  {ticket.selectedSeats && ticket.selectedSeats.length > 0 && (
+                    <Badge variant="default" className="text-xs font-mono font-medium">
+                      Kursi {ticket.selectedSeats.join(", ")}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs">Jumlah & biaya</span>
@@ -158,6 +165,15 @@ export function EventTicketPassDialog({
                 </span>
               </div>
             </div>
+
+            {ticket.selectedSeats && ticket.selectedSeats.length > 0 && (
+              <div className="pt-2 border-t flex items-center justify-between">
+                <span className="text-muted-foreground block text-xs">Nomor kursi</span>
+                <span className="font-mono font-semibold text-xs text-primary">
+                  {ticket.selectedSeats.join(", ")}
+                </span>
+              </div>
+            )}
 
             <div className="pt-2 border-t">
               <span className="text-muted-foreground block text-xs">Lokasi venue</span>

@@ -9,7 +9,10 @@ import {
   organizerCheckInAttendee,
   getEventBookings,
 } from "@/lib/events";
-import { PATCH as handleAdminCheckIn } from "@/app/api/events/bookings/[id]/route";
+import {
+  PATCH as handleAdminCheckIn,
+  DELETE as handleDeleteBooking,
+} from "@/app/api/events/bookings/[id]/route";
 import { PATCH as handleOrganizerCheckIn } from "@/app/api/events/portal/check-in/route";
 
 describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () => {
@@ -227,7 +230,7 @@ describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () 
         updateBookingCheckIn(booking.ticketCode, "CHECKED_IN", {
           enforceDateWindow: false,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("memproses dua tiket berbeda dalam booking yang sama secara terpisah", async () => {
@@ -321,6 +324,231 @@ describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () 
       expect(p2.seat).toBe(2);
       expect(p3.ticketCode).toBe(`${booking.ticketCode}-03`);
       expect(p3.seat).toBe(3);
+    });
+
+    it("menolak request PATCH dengan body kosong ({}) untuk menutup celah IDOR kebocoran data tamu", async () => {
+      const booking = await createEventBooking({
+        eventId: nowEventId,
+        guestName: "Target IDOR Victim",
+        guestEmail: "victim@example.com",
+        guestPhone: "081999888777",
+        ticketCount: 1,
+        paymentMethod: "CASH",
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/events/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const res = await handleAdminCheckIn(req, {
+        params: Promise.resolve({ id: booking.id }),
+      });
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.data).toBeUndefined();
+      expect(data.guestEmail).toBeUndefined();
+      expect(data.guestToken).toBeUndefined();
+    });
+
+    it("menghapus guestToken dan menyamarkan email/telepon untuk staf check-in non-Hub-Admin", async () => {
+      const booking = await createEventBooking({
+        eventId: nowEventId,
+        guestName: "Budi Sanjaya",
+        guestEmail: "budi.sanjaya@example.com",
+        guestPhone: "081234567890",
+        ticketCount: 1,
+        paymentMethod: "CASH",
+      });
+      await updateBookingPaymentStatus(booking.id, "PAID");
+
+      const req = new NextRequest(`http://localhost:3000/api/events/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=EVENT_STAFF",
+        },
+        body: JSON.stringify({
+          checkInStatus: "CHECKED_IN",
+        }),
+      });
+
+      const res = await handleAdminCheckIn(req, {
+        params: Promise.resolve({ id: booking.id }),
+      });
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.guestToken).toBeUndefined();
+      expect(data.data.guestEmail).not.toBe("budi.sanjaya@example.com");
+      expect(data.data.guestEmail).toContain("***");
+      expect(data.data.guestPhone).not.toBe("081234567890");
+      expect(data.data.guestPhone).toContain("••••");
+    });
+
+    it("menolak payload multi-intent (gabungan checkInStatus dan paymentProofUrl) dan menolak unauthenticated sebelum lookup 404", async () => {
+      const booking = await createEventBooking({
+        eventId: nowEventId,
+        guestName: "Multi Intent Target",
+        guestEmail: "multi@example.com",
+        guestPhone: "081234567891",
+        ticketCount: 1,
+        paymentMethod: "CASH",
+      });
+      await updateBookingPaymentStatus(booking.id, "PAID");
+
+      const conflictReq = new NextRequest(`http://localhost:3000/api/events/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=EVENT_STAFF",
+        },
+        body: JSON.stringify({
+          checkInStatus: "CHECKED_IN",
+          paymentProofUrl: "https://example.com/proof.png",
+        }),
+      });
+      const conflictRes = await handleAdminCheckIn(conflictReq, {
+        params: Promise.resolve({ id: booking.id }),
+      });
+      expect(conflictRes.status).toBe(400);
+
+      const oracleReq = new NextRequest("http://localhost:3000/api/events/bookings/non-existent-id-999", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "APPROVE_PAYMENT" }),
+      });
+      const oracleRes = await handleAdminCheckIn(oracleReq, {
+        params: Promise.resolve({ id: "non-existent-id-999" }),
+      });
+      expect(oracleRes.status).toBe(403);
+
+      const proofOracleReq = new NextRequest("http://localhost:3000/api/events/bookings/non-existent-id-999", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-guest-token": "dummy-probe-token" },
+        body: JSON.stringify({ paymentProofUrl: "https://example.com/proof.png" }),
+      });
+      const proofOracleRes = await handleAdminCheckIn(proofOracleReq, {
+        params: Promise.resolve({ id: "non-existent-id-999" }),
+      });
+      expect(proofOracleRes.status).toBe(403);
+
+      const invalidQtyReq = new NextRequest(`http://localhost:3000/api/events/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=EVENT_STAFF",
+        },
+        body: JSON.stringify({
+          checkInStatus: "CHECKED_IN",
+          incrementQty: "1",
+        }),
+      });
+      const invalidQtyRes = await handleAdminCheckIn(invalidQtyReq, {
+        params: Promise.resolve({ id: booking.id }),
+      });
+      expect(invalidQtyRes.status).toBe(400);
+    });
+
+    it("menghapus guestToken dari respons DELETE /api/events/bookings/[id]", async () => {
+      const booking = await createEventBooking({
+        eventId: futureEventId,
+        guestName: "Delete Sanitize Check",
+        guestEmail: "delete.sanitize@example.com",
+        guestPhone: "081234567892",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+
+      const delReq = new NextRequest(`http://localhost:3000/api/events/bookings/${booking.id}`, {
+        method: "DELETE",
+        headers: { cookie: "dagoeng_active_persona=SUPER_ADMIN" },
+      });
+      const delRes = await handleDeleteBooking(delReq, {
+        params: Promise.resolve({ id: booking.id }),
+      });
+      const delJson = await delRes.json();
+
+      expect(delRes.status).toBe(200);
+      expect(delJson.data.guestToken).toBeUndefined();
+    });
+
+    it("menolak cross-event check-in hijack saat ticketCode milik event lain dikirim ke endpoint booking ID atau updateBookingCheckIn", async () => {
+      const otherEv = await createEventSubmission({
+        organizerName: "Komunitas Korban",
+        organizerEmail: "korban-other@dagocreative.id",
+        organizerPhone: "081234567899",
+        title: "Event Korban Hijack",
+        category: "COMMUNITY",
+        description: "Event target terpisah",
+        startDate: new Date(Date.now() - 3600000).toISOString(),
+        endDate: new Date(Date.now() + 5 * 3600000).toISOString(),
+        location: "Main Hall Dago",
+        isPaid: true,
+        price: 50000,
+        posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      });
+      await updateEventStatus(otherEv.id, "APPROVED");
+
+      const bookingA = await createEventBooking({
+        eventId: nowEventId,
+        guestName: "Peserta Event A",
+        guestEmail: "peserta.a@example.com",
+        guestPhone: "081200010001",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+      await updateBookingPaymentStatus(bookingA.id, "PAID");
+
+      const bookingB = await createEventBooking({
+        eventId: otherEv.id,
+        guestName: "Korban Event B",
+        guestEmail: "korban.b@example.com",
+        guestPhone: "081200020002",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+      await updateBookingPaymentStatus(bookingB.id, "PAID");
+
+      const hijackReq = new NextRequest(`http://localhost:3000/api/events/bookings/${bookingA.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: "dagoeng_active_persona=SUPER_ADMIN",
+        },
+        body: JSON.stringify({
+          checkInStatus: "CHECKED_IN",
+          ticketCode: bookingB.ticketCode,
+        }),
+      });
+
+      const hijackRes = await handleAdminCheckIn(hijackReq, {
+        params: Promise.resolve({ id: bookingA.id }),
+      });
+      const hijackJson = await hijackRes.json();
+
+      expect(hijackRes.status).toBe(403);
+      expect(hijackJson.success).toBe(false);
+      expect(hijackJson.error).toBe("Kode tiket tidak sesuai dengan pemesanan yang dipilih.");
+
+      await expect(
+        updateBookingCheckIn(bookingA.id, "CHECKED_IN", {
+          ticketCode: bookingB.ticketCode,
+          enforceDateWindow: false,
+        })
+      ).rejects.toThrow("Kode tiket tidak sesuai dengan pemesanan yang dipilih.");
+
+      const allBookings = await getEventBookings();
+      const afterA = allBookings.find((b) => b.id === bookingA.id);
+      const afterB = allBookings.find((b) => b.id === bookingB.id);
+      expect(afterA?.checkInStatus).toBe("REGISTERED");
+      expect(afterA?.checkedInQty || 0).toBe(0);
+      expect(afterB?.checkInStatus).toBe("REGISTERED");
+      expect(afterB?.checkedInQty || 0).toBe(0);
     });
   });
 });

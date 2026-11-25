@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { organizerCheckInAttendee, getBookingById, getAdminEvents } from "@/lib/events";
 import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
-import { assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import { assertOrganizerAuth, sanitizeBookingForResponse } from "@/lib/server-auth";
 import { AttendeeCheckInStatus } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -66,8 +66,10 @@ export async function PATCH(req: NextRequest) {
     const enforceDateWindow = !reset;
 
     if (reset || checkInStatus === "REGISTERED") {
-      const allEvents = await getAdminEvents();
-      const booking = await getBookingById(identifier);
+      const [allEvents, booking] = await Promise.all([
+        getAdminEvents(),
+        getBookingById(identifier),
+      ]);
       if (booking) {
         const event = allEvents.find((e) => e.id === booking.eventId);
         if (event && getEventDateStatusWita(event) !== "TODAY") {
@@ -94,6 +96,7 @@ export async function PATCH(req: NextRequest) {
         enforceDateWindow,
         ticketCode: identifier,
         seatNumber: typeof body.seatNumber === "number" ? body.seatNumber : undefined,
+        checkedInBy: auth.name || auth.email || "Petugas Penyelenggara",
       }
     );
 
@@ -104,12 +107,7 @@ export async function PATCH(req: NextRequest) {
         ? `Kehadiran parsial tercatat: ${updated.checkedInQty} dari ${updated.ticketCount} tiket telah hadir.`
         : "Status kehadiran peserta berhasil dibatalkan.";
 
-    const { guestToken: _token, ...sanitized } = updated;
-    const maskedUpdated = {
-      ...sanitized,
-      guestEmail: maskEmail(updated.guestEmail),
-      guestPhone: maskPhoneNumber(updated.guestPhone),
-    };
+    const maskedUpdated = sanitizeBookingForResponse(updated, { maskPii: true });
 
     return NextResponse.json({
       success: true,

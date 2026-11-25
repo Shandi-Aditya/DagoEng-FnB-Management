@@ -65,7 +65,7 @@ describe("Critical Check-in Bugfixes Suite", () => {
           ticketCode: code01,
           bypassWindow: true,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       // Verifikasi count tetap 1
       const currentBookings1 = await getEventBookings(eventId);
@@ -79,7 +79,7 @@ describe("Critical Check-in Bugfixes Suite", () => {
           ticketCode: code01,
           bypassWindow: true,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       const currentBookings2 = await getEventBookings(eventId);
       expect(currentBookings2.find((b) => b.id === booking.id)?.checkedInQty).toBe(1);
@@ -140,7 +140,7 @@ describe("Critical Check-in Bugfixes Suite", () => {
           ticketCode: code01,
           bypassWindow: true,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       // Scan -02: BERHASIL
       const res2 = await updateBookingCheckIn(booking.id, "CHECKED_IN", {

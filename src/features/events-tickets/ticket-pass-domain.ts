@@ -26,6 +26,7 @@ export interface TicketPassData {
   checkInTime?: string | null;
   ticketTierId?: string | null;
   ticketTierName?: string | null;
+  selectedSeats?: string[];
   isInvitation?: boolean;
   invitationNote?: string | null;
   promoCode?: string | null;

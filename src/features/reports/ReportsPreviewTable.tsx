@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { StatCard } from "@/components/app/stat-card";
 import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -22,6 +23,7 @@ import {
   emptyReportMessage,
   filterReportRows,
   isNumericReportCell,
+  type MdrBearerMode,
   type ReportDataset,
   type ReportType,
 } from "@/features/reports/reports-domain";
@@ -49,6 +51,11 @@ export interface ReportsPreviewTableProps {
     availableCompanies: string[];
     onCompanyChange: (company: string) => void;
   };
+  mdrBearerFilter?: {
+    selected: MdrBearerMode;
+    onChange: (mode: MdrBearerMode) => void;
+  };
+  onToggleSettlementStatus?: (tenantId: string) => void;
 }
 
 export function ReportsPreviewTable({
@@ -63,6 +70,8 @@ export function ReportsPreviewTable({
   onPageChange,
   onPageSizeChange,
   companyFilter,
+  mdrBearerFilter,
+  onToggleSettlementStatus,
 }: ReportsPreviewTableProps) {
   const hasSearch = searchQuery.trim() !== "";
   const filteredRows = filterReportRows(report.tableRows, searchQuery);
@@ -118,6 +127,19 @@ export function ReportsPreviewTable({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {mdrBearerFilter && (
+              <NativeSelect
+                className="w-full sm:w-56"
+                value={mdrBearerFilter.selected}
+                onChange={(e) => mdrBearerFilter.onChange(e.target.value as MdrBearerMode)}
+                aria-label="Pilihan penanggung MDR QRIS"
+              >
+                <NativeSelectOption value="MITRA">MDR QRIS: Ditanggung mitra</NativeSelectOption>
+                <NativeSelectOption value="DAGO">MDR QRIS: Ditanggung DAGO</NativeSelectOption>
+                <NativeSelectOption value="SPLIT">MDR QRIS: Dibagi proporsional</NativeSelectOption>
+              </NativeSelect>
+            )}
+
             {companyFilter && (
               <NativeSelect
                 className="w-full sm:w-48"
@@ -164,56 +186,152 @@ export function ReportsPreviewTable({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {report.tableHeaders.map((header, i) => (
-                      <TableHead
-                        key={header}
-                        className={cn("whitespace-nowrap", numericColumns[i] && "text-right")}
-                      >
-                        {header}
-                      </TableHead>
-                    ))}
+                    {report.tableHeaders.map((header, i) => {
+                      const isStatusHeader =
+                        (reportType === "SETTLEMENT" ||
+                          reportType === "SETTLEMENT_CONSOLIDATED") &&
+                        i === report.tableHeaders.length - 1;
+                      return (
+                        <TableHead
+                          key={header}
+                          className={cn(
+                            "whitespace-nowrap",
+                            (numericColumns[i] || isStatusHeader) && "text-right"
+                          )}
+                        >
+                          {header}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedRows.map((row, rIdx) => (
-                    <TableRow key={`${safeCurrentPage}-${rIdx}`}>
-                      {row.map((cell, cIdx) => {
-                        const isNumeric = numericColumns[cIdx] || isNumericReportCell(cell);
-                        const cellStr = String(cell);
-                        const isNegative = isNumeric && (cellStr.startsWith("-Rp") || (cellStr.startsWith("-") && cellStr !== "-"));
-                        const isPositiveVariance = isNumeric && (cellStr.startsWith("+Rp") || cellStr.startsWith("+"));
-                        const isAdjustmentBadgeCol =
-                          (reportType === "VOID_REFUND_DISCOUNT" ||
-                            report.tableHeaders[2] === "Jenis koreksi") &&
-                          cIdx === 2;
-                        return (
-                          <TableCell
-                            key={cIdx}
-                            className={cn(
-                              isNumeric
-                                ? cn(
-                                    "whitespace-nowrap text-right font-mono font-medium tabular-nums",
-                                    isNegative
-                                      ? "text-destructive"
-                                      : isPositiveVariance
-                                      ? "text-success"
-                                      : "text-foreground"
-                                  )
-                                : "max-w-56 whitespace-normal text-muted-foreground"
-                            )}
-                          >
-                            {isAdjustmentBadgeCol ? (
-                              <StatusBadge status={adjustmentKindTone(cellStr)}>
-                                {cellStr}
-                              </StatusBadge>
-                            ) : (
-                              cell
-                            )}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
+                  {paginatedRows.map((row, rIdx) => {
+                    const isTotalRow = String(row[0]).toLowerCase() === "total";
+                    return (
+                      <TableRow
+                        key={`${safeCurrentPage}-${rIdx}`}
+                        className={cn(isTotalRow && "bg-muted/30 font-semibold border-t-2")}
+                      >
+                        {row.map((cell, cIdx) => {
+                          const isNumeric = numericColumns[cIdx] || isNumericReportCell(cell);
+                          const cellStr = String(cell);
+                          const isNegative =
+                            isNumeric &&
+                            (cellStr.startsWith("-Rp") || (cellStr.startsWith("-") && cellStr !== "-"));
+                          const isPositiveVariance =
+                            isNumeric && (cellStr.startsWith("+Rp") || cellStr.startsWith("+"));
+                          const isAdjustmentBadgeCol =
+                            (reportType === "VOID_REFUND_DISCOUNT" ||
+                              report.tableHeaders[2] === "Jenis koreksi") &&
+                            cIdx === 2;
+
+                          const isStatusCol =
+                            (reportType === "SETTLEMENT" ||
+                              reportType === "SETTLEMENT_CONSOLIDATED") &&
+                            cIdx === report.tableHeaders.length - 1;
+
+                          if (isStatusCol) {
+                            if (isTotalRow) {
+                              return (
+                                <TableCell
+                                  key={cIdx}
+                                  className="whitespace-nowrap text-right font-medium"
+                                >
+                                  <Badge variant="secondary">{cellStr}</Badge>
+                                </TableCell>
+                              );
+                            }
+                            if (cellStr === "Internal") {
+                              return (
+                                <TableCell key={cIdx} className="whitespace-nowrap text-right">
+                                  <StatusBadge status="neutral">Internal</StatusBadge>
+                                </TableCell>
+                              );
+                            }
+                            const isPaid = cellStr === "Lunas";
+                            const tenantId = String(row[0]);
+                            return (
+                              <TableCell key={cIdx} className="whitespace-nowrap text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <StatusBadge status={isPaid ? "success" : "warning"}>
+                                    {cellStr}
+                                  </StatusBadge>
+                                  {onToggleSettlementStatus && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => onToggleSettlementStatus(tenantId)}
+                                    >
+                                      {isPaid ? "Batal" : "Tandai lunas"}
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
+                          }
+
+                          const isActionCashFlow =
+                            (reportType === "SETTLEMENT" ||
+                              reportType === "SETTLEMENT_CONSOLIDATED") &&
+                            (report.tableHeaders[cIdx] === "Aliran kas akhir" ||
+                              cellStr.startsWith("Dago transfer") ||
+                              cellStr.startsWith("Mitra setor") ||
+                              cellStr.startsWith("Impas"));
+
+                          if (isActionCashFlow && !isTotalRow) {
+                            const isDagoTransfer = cellStr.startsWith("Dago transfer");
+                            const isMitraSetor = cellStr.startsWith("Mitra setor");
+                            return (
+                              <TableCell key={cIdx} className="whitespace-nowrap">
+                                <StatusBadge
+                                  status={
+                                    isDagoTransfer ? "info" : isMitraSetor ? "warning" : "neutral"
+                                  }
+                                >
+                                  {cellStr}
+                                </StatusBadge>
+                              </TableCell>
+                            );
+                          }
+
+                          return (
+                            <TableCell
+                              key={cIdx}
+                              className={cn(
+                                isNumeric
+                                  ? cn(
+                                      "whitespace-nowrap text-right font-mono font-medium tabular-nums",
+                                      isNegative
+                                        ? "text-destructive"
+                                        : isPositiveVariance
+                                        ? "text-success"
+                                        : isTotalRow
+                                        ? "text-foreground font-semibold"
+                                        : "text-foreground"
+                                    )
+                                  : cn(
+                                      "max-w-56 whitespace-normal",
+                                      isTotalRow
+                                        ? "font-semibold text-foreground"
+                                        : "text-muted-foreground"
+                                    )
+                              )}
+                            >
+                              {isAdjustmentBadgeCol ? (
+                                <StatusBadge status={adjustmentKindTone(cellStr)}>
+                                  {cellStr}
+                                </StatusBadge>
+                              ) : (
+                                cell
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

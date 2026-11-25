@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getPersistentOrders,
+  getPersistentProductsData,
   resetPersistentOrders,
   mutatePersistentOrders,
   updatePersistentOrderIf,
@@ -12,7 +13,14 @@ import {
   isOrderBeforeCooking,
   deductPersistentOrderBOM,
   restorePersistentOrderBOMIfBeforeCooking,
+  readPersistentDomainState,
 } from "@/lib/persistent-storage";
+import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
+import {
+  findBlockedOrderTenant,
+  formatBlockedTenantError,
+  resolveCatalogOrderGuardItems,
+} from "@/lib/tenant-order-guard";
 import {
   applyPersistentOrderRefundEffects,
   buildManualDiscountAuditEntry,
@@ -186,6 +194,27 @@ type OrderMutationOutcome =
       serverEarnedPoints: number;
     };
 
+function areOrderItemsEquivalent(
+  left: OrderRecord["items"] | undefined,
+  right: OrderRecord["items"] | undefined
+): boolean {
+  const a = left ?? [];
+  const b = right ?? [];
+  if (a.length !== b.length) return false;
+  return a.every((itemA, idx) => {
+    const itemB = b[idx];
+    if (!itemB) return false;
+    return (
+      (itemA.productId ?? "") === (itemB.productId ?? "") &&
+      (itemA.tenantId ?? "") === (itemB.tenantId ?? "") &&
+      (itemA.itemType ?? "") === (itemB.itemType ?? "") &&
+      itemA.productName === itemB.productName &&
+      Number(itemA.quantity) === Number(itemB.quantity) &&
+      Number(itemA.unitPrice) === Number(itemB.unitPrice)
+    );
+  });
+}
+
 function buildOrderCandidateForWrite(
   action: OrderWriteAction,
   existingOrder: OrderRecord | undefined,
@@ -294,6 +323,11 @@ async function executeAuthorizedOrderWrite(params: {
       ? normalizeTenantId(auth.tenantId)
       : undefined;
 
+  const [tenantsState, catalogData] = await Promise.all([
+    readPersistentDomainState(tenantsDomainSpec),
+    getPersistentProductsData(),
+  ]);
+
   const outcome = await mutatePersistentOrders<OrderMutationOutcome>(async (existingOrders) => {
     const targetId =
       action.mode === "UPSERT" ? action.initialOrderData.id : action.targetId;
@@ -305,6 +339,40 @@ async function executeAuthorizedOrderWrite(params: {
     }
 
     let orderData = candidate.orderData;
+    const isCancelOrRefundAttempt =
+      orderData.status === "CANCELLED" || orderData.paymentStatus === "REFUNDED";
+    const itemsUnchangedInPatch =
+      action.mode === "PATCH" &&
+      Boolean(existingOrder) &&
+      (action.rawPatch.items === undefined ||
+        areOrderItemsEquivalent(existingOrder!.items, orderData.items)) &&
+      (action.rawPatch.tenantId === undefined ||
+        action.rawPatch.tenantId === existingOrder!.tenantId);
+    const isWorkflowProgressionOnPaidOrder =
+      existingOrder?.paymentStatus === "PAID" && itemsUnchangedInPatch;
+    if (!isCancelOrRefundAttempt && !isWorkflowProgressionOnPaidOrder) {
+      const guardItems = resolveCatalogOrderGuardItems(
+        orderData.items,
+        catalogData.products
+      );
+      const blockedTenant = findBlockedOrderTenant(
+        guardItems,
+        tenantsState.profiles,
+        orderData.tenantId
+      );
+      if (blockedTenant.blocked) {
+        return {
+          nextOrders: existingOrders,
+          result: {
+            ok: false,
+            response: NextResponse.json(
+              { error: formatBlockedTenantError(blockedTenant) },
+              { status: 403 }
+            ),
+          },
+        };
+      }
+    }
     const validation = validateOrderPayload(orderData);
     if (!validation.ok) {
       return {

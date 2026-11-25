@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -147,7 +148,7 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
       <div className="flex min-w-0 flex-col gap-6">
         {isCheckInStaff ? (
           <Alert variant="destructive">
-            <AlertTitle>Akses Pembuatan Event Ditolak</AlertTitle>
+            <AlertTitle>Akses pembuatan event ditolak</AlertTitle>
             <AlertDescription>{CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE}</AlertDescription>
           </Alert>
         ) : null}
@@ -382,9 +383,33 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
               )}
 
               {/* Editor Jenis Tiket Bertingkat (Opsional jika ingin multi-tier) */}
-              <div className="border-t pt-3">
+              <div className="border-t pt-3 space-y-3" data-invalid={Boolean(err("ticketTiers")) || undefined}>
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                  <div className="space-y-0.5">
+                    <FieldLabel htmlFor="submission-has-seating" className="text-xs font-medium cursor-pointer block">
+                      Pakai nomor kursi
+                    </FieldLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Pembeli memilih kursi di denah visual saat pesan tiket (contoh VIP A1-A10, Reguler B1-B20).
+                    </p>
+                  </div>
+                  <Checkbox
+                    id="submission-has-seating"
+                    checked={Boolean(form.hasSeatingChart)}
+                    onCheckedChange={(checked) => {
+                      set("hasSeatingChart", checked === true);
+                      setErrors((prev) => {
+                        if (!prev.ticketTiers) return prev;
+                        const { ticketTiers: _removed, ...rest } = prev;
+                        return rest;
+                      });
+                    }}
+                  />
+                </div>
+
                 <TicketTiersEditor
                   tiers={form.ticketTiers || []}
+                  hasSeatingChart={Boolean(form.hasSeatingChart)}
                   onChange={(tiers) => {
                     set("ticketTiers", tiers);
                     const sumQ = tiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
@@ -407,6 +432,7 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                   }}
                   maxVenueCapacity={capacityHint.capacity}
                 />
+                {err("ticketTiers") ? <FieldError>{err("ticketTiers")}</FieldError> : null}
               </div>
 
               {/* Kebijakan Refund (Hanya untuk event berbayar) */}
@@ -531,10 +557,10 @@ function CheckList({ legend, items, selected, onToggle }: CheckListProps) {
       <legend className="mb-1 text-sm font-medium">{legend}</legend>
       <div className="grid gap-3 sm:grid-cols-2">
         {items.map((item) => (
-          <label key={item} className="flex items-center gap-2.5 text-sm">
+          <Label key={item} className="flex items-center gap-2.5 text-sm font-normal cursor-pointer">
             <Checkbox checked={selected.includes(item)} onCheckedChange={(checked) => onToggle(item, checked === true)} />
             {item}
-          </label>
+          </Label>
         ))}
       </div>
     </fieldset>

@@ -52,7 +52,29 @@ export default function EventCheckInDashboardPage() {
     roleSlug === "SUPER_ADMIN" ||
     ((roleSlug === "OWNER" || roleSlug === "MANAGER") &&
       (user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM"));
-  const isEventStaff = Boolean(user?.permissions?.includes("events:checkin"));
+  const isEventStaff =
+    roleSlug === "CHECKIN_STAFF" || Boolean(user?.permissions?.includes("events:checkin"));
+
+  const fetchBookingsForEvents = async (targetEvents: CommunityEvent[]): Promise<EventTicketOrder[]> => {
+    const responses = await Promise.all(
+      targetEvents.map(async (evt) => {
+        const res = await fetch(`/api/events/bookings?eventId=${encodeURIComponent(evt.id)}`);
+        if (!res.ok) {
+          throw new Error("Gagal memuat data peserta event.");
+        }
+        return res.json();
+      })
+    );
+    const merged = new Map<string, EventTicketOrder>();
+    for (const item of responses) {
+      if (item?.success && Array.isArray(item.data)) {
+        for (const booking of item.data as EventTicketOrder[]) {
+          merged.set(booking.id, booking);
+        }
+      }
+    }
+    return Array.from(merged.values());
+  };
 
   // Load events and bookings concurrently
   const loadData = async () => {
@@ -65,52 +87,48 @@ export default function EventCheckInDashboardPage() {
     try {
       let accessibleEvents: CommunityEvent[] = [];
       let allBookings: EventTicketOrder[] = [];
+      let todayEvents: CommunityEvent[] = [];
 
-      if (isHubAdmin || isEventStaff) {
-        const bookingsUrl = isHubAdmin ? "/api/events/bookings?unmasked=true" : "/api/events/bookings";
+      if (isHubAdmin) {
         const [evtRes, bRes] = await Promise.all([
           fetch("/api/events"),
-          fetch(bookingsUrl),
+          fetch("/api/events/bookings?unmasked=true"),
         ]);
+        if (!evtRes.ok || !bRes.ok) {
+          throw new Error("Gagal memuat data check-in event.");
+        }
         const [evtJson, bJson] = await Promise.all([evtRes.json(), bRes.json()]);
         const allEvents: CommunityEvent[] = evtJson.success && Array.isArray(evtJson.data) ? evtJson.data : [];
         allBookings = bJson.success && Array.isArray(bJson.data) ? bJson.data : [];
         accessibleEvents = allEvents.filter((e) => e.status === "APPROVED");
+        todayEvents = filterTodayEventsWita(accessibleEvents);
+      } else if (isEventStaff) {
+        const evtRes = await fetch("/api/events");
+        if (!evtRes.ok) {
+          throw new Error("Gagal memuat daftar event.");
+        }
+        const evtJson = await evtRes.json();
+        const allEvents: CommunityEvent[] = evtJson.success && Array.isArray(evtJson.data) ? evtJson.data : [];
+        accessibleEvents = allEvents.filter((e) => e.status === "APPROVED");
+        todayEvents = filterTodayEventsWita(accessibleEvents);
+        allBookings = await fetchBookingsForEvents(todayEvents);
       } else {
         const portalRes = await fetch("/api/events/portal");
+        if (!portalRes.ok) {
+          throw new Error("Gagal memuat portal penyelenggara event.");
+        }
         const portalJson = await portalRes.json();
-        if (portalRes.ok && portalJson.success && portalJson.data) {
+        if (portalJson.success && portalJson.data) {
           const portalEvents: CommunityEvent[] = Array.isArray(portalJson.data.events)
             ? portalJson.data.events
             : [];
           accessibleEvents = portalEvents.filter((e) => e.status === "APPROVED");
-          const todayOrgEvents = filterTodayEventsWita(accessibleEvents);
-          const perEventResponses = await Promise.all(
-            todayOrgEvents.map((evt) =>
-              fetch(`/api/events/bookings?eventId=${encodeURIComponent(evt.id)}`)
-                .then((r) => r.json())
-                .catch(() => null)
-            )
-          );
-          const merged = new Map<string, EventTicketOrder>();
-          for (const item of perEventResponses) {
-            if (item?.success && Array.isArray(item.data)) {
-              for (const b of item.data as EventTicketOrder[]) {
-                merged.set(b.id, b);
-              }
-            }
-          }
-          if (merged.size === 0 && Array.isArray(portalJson.data.bookings)) {
-            allBookings = portalJson.data.bookings;
-          } else {
-            allBookings = Array.from(merged.values());
-          }
+          allBookings = Array.isArray(portalJson.data.bookings) ? portalJson.data.bookings : [];
         }
+        todayEvents = filterTodayEventsWita(accessibleEvents);
       }
 
       setBookings(allBookings);
-
-      const todayEvents = filterTodayEventsWita(accessibleEvents);
       setEvents(todayEvents);
 
       if (todayEvents.length > 0) {
@@ -158,6 +176,14 @@ export default function EventCheckInDashboardPage() {
   const stats = useMemo(() => {
     return calculateCheckInStats(eventTickets);
   }, [eventTickets]);
+
+  const triggerAttendeeCheckIn = (ticket: EventTicketOrder) => {
+    if ((ticket.ticketCount || 1) > 1) {
+      setGroupCheckInBooking(ticket);
+    } else {
+      handleCheckIn(ticket, "CHECKED_IN").catch(() => {});
+    }
+  };
 
   // Filtered tickets
   const filteredTickets = useMemo(() => {
@@ -401,13 +427,7 @@ export default function EventCheckInDashboardPage() {
                     key={ticket.id}
                     ticket={ticket}
                     isProcessing={isProcessingId === ticket.id}
-                    onCheckIn={(t) => {
-                      if ((t.ticketCount || 1) > 1) {
-                        setGroupCheckInBooking(t);
-                      } else {
-                        handleCheckIn(t, "CHECKED_IN").catch(() => {});
-                      }
-                    }}
+                    onCheckIn={triggerAttendeeCheckIn}
                     onReset={(t) => handleCheckIn(t, "REGISTERED", { reset: true }).catch(() => {})}
                     onViewQR={(t) => setViewQRBooking(t)}
                   />
@@ -427,13 +447,7 @@ export default function EventCheckInDashboardPage() {
               <CheckInAttendeesTable
                 tickets={filteredTickets}
                 isProcessingId={isProcessingId}
-                onCheckIn={(ticket) => {
-                  if ((ticket.ticketCount || 1) > 1) {
-                    setGroupCheckInBooking(ticket);
-                  } else {
-                    handleCheckIn(ticket, "CHECKED_IN").catch(() => {});
-                  }
-                }}
+                onCheckIn={triggerAttendeeCheckIn}
                 onReset={(ticket) => handleCheckIn(ticket, "REGISTERED", { reset: true }).catch(() => {})}
                 onViewQR={(ticket) => setViewQRBooking(ticket)}
                 onSwitchToCheckedTab={() => setActiveTab("CHECKED")}
@@ -458,11 +472,7 @@ export default function EventCheckInDashboardPage() {
         onClose={() => setViewQRBooking(null)}
         onSimulateCheckIn={(booking) => {
           setViewQRBooking(null);
-          if ((booking.ticketCount || 1) > 1) {
-            setGroupCheckInBooking(booking);
-          } else {
-            handleCheckIn(booking, "CHECKED_IN").catch(() => {});
-          }
+          triggerAttendeeCheckIn(booking);
         }}
       />
 

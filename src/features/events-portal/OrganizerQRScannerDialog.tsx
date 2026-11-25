@@ -25,7 +25,11 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { StatusBadge } from "@/components/app/status-badge";
 import { Html5Qrcode } from "html5-qrcode";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
-import { filterTodayEventsWita } from "@/features/events-checkin/events-checkin-domain";
+import {
+  filterTodayEventsWita,
+  formatCheckInTime,
+  parseTicketScanCode,
+} from "@/features/events-checkin/events-checkin-domain";
 
 interface OrganizerQRScannerDialogProps {
   open: boolean;
@@ -46,6 +50,7 @@ interface ScanResultFeedback {
   eventTitle?: string;
   checkedInQty?: number;
   ticketCount?: number;
+  seatLabel?: string;
   timestamp: string;
 }
 
@@ -151,48 +156,23 @@ export function OrganizerQRScannerDialog({
     }
   }, []);
 
-  const parseQRContent = (decodedText: string): { ticketCode: string; eventId?: string } => {
-    const trimmed = decodedText.trim();
-    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (parsed.ticketCode) {
-          return { ticketCode: String(parsed.ticketCode).trim(), eventId: parsed.eventId };
-        }
-      } catch {
-        // Fallthrough
-      }
-    }
-
-    if (trimmed.startsWith("DAGO-CHECKIN:")) {
-      const parts = trimmed.split(":");
-      return {
-        ticketCode: parts[1] || "",
-        eventId: parts[2] || undefined,
-      };
-    }
-
-    return { ticketCode: trimmed };
-  };
+  const nowTimeWita = () => formatCheckInTime(new Date().toISOString());
 
   const processCheckIn = useCallback(
     async (rawCode: string) => {
-      const { ticketCode } = parseQRContent(rawCode);
+      const { cleanCode: ticketCode, baseCode: baseTicketCode, seatNumber } = parseTicketScanCode(rawCode);
       if (!ticketCode) {
         setFeedback({
           type: "ERROR",
           title: "Format QR tidak dikenali",
           message: "Data dalam QR code ini bukan tiket event DagoEng yang valid.",
-          timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+          timestamp: nowTimeWita(),
         });
         playBeep(false);
         return;
       }
 
       const targetEvent = events.find((e) => e.id === activeEventId);
-      const matchSeat = ticketCode.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
-      const seatNumber = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
-      const baseTicketCode = ticketCode.replace(/-\d+$/, "").toUpperCase();
 
       try {
         setIsProcessing(true);
@@ -215,20 +195,20 @@ export function OrganizerQRScannerDialog({
           const errMsg = json.error || "Gagal validasi tiket.";
           playBeep(false);
 
-          if (errMsg.includes("sudah digunakan")) {
+          if (errMsg.includes("sudah dipakai") || errMsg.includes("sudah digunakan")) {
             const existing = bookings.find(
-              (b) => b.ticketCode.toUpperCase().replace(/-\d+$/, "") === baseTicketCode
+              (b) => parseTicketScanCode(b.ticketCode).baseCode === baseTicketCode
             );
             setFeedback({
               type: "ALREADY_USED",
-              title: "Tiket sudah digunakan",
+              title: "Tiket sudah dipakai",
               message: errMsg,
               ticketCode,
               guestName: existing?.guestName,
               eventTitle: targetEvent?.title || existing?.eventTitle,
-              checkedInQty: existing?.ticketCount,
+              checkedInQty: existing?.checkedInQty ?? existing?.ticketCount,
               ticketCount: existing?.ticketCount,
-              timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+              timestamp: nowTimeWita(),
             });
           } else if (errMsg.includes("PENDING") || errMsg.includes("belum diverifikasi lunas")) {
             setFeedback({
@@ -236,7 +216,7 @@ export function OrganizerQRScannerDialog({
               title: "Tiket belum lunas",
               message: "Tiket ini berbayar dan belum lunas. Peserta belum dapat check-in.",
               ticketCode,
-              timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+              timestamp: nowTimeWita(),
             });
           } else if (errMsg.includes("CANCELLED")) {
             setFeedback({
@@ -244,7 +224,7 @@ export function OrganizerQRScannerDialog({
               title: "Tiket dibatalkan",
               message: "Pesanan tiket ini telah dibatalkan dan hak hadir tidak berlaku.",
               ticketCode,
-              timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+              timestamp: nowTimeWita(),
             });
           } else {
             setFeedback({
@@ -252,7 +232,7 @@ export function OrganizerQRScannerDialog({
               title: "Tiket tidak ditemukan",
               message: errMsg,
               ticketCode,
-              timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+              timestamp: nowTimeWita(),
             });
           }
           return;
@@ -260,6 +240,14 @@ export function OrganizerQRScannerDialog({
 
         playBeep(true);
         const updatedBooking = (json.data || json.booking) as EventTicketOrder;
+        let seatLabel: string | undefined = undefined;
+        if (updatedBooking.selectedSeats && updatedBooking.selectedSeats.length > 0) {
+          if (seatNumber && updatedBooking.selectedSeats[seatNumber - 1]) {
+            seatLabel = updatedBooking.selectedSeats[seatNumber - 1];
+          } else {
+            seatLabel = updatedBooking.selectedSeats.join(", ");
+          }
+        }
         setFeedback({
           type: "SUCCESS",
           title: "Check-in berhasil",
@@ -267,9 +255,10 @@ export function OrganizerQRScannerDialog({
           ticketCode: updatedBooking.ticketCode,
           guestName: updatedBooking.guestName,
           eventTitle: updatedBooking.eventTitle,
+          seatLabel,
           checkedInQty: updatedBooking.checkedInQty ?? updatedBooking.ticketCount,
           ticketCount: updatedBooking.ticketCount,
-          timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+          timestamp: nowTimeWita(),
         });
 
         onCheckInSuccess(updatedBooking, `Check-in berhasil untuk ${updatedBooking.guestName}`);
@@ -279,7 +268,7 @@ export function OrganizerQRScannerDialog({
           type: "ERROR",
           title: "Gangguan koneksi",
           message: err instanceof Error ? err.message : "Gagal memproses check-in ke server.",
-          timestamp: new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" }),
+          timestamp: nowTimeWita(),
         });
       } finally {
         setIsProcessing(false);
@@ -475,6 +464,9 @@ export function OrganizerQRScannerDialog({
               {feedback.guestName && (
                 <div className="text-xs text-foreground font-medium pt-1">
                   Peserta: {feedback.guestName} &bull; {feedback.ticketCode}
+                  {feedback.seatLabel && (
+                    <span className="font-mono text-primary font-semibold"> &bull; Kursi: {feedback.seatLabel}</span>
+                  )}
                 </div>
               )}
             </div>

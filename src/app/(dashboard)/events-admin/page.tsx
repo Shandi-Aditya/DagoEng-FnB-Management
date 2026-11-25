@@ -547,13 +547,17 @@ export default function AdminEventsPage() {
         return;
       }
 
-      setAllBookings((prev) =>
-        prev.map((b) =>
-          b.id === booking.id
-            ? { ...b, checkInStatus: nextStatus, checkInTime: nextStatus === "CHECKED_IN" ? new Date().toISOString() : null }
-            : b
-        )
-      );
+      const updatedBooking =
+        json && typeof json === "object" && "data" in json
+          ? (json.data as EventTicketOrder | undefined)
+          : undefined;
+      if (updatedBooking) {
+        setAllBookings((prev) =>
+          prev.map((b) => (b.id === booking.id ? { ...b, ...updatedBooking } : b))
+        );
+      } else {
+        await loadAdminEvents();
+      }
 
       logActivity({
         module: "COMMERCIAL",
@@ -584,6 +588,8 @@ export default function AdminEventsPage() {
       maxCapacity: event.maxCapacity,
       ticketTiers: event.ticketTiers,
       refundPolicy: event.refundPolicy,
+      hasSeatingChart: Boolean(event.hasSeatingChart),
+      seatingConfig: event.seatingConfig,
     });
     setEditGuidelinesText((event.guidelines || []).join("\n"));
     setIsEditModalOpen(true);

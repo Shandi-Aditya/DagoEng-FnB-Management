@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Ticket } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/app/status-badge";
 import type { EventTicketOrder } from "@/types/event";
 import { getCheckInStatusTone } from "./events-checkin-domain";
+import { formatSeatsList } from "@/lib/event-seating";
 
 interface EventCheckInQRDialogProps {
   booking: EventTicketOrder | null;
@@ -37,15 +38,15 @@ export function EventCheckInQRDialog({
 
   return (
     <Dialog open={Boolean(booking)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>QR Code E-Tiket Peserta</DialogTitle>
+      <DialogContent className="sm:max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b shrink-0">
+          <DialogTitle>QR code e-tiket peserta</DialogTitle>
           <DialogDescription className="font-mono text-xs">
             {booking.ticketCode}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           {/* QR Code Presentation Box */}
           <div className="bg-white p-4 rounded-xl border border-border flex items-center justify-center mx-auto w-fit shadow-xs">
             <QRCodeSVG
@@ -66,6 +67,14 @@ export function EventCheckInQRDialog({
               <span className="text-muted-foreground">Jumlah tiket:</span>
               <span className="font-medium text-foreground">{ticketCount} tiket</span>
             </div>
+            {booking.selectedSeats && booking.selectedSeats.length > 0 && (
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-muted-foreground">Nomor kursi:</span>
+                <span className="font-mono font-medium text-primary text-right">
+                  {formatSeatsList(booking.selectedSeats)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Status kehadiran:</span>
               <StatusBadge status={statusInfo.tone}>{statusInfo.label}</StatusBadge>
@@ -73,7 +82,7 @@ export function EventCheckInQRDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="p-4 px-6 border-t shrink-0 flex-col sm:flex-row gap-2">
           <Button
             type="button"
             size="lg"
@@ -85,7 +94,7 @@ export function EventCheckInQRDialog({
             <CheckCircle2 />
             <span>
               {isFullyCheckedIn
-                ? "Tiket sudah digunakan"
+                ? "Tiket sudah dipakai"
                 : ticketCount > 1
                 ? "Check-in rombongan ini"
                 : "Simulasikan scan tiket"}

@@ -172,6 +172,9 @@ function LoginContent() {
     searchParams.get("returnTo") || searchParams.get("redirect"),
   );
   const initialMode = searchParams.get("mode");
+  const inviteToken = searchParams.get("invite");
+  const inviteRole = searchParams.get("role");
+  const isTenantInviteFlow = Boolean(inviteToken && (!inviteRole || inviteRole === "owner"));
 
   const isFromEvents =
     fromParam === "events" || returnTo?.startsWith("/events");
@@ -197,11 +200,79 @@ function LoginContent() {
   const [regPassword, setRegPassword] = useState("");
   const [showRegPassword, setShowRegPassword] = useState(false);
 
+  // Tenant Owner Invite Activation States
+  const [inviteInfo, setInviteInfo] = useState<{
+    tenantId: string;
+    tenantName: string;
+    contactEmail?: string;
+  } | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [showInvitePassword, setShowInvitePassword] = useState(false);
+
   useEffect(() => {
     if (initialMode === "register") {
       setIsRegisterMode(true);
     }
   }, [initialMode]);
+
+  useEffect(() => {
+    if (!isTenantInviteFlow || !inviteToken) return;
+    let cancelled = false;
+    fetch(`/api/tenants/activate?token=${encodeURIComponent(inviteToken)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.success && data.data) {
+          setInviteInfo(data.data);
+          setInviteEmail(data.data.contactEmail || "");
+          setInviteName(`Pemilik ${data.data.tenantName}`);
+        } else {
+          setInviteError(data.error || "Tautan undangan mitra tidak valid.");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInviteError("Gagal memeriksa tautan undangan mitra.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isTenantInviteFlow, inviteToken]);
+
+  const handleActivateTenantOwner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteToken) return;
+    setErrorMessage(null);
+    setInviteError(null);
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/tenants/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: inviteToken,
+          email: inviteEmail.trim(),
+          name: inviteName.trim(),
+          password: invitePassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setInviteError(data.error || "Gagal mengaktifkan akun pemilik mitra.");
+        return;
+      }
+      setInviteSuccess(data.message || "Akun pemilik mitra diaktifkan.");
+      setEmail(data.data?.email || inviteEmail.trim());
+      setInviteInfo(null);
+    } catch {
+      setInviteError("Gagal menghubungi server saat aktivasi akun.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   /**
    * Universal Login Handler with Backend Role Auto-Detection & Safe Auto-Routing
@@ -387,14 +458,65 @@ function LoginContent() {
               </Alert>
             ) : null}
 
-            {errorMessage ? (
-              <Alert variant="destructive">
-                <AlertCircle />
-                <AlertDescription>{errorMessage}</AlertDescription>
+            {inviteSuccess ? (
+              <Alert>
+                <AlertDescription>{inviteSuccess}</AlertDescription>
               </Alert>
             ) : null}
 
-            {!isRegisterMode ? (
+            {errorMessage || inviteError ? (
+              <Alert variant="destructive">
+                <AlertCircle />
+                <AlertDescription>{errorMessage || inviteError}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {isTenantInviteFlow && inviteInfo ? (
+              <form onSubmit={handleActivateTenantOwner}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Gerai mitra</FieldLabel>
+                    <Input value={inviteInfo.tenantName} disabled />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="inviteName">Nama pemilik akun</FieldLabel>
+                    <Input
+                      id="inviteName"
+                      type="text"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="inviteEmail">Email login pemilik</FieldLabel>
+                    <Input
+                      id="inviteEmail"
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="pemilik@mitra.id"
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="invitePassword">Password baru (min. 8 karakter)</FieldLabel>
+                    <PasswordInput
+                      id="invitePassword"
+                      value={invitePassword}
+                      onChange={setInvitePassword}
+                      visible={showInvitePassword}
+                      onToggle={() => setShowInvitePassword((v) => !v)}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
+                    {isLoading ? <Spinner /> : null}
+                    {isLoading ? "Mengaktifkan akun" : "Aktifkan akun pemilik"}
+                  </Button>
+                </FieldGroup>
+              </form>
+            ) : !isRegisterMode ? (
               <form onSubmit={handleUniversalLogin}>
                 <FieldGroup>
                   <Field>

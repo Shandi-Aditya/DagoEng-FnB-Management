@@ -594,7 +594,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
       // 5. Percobaan check-in orang ke-4 (melebihi tiketCount 3) -> DITOLAK
       await expect(
         updateBookingCheckIn(booking.id, "CHECKED_IN", { incrementQty: 1 })
-      ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
       // 6. Reset check-in kembali ke 0
       const reset = await updateBookingCheckIn(booking.id, "REGISTERED", { reset: true });
@@ -634,7 +634,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
       // Pemindaian kedua pada tiket yang sama -> Ditolak (anti double check-in)
       await expect(
         organizerCheckInAttendee("halo@bandungdev.org", booking.ticketCode, "CHECKED_IN")
-      ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("5.2. Mendukung pemindaian bertahap (partial check-in) via ticketCode untuk rombongan", async () => {
@@ -686,7 +686,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
           "CHECKED_IN",
           { incrementQty: 1 }
         )
-      ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("5.3. Menolak tiket yang berstatus CANCELLED untuk check-in via QR", async () => {

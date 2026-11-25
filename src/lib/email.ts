@@ -12,6 +12,7 @@ import { OFFICIAL_CS_DISPLAY_PHONE, buildOfficialCsWhatsAppUrl } from "@/lib/con
 export interface PaidTicketItem {
   ticketCode: string;
   seatNumber: number;
+  seatLabel?: string;
   guestLabel: string;
   qrPayload: string;
   qrImageUrl: string;
@@ -27,6 +28,7 @@ export interface TicketConfirmationEmailPayload {
   eventLocation?: string;
   ticketCode: string;
   ticketCount: number;
+  selectedSeats?: string[];
   totalPrice: number;
   paymentStatus: "PENDING" | "PAID" | "CANCELLED";
   privateAccessUrl: string;
@@ -78,6 +80,7 @@ export function buildPaidTicketItems(booking: {
   eventId: string;
   ticketCount?: number;
   guestName: string;
+  selectedSeats?: string[];
 }): PaidTicketItem[] {
   const count = Math.max(1, booking.ticketCount || 1);
   const items: PaidTicketItem[] = [];
@@ -87,6 +90,7 @@ export function buildPaidTicketItems(booking: {
     const guestLabel = count > 1
       ? (seat === 1 ? `${booking.guestName} (Pemesan Utama)` : `Tamu Pax #${seat}`)
       : booking.guestName;
+    const seatLabel = booking.selectedSeats?.[seat - 1];
     const qrPayload = JSON.stringify({
       ticketCode: subCode,
       eventId: booking.eventId,
@@ -98,6 +102,7 @@ export function buildPaidTicketItems(booking: {
     items.push({
       ticketCode: subCode,
       seatNumber: seat,
+      seatLabel,
       guestLabel,
       qrPayload,
       qrImageUrl,
@@ -123,11 +128,13 @@ export function generatePaidTicketEmailHtml(payload: TicketConfirmationEmailPayl
     .map((t) => {
       const safeGuestLabel = escapeHtml(t.guestLabel);
       const safeSubCode = escapeHtml(t.ticketCode);
+      const safeSeatLabel = t.seatLabel ? escapeHtml(t.seatLabel) : "";
       const imgSrc = t.cid ? `cid:${t.cid}` : (t.qrImageUrl || `cid:qr-seat-${t.seatNumber}@dagoeng.com`);
       return `
     <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; background-color: #f8fafc; text-align: center;">
       <div style="font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 4px;">${safeGuestLabel}</div>
-      <div style="font-size: 13px; font-family: monospace; color: #0284c7; font-weight: 700; margin-bottom: 12px;">${safeSubCode}</div>
+      <div style="font-size: 13px; font-family: monospace; color: #0284c7; font-weight: 700; margin-bottom: ${safeSeatLabel ? "4px" : "12px"};">${safeSubCode}</div>
+      ${safeSeatLabel ? `<div style="font-size: 12px; font-weight: 600; color: #0f172a; margin-bottom: 12px;">Kursi: <span style="font-family: monospace; color: #0284c7;">${safeSeatLabel}</span></div>` : ""}
       <div style="margin: 0 auto 12px; display: inline-block; padding: 8px; background: #ffffff; border-radius: 8px; border: 1px solid #cbd5e1;">
         <img src="${imgSrc}" alt="QR ${safeSubCode}" width="180" height="180" style="display: block; max-width: 100%; height: auto;" />
       </div>
@@ -163,6 +170,7 @@ export function generatePaidTicketEmailHtml(payload: TicketConfirmationEmailPayl
         <div style="margin-bottom: 4px;"><strong>Waktu Acara:</strong> ${safeEventDate}</div>
         <div style="margin-bottom: 4px;"><strong>Lokasi:</strong> ${safeEventLocation}</div>
         <div style="margin-bottom: 4px;"><strong>Kode Booking:</strong> <span style="font-family: monospace; font-weight: 600;">${safeTicketCode}</span></div>
+        ${payload.selectedSeats && payload.selectedSeats.length > 0 ? `<div style="margin-bottom: 4px;"><strong>Nomor Kursi:</strong> <span style="font-family: monospace; font-weight: 600;">${escapeHtml(payload.selectedSeats.join(", "))}</span></div>` : ""}
         <div><strong>Jumlah Peserta:</strong> ${payload.ticketCount} Tiket</div>
       </div>
 
@@ -514,6 +522,7 @@ export async function dispatchPaidTicketEmail(
     eventLocation?: string;
     ticketCode: string;
     ticketCount?: number;
+    selectedSeats?: string[];
     totalPrice?: number;
     paymentStatus: string;
     guestToken?: string;
@@ -531,6 +540,7 @@ export async function dispatchPaidTicketEmail(
     eventId: booking.eventId,
     ticketCount: count,
     guestName: booking.guestName,
+    selectedSeats: booking.selectedSeats,
   });
 
   const payload: TicketConfirmationEmailPayload = {
@@ -541,6 +551,7 @@ export async function dispatchPaidTicketEmail(
     eventLocation: booking.eventLocation,
     ticketCode: booking.ticketCode,
     ticketCount: count,
+    selectedSeats: booking.selectedSeats,
     totalPrice: price,
     paymentStatus: booking.paymentStatus as any,
     privateAccessUrl,

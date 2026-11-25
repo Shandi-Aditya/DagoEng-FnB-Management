@@ -22,6 +22,7 @@ import {
   allocateIntegerProRata,
   calculateMixedCartTaxAndService,
   isCoworkingOrderItem,
+  normalizeTenantId,
 } from "@/lib/tax-breakdown";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { useCoworking } from "@/contexts/CoworkingContext";
@@ -51,7 +52,15 @@ import { KitchenTicketData } from "@/types/printer";
 import { CashDrawerShiftModal, buildCashDrawerShiftSummary } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
-import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
+import {
+  isTenantActive,
+  isTenantSuspended,
+  getTenantStatus,
+  getTenantProfile,
+  DEFAULT_FNB_TENANTS,
+  getAllFnbTenants,
+  getTenantName,
+} from "@/lib/tenant";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import {
   generateSequentialReceiptNumber,
@@ -180,7 +189,9 @@ export default function POSPage() {
   const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace, cancelBooking: cwCancelBooking } = useCoworking();
   const { shifts, activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
-  const isTenantScoped = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const isTenantScoped =
+    (user?.scopeLevel === "TENANT" || user?.scopeLevel === "OUTLET") &&
+    Boolean(user?.tenant?.id);
   const lockedTenantId = isTenantScoped ? user?.tenant?.id : undefined;
 
   const isSubmittingOrderRef = useRef(false);
@@ -258,6 +269,27 @@ export default function POSPage() {
     if (!isMounted) return scoped;
     return scoped.filter((t) => isTenantActive(t.id));
   }, [tenantSettingsVersion, isMounted, lockedTenantId]);
+
+  const lockedTenantStatus = useMemo(() => {
+    if (!lockedTenantId) return "ACTIVE" as const;
+    return getTenantStatus(lockedTenantId);
+  }, [lockedTenantId, tenantSettingsVersion]);
+
+  const isLockedTenantSuspended =
+    lockedTenantStatus === "SUSPENDED" || lockedTenantStatus === "INACTIVE";
+
+  const lockedTenantSuspendedReason = useMemo(() => {
+    if (!lockedTenantId || !isLockedTenantSuspended) return "";
+    if (lockedTenantStatus === "INACTIVE") {
+      return "Gerai mitra sedang dinonaktifkan oleh manajemen Dago Creative Hub.";
+    }
+    try {
+      const prof = getTenantProfile(lockedTenantId);
+      return prof.suspendedReason || "Keterlambatan setoran settlement lebih dari 2 minggu (14 hari).";
+    } catch {
+      return "Keterlambatan setoran settlement lebih dari 2 minggu (14 hari).";
+    }
+  }, [lockedTenantId, isLockedTenantSuspended, lockedTenantStatus, tenantSettingsVersion]);
 
   // Primary Filter: Selected Mitra/Tenant
   const [selectedTenantId, setSelectedTenantId] = useState<string>(lockedTenantId || "ALL");
@@ -781,6 +813,14 @@ export default function POSPage() {
   const handleAddToCart = (item: POSCartItem) => {
     const meta = resolveCartItemMetadata(item, posProducts);
     if (!meta.isCw) {
+      const tenantStatus = getTenantStatus(meta.resolvedTenantId);
+      if (tenantStatus === "SUSPENDED" || tenantStatus === "INACTIVE") {
+        notify.error(
+          tenantStatus === "SUSPENDED" ? "Mitra ditangguhkan" : "Mitra nonaktif",
+          `Menu dari gerai ${getTenantName(meta.resolvedTenantId) || "Mitra F&B"} tidak dapat dipesan karena status mitra sedang ${tenantStatus === "SUSPENDED" ? "ditangguhkan" : "nonaktif"}.`
+        );
+        return;
+      }
       const tenantOp = isTenantAcceptingOrders(meta.resolvedTenantId, settings?.tenantOperations);
       if (!tenantOp.isOpen) {
         notify.warning(
@@ -1313,7 +1353,7 @@ export default function POSPage() {
         action: "PAYMENT_SUCCESS",
         recordId: createdOrder.orderNumber,
         newValue: `Total: Rp ${grandTotal.toLocaleString()} (${paymentData.method}) - Bayar: Rp ${paymentData.amountPaid.toLocaleString()}`,
-        description: `Pembayaran transaksi kasir POS ${createdOrder.orderNumber} berhasil`,
+        description: `Pembayaran transaksi kasir POS ${createdOrder.orderNumber} diproses`,
         reason: `Pembayaran kasir selesai via ${paymentData.method}`,
         status: "SUCCESS",
       });
@@ -1688,7 +1728,7 @@ export default function POSPage() {
         action: "PAYMENT_SUCCESS",
         recordId: createdBooking.bookingCode,
         newValue: `Booking: ${selectedSpace.name} - ${effectiveGuestName} (${formatCurrencyIDR(cwPricing.total)} via ${cwPaymentMethod})`,
-        description: `Transaksi booking Co-working ${createdBooking.bookingCode} berhasil di Kasir`,
+        description: `Transaksi booking co-working ${createdBooking.bookingCode} diproses di kasir`,
         reason: `Pembayaran kasir selesai via ${cwPaymentMethod}`,
         status: "SUCCESS",
       });
@@ -1818,7 +1858,7 @@ export default function POSPage() {
     setIsManualTimeSet(false);
     setIsCwQrisModalOpen(false);
     setPendingCwQrisBooking(null);
-    notify.success("Pembayaran QRIS lunas", `Booking #${verifiedBooking.bookingCode} berhasil disetujui supervisor.`);
+    notify.success("Pembayaran QRIS lunas", `Booking #${verifiedBooking.bookingCode} disetujui supervisor.`);
   };
 
   const availableCartPromos = (settings.promos ?? []).filter((promo: PromoConfig) => {
@@ -1839,7 +1879,27 @@ export default function POSPage() {
       ? `Belum mencapai minimum belanja Rp ${activePromo.minimumAmount.toLocaleString("id-ID")}.`
       : null;
   const cartCount = cartItemCount(cartItems);
-  const canPay = cartItems.length > 0 && !(orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0));
+  const blockedCartTenant = useMemo(() => {
+    for (const item of cartItems) {
+      if (item.itemType === "COWORKING") continue;
+      const tid = normalizeTenantId(item.tenantId || lockedTenantId || "tenant-ks") || "tenant-ks";
+      const status = getTenantStatus(tid);
+      if (status === "SUSPENDED" || status === "INACTIVE") {
+        return {
+          tenantId: tid,
+          status,
+          brandName: getTenantName(tid) || item.tenantName || tid,
+        };
+      }
+    }
+    return null;
+  }, [cartItems, lockedTenantId, tenantSettingsVersion]);
+
+  const canPay =
+    !isLockedTenantSuspended &&
+    !blockedCartTenant &&
+    cartItems.length > 0 &&
+    !(orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0));
 
   const handlePromoChange = (promoId: string) => {
     setSelectedPromoId(promoId);
@@ -1855,6 +1915,20 @@ export default function POSPage() {
   };
 
   const handleRequestPayment = () => {
+    if (isLockedTenantSuspended) {
+      notify.error(
+        "Kasir outlet terkunci",
+        `Status gerai sedang ${lockedTenantStatus === "INACTIVE" ? "nonaktif" : "ditangguhkan"}: ${lockedTenantSuspendedReason} Transaksi tidak dapat diproses.`
+      );
+      return;
+    }
+    if (blockedCartTenant) {
+      notify.error(
+        blockedCartTenant.status === "SUSPENDED" ? "Mitra ditangguhkan" : "Mitra nonaktif",
+        `Keranjang berisi item dari gerai ${blockedCartTenant.brandName} yang sedang ${blockedCartTenant.status === "SUSPENDED" ? "ditangguhkan" : "nonaktif"}.`
+      );
+      return;
+    }
     if (orderType === "DINE_IN" && !selectedTable) {
       notify.warning("Pilih meja dulu", "Pesanan dine in perlu nomor meja sebelum dibayar.");
       return;
@@ -1902,6 +1976,29 @@ export default function POSPage() {
     // Co-working mode switches the accent from F&B orange to co-working blue
     <div data-unit={posUnit} className="flex flex-col gap-4">
       <UnitScope unit={posUnit} />
+      {isLockedTenantSuspended ? (
+        <Alert className="border-warning/40 bg-warning/10 text-foreground">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="space-y-1">
+            <p className="font-semibold text-sm">
+              {lockedTenantStatus === "INACTIVE"
+                ? "Kasir outlet terkunci (mitra nonaktif)"
+                : "Kasir outlet terkunci (mitra ditangguhkan)"}
+            </p>
+            <p className="text-xs">
+              Status kemitraan gerai saat ini sedang{" "}
+              <strong>{lockedTenantStatus === "INACTIVE" ? "nonaktif" : "ditangguhkan"}</strong>.{" "}
+              {lockedTenantSuspendedReason}
+            </p>
+            <p className="text-xs opacity-90">
+              Kasir tidak dapat memproses pesanan atau transaksi baru. Hubungi manajemen Dago Creative Hub untuk{" "}
+              {lockedTenantStatus === "INACTIVE"
+                ? "pengaktifan kembali gerai."
+                : "penyelesaian setoran dan pembukaan kunci."}
+            </p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {isTenantScoped ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -1944,7 +2041,7 @@ export default function POSPage() {
       )}
 
       {needsReconciliationShift ? (
-        <Alert variant="destructive">
+        <Alert className="border-warning/40 bg-warning/10 text-foreground">
           <AlertTriangle className="size-4" />
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             <span>
@@ -2247,7 +2344,7 @@ export default function POSPage() {
           />
 
           {!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen && (
-            <Alert variant="destructive">
+            <Alert className="border-warning/40 bg-warning/10 text-foreground">
               <AlertTriangle className="size-4" />
               <AlertDescription className="text-xs">
                 {isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).reason}. Kantor Dago Creative Hub dan co-working beroperasi Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA.

@@ -101,6 +101,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       customPlatformFeePercent: body.customPlatformFeePercent,
       ticketTiers: body.ticketTiers,
       refundPolicy: body.refundPolicy,
+      hasSeatingChart: body.hasSeatingChart,
+      seatingConfig: body.seatingConfig,
     };
 
     const updated = await updateEventDetails(id, allowedUpdates);

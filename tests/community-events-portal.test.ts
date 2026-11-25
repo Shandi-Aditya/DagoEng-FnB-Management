@@ -124,7 +124,7 @@ describe("Community Organizer Portal & Cross-Community Isolation", () => {
     // Tolak check-in berulang (T-1)
     await expect(
       organizerCheckInAttendee(orgEmailA, bookingA.id, "CHECKED_IN")
-    ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+    ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
   });
 
   it("4. NEGATIVE TEST: Penyelenggara B DITOLAK saat mencoba check-in peserta milik Komunitas A", async () => {

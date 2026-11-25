@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventBookings, getEventOperationalStats, getAdminEvents } from "@/lib/events";
-import { assertEventAdmin, assertCheckInAuth, assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import {
+  assertEventAdmin,
+  assertCheckInAuth,
+  assertOrganizerAuth,
+  sanitizeBookingForResponse,
+} from "@/lib/server-auth";
 import { normalizeIndonesianPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +37,10 @@ export async function GET(req: NextRequest) {
       if (checkInAuth.authorized) {
         isAuthorized = true;
         authRole = checkInAuth.role;
+        if (checkInAuth.isOrganizer && checkInAuth.email) {
+          isOrganizer = true;
+          organizerEmail = checkInAuth.email.toLowerCase().trim();
+        }
       }
     }
 
@@ -67,6 +76,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (authRole === "CHECKIN_STAFF" && !eventId) {
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        data: [],
+        stats: null,
+      });
+    }
+
     const canViewUnmasked =
       allowUnmasked &&
       (authRole === "SUPER_ADMIN" || authRole === "OWNER" || authRole === "MANAGER");
@@ -99,15 +117,9 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const safeBookings = filteredBookings.map((b) => {
-      const { guestToken: _token, ...rest } = b;
-      if (canViewUnmasked) return rest;
-      return {
-        ...rest,
-        guestEmail: maskEmail(b.guestEmail),
-        guestPhone: maskPhoneNumber(b.guestPhone),
-      };
-    });
+    const safeBookings = filteredBookings.map((b) =>
+      sanitizeBookingForResponse(b, { maskPii: !canViewUnmasked })
+    );
 
     let stats = null;
     if (includeStats) {
@@ -126,7 +138,7 @@ export async function GET(req: NextRequest) {
       data: safeBookings,
       stats,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/events/bookings error:", error);
     return NextResponse.json(
       { success: false, error: "Gagal memuat data pemesanan tiket event." },

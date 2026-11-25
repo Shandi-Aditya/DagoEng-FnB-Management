@@ -337,6 +337,7 @@ export default function PrivateTicketViewPage() {
                 ticketCount={ticket.ticketCount}
                 totalPrice={ticket.totalPrice}
                 ticketTierName={ticket.ticketTierName}
+                selectedSeats={ticket.selectedSeats}
                 isInvitation={ticket.isInvitation}
                 invitationNote={ticket.invitationNote}
                 promoCode={ticket.promoCode}

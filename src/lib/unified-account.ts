@@ -5,6 +5,7 @@ import {
   getAllOrganizers,
   getOrganizerByEmail,
   createOrganizer,
+  isTenantOwnerEmailAsync,
   CommunityOrganizerProfile,
 } from "./organizers";
 import {
@@ -143,6 +144,11 @@ export async function registerUnifiedUser(payload: RegisterUserPayload): Promise
 
   if (!normalizedEmail || !normalizedEmail.includes("@")) {
     throw new Error("Format alamat email tidak valid.");
+  }
+  if (await isTenantOwnerEmailAsync(normalizedEmail)) {
+    throw new Error(
+      `EMAIL_CONFLICT: Email [${normalizedEmail}] sudah terdaftar sebagai akun pemilik mitra.`
+    );
   }
   if (!normalizedName || normalizedName.length < 2) {
     throw new Error("Nama lengkap minimal 2 karakter.");

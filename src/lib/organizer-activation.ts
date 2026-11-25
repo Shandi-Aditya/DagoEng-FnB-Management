@@ -99,7 +99,7 @@ function loadInvitesFromDisk(): OrganizerActivationTokenRecord[] {
     if (!fs.existsSync(invitesFile)) {
       return [];
     }
-    const raw = fs.readFileSync(invitesFile, "utf-8");
+    const raw = fs.readFileSync(invitesFile, "utf-8").replace(/^\uFEFF/, "");
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {

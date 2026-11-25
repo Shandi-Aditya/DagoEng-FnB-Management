@@ -3,10 +3,10 @@
 import type React from "react";
 import { useEffect, useState } from "react";
 import {
-  Award,
   Coffee,
-  Grid,
   Laptop,
+  MapPin,
+  Pencil,
   Plus,
   Printer,
   Settings,
@@ -14,25 +14,40 @@ import {
   Sparkles,
   Store,
   Tag,
+  Trash2,
   UtensilsCrossed,
   Wifi,
 } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { notify } from "@/components/app/notify";
 import { PageHeader } from "@/components/app/page-header";
+import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
-import { useOutlet } from "@/contexts/OutletContext";
+import { useOutlet, type OutletItem } from "@/contexts/OutletContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 import { useTables } from "@/contexts/TableContext";
 import {
   INDONESIAN_NATIONAL_HOLIDAYS_2026,
-  type HolidayOverride,
   type HolidayOverrideDate,
   type TenantOperationConfig,
 } from "@/lib/operating-hours";
@@ -53,7 +68,6 @@ import {
   getSimulatedOrgSubscription,
   getSimulatedTenantAddons,
   type OrgSubscriptionState,
-  type PlanTier,
   setSimulatedOrgPlan,
   type TenantAddonItem,
   toggleSimulatedTenantAddon,
@@ -68,9 +82,15 @@ import {
   getTenantName,
   getTenantProfile,
   getTenantStatus,
+  getWitaDateKey,
+  recordTenantSettlementDeposit,
   saveCustomTenant,
   saveTenantProfile,
   setTenantStatus,
+  checkTenantAutoSuspension,
+  type FnbPartnerInfo,
+  type TenantStatus,
+  type TenantPartnerType,
 } from "@/lib/tenant";
 import {
   DEFAULT_NETWORK_CONFIG,
@@ -92,8 +112,8 @@ import {
 import type { CategoryTaxType, OutletReceiptCombineMode } from "@/types/settings";
 import type { CoworkingMembershipPlan } from "@/types/coworking";
 import type { TableStatus } from "@/contexts/TableContext";
-import type { CommunityEvent, EventRevenueSharingPolicy, DEFAULT_EVENT_POLICY } from "@/types/event";
-import type { CommunityOrganizerProfile, INITIAL_ORGANIZERS } from "@/types/organizer";
+import type { CommunityEvent } from "@/types/event";
+import type { CommunityOrganizerProfile } from "@/types/organizer";
 import type { MasterProduct } from "@/types/product";
 
 // Sub-komponen modular settings yang telah di-unslop
@@ -130,7 +150,7 @@ export default function SettingsPage() {
   const { areas, addTable, updateTable, deleteTable, updateTableStatus } = useTables();
   const allTables = areas.flatMap((a) => a.tables.map((t) => ({ ...t, areaName: a.name })));
   const { settings, updateSettings, savePromos } = useSettings();
-  const { outlets } = useOutlet();
+  const { outlets, allOutlets, addOutlet, updateOutlet, deleteOutlet } = useOutlet();
 
   const isSuperAdmin = user?.role?.slug === "SUPER_ADMIN";
   const isOrgOwner = user?.role?.slug === "OWNER" && user?.scopeLevel === "ORGANIZATION";
@@ -209,25 +229,37 @@ export default function SettingsPage() {
   );
 
   // Tenant Operations & Profil
-  const [localTenants, setLocalTenants] = useState<{ id: string; name: string; code: string; badge: string }[]>(() => getAllFnbTenants());
-  const [allTenantStatuses, setAllTenantStatuses] = useState<Record<string, "ACTIVE" | "INACTIVE">>({});
+  const [localTenants, setLocalTenants] = useState<FnbPartnerInfo[]>(() => getAllFnbTenants());
+  const [allTenantStatuses, setAllTenantStatuses] = useState<Record<string, TenantStatus>>({});
   const [tenantOps, setTenantOps] = useState<Record<string, TenantOperationConfig>>(settings.tenantOperations || {});
   const [tenantBrandName, setTenantBrandName] = useState(user?.tenant?.name || "Kopi Senja");
   const [tenantTagline, setTenantTagline] = useState("Specialty Coffee & Beverages");
   const [tenantDesc, setTenantDesc] = useState("Single origin espresso blend Kintamani, olahan susu segar & gula aren organik Bali.");
   const [tenantPhone, setTenantPhone] = useState(OFFICIAL_CS_DISPLAY_PHONE);
   const [tenantReceiptHeader, setTenantReceiptHeader] = useState("Kopi Senja — Specialty Coffee & Beverages");
-  const [tenantReceiptFooter, setTenantReceiptFooter] = useState("Terima kasih telah berkunjung ke Kopi Senja!");
+  const [tenantReceiptFooter, setTenantReceiptFooter] = useState("Terima kasih telah berkunjung ke Kopi Senja");
   const [tenantLowStock, setTenantLowStock] = useState(35);
-  const [tenantStatus, setTenantStatusState] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
+  const [tenantStatus, setTenantStatusState] = useState<TenantStatus>("ACTIVE");
   const [tenantOpenTime, setTenantOpenTime] = useState(settings.tenantOperations?.[user?.tenant?.id || "tenant-ks"]?.openTime || "08:00");
   const [tenantCloseTime, setTenantCloseTime] = useState(settings.tenantOperations?.[user?.tenant?.id || "tenant-ks"]?.closeTime || "21:00");
   const [tenantClosedReason, setTenantClosedReason] = useState(settings.tenantOperations?.[user?.tenant?.id || "tenant-ks"]?.temporaryClosedReason || "");
   const [bankName, setBankName] = useState<string>("BCA");
   const [bankAccountNumber, setBankAccountNumber] = useState<string>("");
   const [bankAccountHolder, setBankAccountHolder] = useState<string>("");
+  const [tenantNpwp, setTenantNpwp] = useState<string>("");
   const [bankFormError, setBankFormError] = useState<string>("");
   const [isSavingTenantOps, setIsSavingTenantOps] = useState(false);
+
+  // Outlet Management Modal State
+  const [isOutletModalOpen, setIsOutletModalOpen] = useState(false);
+  const [editingOutlet, setEditingOutlet] = useState<OutletItem | null>(null);
+  const [formOutletName, setFormOutletName] = useState("");
+  const [formOutletCode, setFormOutletCode] = useState("");
+  const [formOutletAddress, setFormOutletAddress] = useState("");
+  const [formOutletPhone, setFormOutletPhone] = useState("");
+  const [formOutletStatus, setFormOutletStatus] = useState<OutletItem["status"]>("ACTIVE");
+  const [isSavingOutlet, setIsSavingOutlet] = useState(false);
+  const [deletingOutlet, setDeletingOutlet] = useState<OutletItem | null>(null);
 
   // Flexible Revenue Sharing
   const [settlementBasis, setSettlementBasis] = useState<SettlementBasisMode>(
@@ -240,7 +272,7 @@ export default function SettingsPage() {
   // Organizers & Event Policy
   const [partnerSubTab, setPartnerSubTab] = useState<PartnerSubTabId>("MANAJEMEN_MITRA");
   const [partnerTypeFilter, setPartnerTypeFilter] = useState<"ALL" | "FNB" | "EVENT">("ALL");
-  const [partnerStatusFilter, setPartnerStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [partnerStatusFilter, setPartnerStatusFilter] = useState<"ALL" | TenantStatus>("ALL");
   const [partnerSearchQuery, setPartnerSearchQuery] = useState<string>("");
   const [organizers, setOrganizers] = useState<CommunityOrganizerProfile[]>([]);
   const [selectedPartnerDetail, setSelectedPartnerDetail] = useState<UnifiedPartnerRow | null>(null);
@@ -248,6 +280,19 @@ export default function SettingsPage() {
   const [formTenantName, setFormTenantName] = useState("");
   const [formTenantCode, setFormTenantCode] = useState("");
   const [formTenantBadge, setFormTenantBadge] = useState("");
+  const [formTenantPartnerType, setFormTenantPartnerType] = useState<TenantPartnerType>("EXTERNAL");
+  const [formTenantPIC, setFormTenantPIC] = useState("");
+  const [formTenantPhone, setFormTenantPhone] = useState("");
+  const [formTenantEmail, setFormTenantEmail] = useState("");
+  const [formTenantNPWP, setFormTenantNPWP] = useState("");
+  const [formTenantBankName, setFormTenantBankName] = useState("BCA");
+  const [formTenantBankAccountNumber, setFormTenantBankAccountNumber] = useState("");
+  const [formTenantBankAccountHolder, setFormTenantBankAccountHolder] = useState("");
+  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
+  const [formTenantPksNumber, setFormTenantPksNumber] = useState("");
+  const [formTenantContractStart, setFormTenantContractStart] = useState("");
+  const [formTenantContractEnd, setFormTenantContractEnd] = useState("");
+  const [formTenantPksFile, setFormTenantPksFile] = useState("");
   const [isAddOrganizerModalOpen, setIsAddOrganizerModalOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgCategory, setNewOrgCategory] = useState("Komunitas Kreatif");
@@ -360,8 +405,17 @@ export default function SettingsPage() {
   const refreshAllTenantStatuses = () => {
     const tenants = getAllFnbTenants();
     setLocalTenants(tenants);
-    const statuses: Record<string, "ACTIVE" | "INACTIVE"> = {};
+    const statuses: Record<string, TenantStatus> = {};
     tenants.forEach((t) => {
+      const prof = getTenantProfile(t.id);
+      if (!isTenantOwner) {
+        const autoCheck = checkTenantAutoSuspension(prof);
+        if (autoCheck.shouldSuspend) {
+          setTenantStatus(t.id, "SUSPENDED", autoCheck.reason);
+          statuses[t.id] = "SUSPENDED";
+          return;
+        }
+      }
       statuses[t.id] = getTenantStatus(t.id);
     });
     setAllTenantStatuses(statuses);
@@ -447,6 +501,7 @@ export default function SettingsPage() {
         setBankName(profile.bankName);
         setBankAccountNumber(profile.bankAccountNumber);
         setBankAccountHolder(profile.bankAccountHolder);
+        setTenantNpwp(profile.npwp || "");
         setTenantStatusState(profile.status);
       }
     });
@@ -468,9 +523,16 @@ export default function SettingsPage() {
   }, [user, isTenantOwner]);
 
   useEffect(() => {
+    if (!canAccessSettings) return;
     let active = true;
     fetch("/api/settings/settlement-receipt")
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (!res.ok) {
+          console.warn("Gagal memuat kebijakan bagi hasil:", res.status);
+          return null;
+        }
+        return res.json();
+      })
       .then((data) => {
         if (!active || !data?.success || !data?.policy) return;
         const policy = data.policy;
@@ -484,37 +546,63 @@ export default function SettingsPage() {
         }
         saveStoredSettlementReceiptPolicy(policy);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("Gagal memuat kebijakan bagi hasil:", err);
+      });
 
     return () => {
       active = false;
     };
-  }, [user?.id]);
+  }, [canAccessSettings, user?.id]);
 
   useEffect(() => {
+    if (!canAccessSettings || isTenantOwner) return;
+    let active = true;
     fetch("/api/events/admin/organizers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data)) setOrganizers(data.data);
+      .then((r) => {
+        if (!r.ok) {
+          console.warn("Gagal memuat daftar penyelenggara:", r.status);
+          return null;
+        }
+        return r.json();
       })
-      .catch(() => {});
+      .then((data) => {
+        if (active && data?.success && Array.isArray(data.data)) setOrganizers(data.data);
+      })
+      .catch((err) => {
+        console.warn("Gagal memuat daftar penyelenggara:", err);
+      });
 
     fetch("/api/events/admin/settings")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          console.warn("Gagal memuat pengaturan komisi event:", r.status);
+          return null;
+        }
+        return r.json();
+      })
       .then((data) => {
-        if (data.success && data.data) {
+        if (active && data?.success && data.data) {
           setEventPlatformFee(data.data.defaultPlatformFeePercent ?? 20);
           setEventPolicyEffectiveDate(data.data.effectiveDate || "2026-01-01T00:00:00.000Z");
           setEventPolicyNotes(data.data.policyNotes || "");
           setEventPolicyHistory(data.data.history || []);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("Gagal memuat pengaturan komisi event:", err);
+      });
 
     fetch("/api/events/admin")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          console.warn("Gagal memuat daftar event admin:", r.status);
+          return null;
+        }
+        return r.json();
+      })
       .then((data) => {
-        if (data.success && Array.isArray(data.data)) {
+        if (active && data?.success && Array.isArray(data.data)) {
           setActiveAdminEvents(data.data);
           const overrides: Record<string, number | null> = {};
           data.data.forEach((evt: CommunityEvent) => {
@@ -523,8 +611,14 @@ export default function SettingsPage() {
           setEventOverrides(overrides);
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch((err) => {
+        console.warn("Gagal memuat daftar event admin:", err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [canAccessSettings, isTenantOwner]);
 
   useEffect(() => {
     if (!isTenantOwner || !user?.tenant?.id) return;
@@ -541,6 +635,7 @@ export default function SettingsPage() {
       setBankName(profile.bankName);
       setBankAccountNumber(profile.bankAccountNumber);
       setBankAccountHolder(profile.bankAccountHolder);
+      setTenantNpwp(profile.npwp || "");
       setTenantStatusState(profile.status);
     } catch (e) {
       console.error("Gagal memuat profil mitra", e);
@@ -589,7 +684,7 @@ export default function SettingsPage() {
       tenantId: formProdTenantId,
     });
     setIsAddProdModalOpen(false);
-    notify.success("Menu ditambahkan", `${formProdName} berhasil disimpan.`);
+    notify.success("Menu ditambahkan", `${formProdName} disimpan.`);
   };
 
   const handleOpenEditProduct = (prod: MasterProduct) => {
@@ -621,7 +716,7 @@ export default function SettingsPage() {
         status: formProdStatus,
         isAvailable: formProdStatus === "ACTIVE",
       },
-      "Update Master Data via Settings",
+      "Pembaruan master data dari pengaturan",
     );
     setIsEditProdModalOpen(false);
     setEditingProd(null);
@@ -661,7 +756,7 @@ export default function SettingsPage() {
     });
     setLocalSpaces((prev) => [...prev, created]);
     setIsAddSpaceModalOpen(false);
-    notify.success("Ruang ditambahkan", `${created.name} berhasil disimpan.`);
+    notify.success("Ruang ditambahkan", `${created.name} disimpan.`);
   };
 
   const handleSaveEditSpace = (e: React.FormEvent) => {
@@ -715,7 +810,7 @@ export default function SettingsPage() {
     };
     cwAddPlan(newPlan);
     setIsAddPlanModalOpen(false);
-    notify.success("Paket ditambahkan", `${newPlan.name} berhasil disimpan.`);
+    notify.success("Paket ditambahkan", `${newPlan.name} disimpan.`);
   };
 
   const handleSaveEditPlan = (e: React.FormEvent) => {
@@ -795,12 +890,98 @@ export default function SettingsPage() {
     notify.success("Meja dihapus", `Meja ${deletingTable.number} dihapus.`);
   };
 
+  const resetTenantModalForm = () => {
+    setEditingTenantId(null);
+    setFormTenantName("");
+    setFormTenantCode("");
+    setFormTenantBadge("");
+    setFormTenantPIC("");
+    setFormTenantPhone("");
+    setFormTenantEmail("");
+    setFormTenantNPWP("");
+    setFormTenantBankName("BCA");
+    setFormTenantBankAccountNumber("");
+    setFormTenantBankAccountHolder("");
+    setFormTenantPksNumber("");
+    setFormTenantContractStart("");
+    setFormTenantContractEnd("");
+    setFormTenantPksFile("");
+    setFormTenantPartnerType("EXTERNAL");
+  };
+
+  const handleOpenEditTenant = (tenantId: string) => {
+    const prof = getTenantProfile(tenantId);
+    const meta = localTenants.find((t) => t.id === tenantId);
+    setEditingTenantId(tenantId);
+    setFormTenantName(prof.brandName || meta?.name || "");
+    setFormTenantCode(meta?.code || "");
+    setFormTenantBadge(meta?.badge || "");
+    setFormTenantPartnerType(prof.partnerType || "EXTERNAL");
+    setFormTenantPIC(prof.contactPerson || "");
+    setFormTenantPhone(prof.contactPhone || "");
+    setFormTenantEmail(prof.contactEmail || "");
+    setFormTenantNPWP(prof.npwp || "");
+    setFormTenantBankName(prof.bankName || "BCA");
+    setFormTenantBankAccountNumber(prof.bankAccountNumber || "");
+    setFormTenantBankAccountHolder(prof.bankAccountHolder || "");
+    setFormTenantPksNumber(prof.contractPksNumber || "");
+    setFormTenantContractStart(prof.contractStartDate || "");
+    setFormTenantContractEnd(prof.contractEndDate || "");
+    setFormTenantPksFile(prof.contractPksFile || "");
+    setSelectedPartnerDetail(null);
+    setIsAddTenantModalOpen(true);
+  };
+
   const handleSaveNewTenant = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTenantName.trim()) return;
+
+    if (editingTenantId) {
+      const existingProf = getTenantProfile(editingTenantId);
+      const existingMeta = localTenants.find((t) => t.id === editingTenantId);
+      const nextName = formTenantName.trim();
+      const nextCode =
+        formTenantCode.trim().toUpperCase() ||
+        existingMeta?.code ||
+        editingTenantId.toUpperCase();
+      const nextBadge = formTenantBadge.trim() || existingMeta?.badge || nextName;
+
+      saveCustomTenant({
+        id: editingTenantId,
+        name: nextName,
+        code: nextCode,
+        badge: nextBadge,
+        icon: existingMeta?.icon || "Store",
+        tagline: existingProf.tagline || existingMeta?.tagline || "Mitra resmi Dago",
+        desc: existingProf.description || existingMeta?.desc || "Mitra resmi platform Dago Hub",
+      });
+      saveTenantProfile({
+        ...existingProf,
+        tenantId: editingTenantId,
+        brandName: nextName,
+        contactPerson: formTenantPIC.trim(),
+        contactPhone: formTenantPhone.trim() || existingProf.contactPhone || OFFICIAL_CS_DISPLAY_PHONE,
+        contactEmail: formTenantEmail.trim(),
+        npwp: formTenantNPWP.trim(),
+        bankName: formTenantBankName.trim() || "BCA",
+        bankAccountNumber: formTenantBankAccountNumber.trim(),
+        bankAccountHolder: formTenantBankAccountHolder.trim() || nextName,
+        partnerType: formTenantPartnerType || "EXTERNAL",
+        contractStartDate: formTenantContractStart.trim() || undefined,
+        contractEndDate: formTenantContractEnd.trim() || undefined,
+        contractPksNumber: formTenantPksNumber.trim() || undefined,
+        contractPksFile: formTenantPksFile.trim() || undefined,
+      });
+      refreshAllTenantStatuses();
+      setIsAddTenantModalOpen(false);
+      resetTenantModalForm();
+      notify.success("Mitra diperbarui", `Profil ${nextName} diperbarui.`);
+      return;
+    }
+
     const newId = `tenant-${Date.now()}`;
     const newCode = formTenantCode.trim().toUpperCase() || `TENANT-${Math.floor(100 + Math.random() * 900)}`;
-    const newTenant = {
+    const newTenant: FnbPartnerInfo = {
       id: newId,
       name: formTenantName.trim(),
       code: newCode,
@@ -810,14 +991,91 @@ export default function SettingsPage() {
       icon: "Store",
     };
     saveCustomTenant(newTenant);
+    saveTenantProfile({
+      tenantId: newId,
+      brandName: formTenantName.trim(),
+      tagline: "Mitra resmi Dago",
+      description: "Mitra resmi platform Dago Hub",
+      contactPerson: formTenantPIC.trim(),
+      contactPhone: formTenantPhone.trim() || OFFICIAL_CS_DISPLAY_PHONE,
+      contactEmail: formTenantEmail.trim(),
+      npwp: formTenantNPWP.trim(),
+      receiptHeader: `${formTenantName.trim()} — Mitra Resmi`,
+      receiptFooter: "Terima kasih atas kunjungan Anda",
+      lowStockThresholdPercent: 30,
+      bankName: formTenantBankName.trim() || "BCA",
+      bankAccountNumber: formTenantBankAccountNumber.trim(),
+      bankAccountHolder: formTenantBankAccountHolder.trim() || formTenantName.trim(),
+      status: "ACTIVE",
+      partnerType: formTenantPartnerType || "EXTERNAL",
+      contractStartDate: formTenantContractStart.trim() || undefined,
+      contractEndDate: formTenantContractEnd.trim() || undefined,
+      contractPksNumber: formTenantPksNumber.trim() || undefined,
+      contractPksFile: formTenantPksFile.trim() || undefined,
+      lastSettlementDepositDate: getWitaDateKey(),
+    });
     setTenantRevenueSplit(newId, 85);
     refreshAllTenantStatuses();
     refreshRevenueSplits();
     setIsAddTenantModalOpen(false);
-    setFormTenantName("");
-    setFormTenantCode("");
-    setFormTenantBadge("");
-    notify.success("Mitra ditambahkan", `${newTenant.name} berhasil disimpan.`);
+    resetTenantModalForm();
+    notify.success("Mitra ditambahkan", `${newTenant.name} disimpan ke server.`);
+  };
+
+  const handleRecordTenantDeposit = (tenantId: string) => {
+    const todayWita = getWitaDateKey();
+    recordTenantSettlementDeposit(tenantId, todayWita);
+    refreshAllTenantStatuses();
+    notify.success(
+      "Setoran kas dicatat",
+      `Tanggal setoran ${getTenantName(tenantId)} diperbarui ke ${todayWita} dan status mitra aktif.`
+    );
+  };
+
+  const handleToggleTenantStatusFromModal = (
+    tenantId: string,
+    nextStatus: TenantStatus,
+    reason?: string
+  ) => {
+    setTenantStatus(tenantId, nextStatus, reason);
+    refreshAllTenantStatuses();
+    notify.success(
+      "Status mitra diperbarui",
+      `Status gerai ${getTenantName(tenantId)} diubah menjadi ${
+        nextStatus === "ACTIVE"
+          ? "Aktif"
+          : nextStatus === "SUSPENDED"
+          ? "Ditangguhkan"
+          : "Nonaktif"
+      }.`
+    );
+  };
+
+  const handleGenerateTenantActivationLink = async (tenantId: string) => {
+    setIsGeneratingInvite(true);
+    try {
+      const res = await fetch("/api/tenants/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.data) {
+        notify.error("Gagal membuat undangan", data.error || "Tidak dapat menerbitkan tautan undangan pemilik.");
+        return;
+      }
+      setActivationModalData({
+        organizerName: `Pemilik gerai: ${data.data.tenantName}`,
+        organizerEmail: data.data.contactEmail || "",
+        activationUrl: data.data.activationUrl,
+        expiresAt: data.data.expiresAt,
+      });
+      notify.success("Tautan dibuat", `Tautan undangan akun pemilik untuk ${data.data.tenantName} siap dibagikan.`);
+    } catch {
+      notify.error("Kendala jaringan", "Gagal menghubungi server saat membuat undangan pemilik.");
+    } finally {
+      setIsGeneratingInvite(false);
+    }
   };
 
   const handleToggleOrganizerStatus = async (orgId: string, currentStatus: "ACTIVE" | "INACTIVE") => {
@@ -868,7 +1126,7 @@ export default function SettingsPage() {
       if (data.success && data.data) {
         setOrganizers((prev) => [data.data, ...prev]);
         setIsAddOrganizerModalOpen(false);
-        notify.success("Penyelenggara didaftarkan", `${data.data.name} berhasil disimpan.`);
+        notify.success("Penyelenggara didaftarkan", `${data.data.name} disimpan.`);
       } else {
         setAddOrgError(data.error || "Gagal mendaftarkan penyelenggara.");
       }
@@ -994,8 +1252,8 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success && data.data) {
         setEventPolicyHistory(data.data.history || []);
-        setEventPolicyFeedback(`Kebijakan komisi berhasil disimpan (${eventPlatformFee}% Dago).`);
-        notify.success("Kebijakan disimpan", "Kebijakan komisi event berhasil diperbarui.");
+        setEventPolicyFeedback(`Kebijakan komisi disimpan (${eventPlatformFee}% Dago).`);
+        notify.success("Kebijakan disimpan", "Kebijakan komisi event diperbarui.");
         updateSettings({ eventRevenueSharing: data.data });
       } else {
         setEventPolicyFeedback(`Error: ${data.error || "Gagal menyimpan."}`);
@@ -1014,15 +1272,21 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eventId, customPlatformFeePercent: customFeePercent }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setEventOverrides((prev) => ({ ...prev, [eventId]: customFeePercent }));
-        setActiveAdminEvents((prev) =>
-          prev.map((e) => (e.id === eventId ? { ...e, customPlatformFeePercent: customFeePercent } : e)),
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        notify.error(
+          "Gagal menyimpan override",
+          data?.error || "Server menolak pembaruan komisi khusus event."
         );
-        notify.success("Override disimpan", "Komisi khusus event berhasil diperbarui.");
+        return;
       }
-    } catch {
+      setEventOverrides((prev) => ({ ...prev, [eventId]: customFeePercent }));
+      setActiveAdminEvents((prev) =>
+        prev.map((e) => (e.id === eventId ? { ...e, customPlatformFeePercent: customFeePercent } : e)),
+      );
+      notify.success("Override disimpan", "Komisi khusus event diperbarui.");
+    } catch (err) {
+      console.error("Gagal menyimpan override komisi event:", err);
       notify.error("Kendala jaringan", "Gagal menyimpan override.");
     }
   };
@@ -1155,7 +1419,69 @@ export default function SettingsPage() {
       },
       tenantOperations: tenantOps,
     });
-    notify.success("Pengaturan disimpan", "Seluruh konfigurasi platform berhasil disinkronkan.");
+    notify.success("Pengaturan disimpan", "Seluruh konfigurasi platform disinkronkan.");
+  };
+
+  const handleOpenAddOutlet = () => {
+    setEditingOutlet(null);
+    setFormOutletName("");
+    setFormOutletCode("");
+    setFormOutletAddress("");
+    setFormOutletPhone(OFFICIAL_CS_DISPLAY_PHONE);
+    setFormOutletStatus("ACTIVE");
+    setIsOutletModalOpen(true);
+  };
+
+  const handleOpenEditOutlet = (outlet: OutletItem) => {
+    setEditingOutlet(outlet);
+    setFormOutletName(outlet.name);
+    setFormOutletCode(outlet.code);
+    setFormOutletAddress(outlet.address);
+    setFormOutletPhone(outlet.phone || "");
+    setFormOutletStatus(outlet.status);
+    setIsOutletModalOpen(true);
+  };
+
+  const handleSaveOutlet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formOutletName.trim() || !formOutletCode.trim() || !formOutletAddress.trim()) {
+      notify.error("Data outlet belum lengkap", "Isi nama, kode, dan alamat outlet.");
+      return;
+    }
+    setIsSavingOutlet(true);
+    try {
+      const payload = {
+        name: formOutletName.trim(),
+        code: formOutletCode.trim().toUpperCase(),
+        address: formOutletAddress.trim(),
+        phone: formOutletPhone.trim() || undefined,
+        status: formOutletStatus,
+      };
+      const result = editingOutlet
+        ? await updateOutlet(editingOutlet.id, payload)
+        : await addOutlet(payload);
+      if (!result.ok) {
+        notify.error("Gagal menyimpan outlet", result.error || "Periksa kembali data outlet.");
+        return;
+      }
+      setIsOutletModalOpen(false);
+      setEditingOutlet(null);
+      notify.success(
+        editingOutlet ? "Outlet diperbarui" : "Outlet ditambahkan",
+        `${payload.name} (${payload.code}) disimpan.`
+      );
+    } finally {
+      setIsSavingOutlet(false);
+    }
+  };
+
+  const handleDeleteOutlet = async (outlet: OutletItem) => {
+    const result = await deleteOutlet(outlet.id);
+    if (!result.ok) {
+      notify.error("Gagal menghapus outlet", result.error || "Outlet tidak dapat dihapus.");
+      return;
+    }
+    notify.success("Outlet dihapus", `${outlet.name} dihapus dari daftar outlet.`);
   };
 
   const handleAddHolidayOverride = (e: React.FormEvent) => {
@@ -1181,12 +1507,22 @@ export default function SettingsPage() {
   const handleSaveTenantSettings = (e: React.FormEvent) => {
     e.preventDefault();
     setBankFormError("");
-    if (bankAccountNumber.trim() && !bankAccountHolder.trim()) {
+    const currentTenantId = user?.tenant?.id || "tenant-ks";
+    const existing = getTenantProfile(currentTenantId);
+    const trimmedBankAccount = bankAccountNumber.trim();
+    const resolvedBankAccountNumber =
+      trimmedBankAccount && trimmedBankAccount !== "••••••••"
+        ? trimmedBankAccount
+        : existing.bankAccountNumber || "";
+    const resolvedBankAccountHolder =
+      bankAccountHolder.trim() || existing.bankAccountHolder || "";
+    if (resolvedBankAccountNumber && !resolvedBankAccountHolder) {
       setBankFormError("Nama pemilik rekening wajib diisi.");
       return;
     }
-    const currentTenantId = user?.tenant?.id || "tenant-ks";
+    const nextStatus = existing.status === "SUSPENDED" ? "SUSPENDED" : tenantStatus;
     saveTenantProfile({
+      ...existing,
       tenantId: currentTenantId,
       brandName: tenantBrandName.trim(),
       tagline: tenantTagline.trim(),
@@ -1195,19 +1531,19 @@ export default function SettingsPage() {
       receiptHeader: tenantReceiptHeader.trim(),
       receiptFooter: tenantReceiptFooter.trim(),
       lowStockThresholdPercent: Number(tenantLowStock) || 0,
-      bankName: bankName || "BCA",
-      bankAccountNumber: bankAccountNumber.trim(),
-      bankAccountHolder: bankAccountHolder.trim(),
-      status: tenantStatus,
+      bankName: bankName || existing.bankName || "BCA",
+      bankAccountNumber: resolvedBankAccountNumber,
+      bankAccountHolder: resolvedBankAccountHolder,
+      status: nextStatus,
     });
     refreshAllTenantStatuses();
     const updatedTenantOps = {
       ...tenantOps,
       [currentTenantId]: {
-        isOpenOrder: tenantStatus === "ACTIVE",
+        isOpenOrder: nextStatus === "ACTIVE",
         tenantId: currentTenantId,
         tenantName: tenantBrandName.trim(),
-        isAcceptingOrders: tenantStatus === "ACTIVE",
+        isAcceptingOrders: nextStatus === "ACTIVE",
         openTime: tenantOpenTime,
         closeTime: tenantCloseTime,
         temporaryClosedReason: tenantClosedReason.trim() || undefined,
@@ -1230,10 +1566,10 @@ export default function SettingsPage() {
       if (res.ok) {
         notify.success("Jam operasional disimpan", "Jam buka-tutup mitra tersimpan ke server.");
       } else {
-        notify.warning("Penyimpanan lokal berhasil", "Pembaruan tersimpan di browser, gagal sinkronisasi server.");
+        notify.warning("Tersimpan di browser", "Pembaruan tersimpan di browser, gagal sinkronisasi server.");
       }
     } catch {
-      notify.warning("Penyimpanan lokal berhasil", "Pembaruan tersimpan di browser, gagal sinkronisasi server.");
+      notify.warning("Tersimpan di browser", "Pembaruan tersimpan di browser, gagal sinkronisasi server.");
     } finally {
       setIsSavingTenantOps(false);
     }
@@ -1357,6 +1693,7 @@ export default function SettingsPage() {
 
           {tenantActiveTab === "PROFILE" ? (
             <TenantProfileTab
+              ownerEmail={user?.email || ""}
               tenantBrandName={tenantBrandName}
               onTenantBrandNameChange={setTenantBrandName}
               tenantTagline={tenantTagline}
@@ -1385,6 +1722,7 @@ export default function SettingsPage() {
               onBankAccountNumberChange={setBankAccountNumber}
               bankAccountHolder={bankAccountHolder}
               onBankAccountHolderChange={setBankAccountHolder}
+              tenantNpwp={tenantNpwp}
               bankFormError={bankFormError}
               onSaveTenantSettings={handleSaveTenantSettings}
             />
@@ -1571,6 +1909,7 @@ export default function SettingsPage() {
               organizers={organizers}
               onOpenAddOrganizer={() => setIsAddOrganizerModalOpen(true)}
               onOpenAddTenant={() => setIsAddTenantModalOpen(true)}
+              onEditTenant={handleOpenEditTenant}
               onSelectPartnerDetail={setSelectedPartnerDetail}
               onToggleOrganizerStatus={handleToggleOrganizerStatus}
               onGenerateActivationLink={handleGenerateActivationLink}
@@ -1591,6 +1930,13 @@ export default function SettingsPage() {
                 }));
               }}
               onToggleTenantOrderStatus={async (tId, name, next) => {
+                const currentProfile = getTenantProfile(tId);
+                if (currentProfile?.status === "SUSPENDED") {
+                  notify.error(
+                    "Mitra sedang ditangguhkan. Gunakan 'Buka kunci' atau 'Catat setoran kas' terlebih dahulu."
+                  );
+                  return;
+                }
                 const nextManualOverride: "OPEN" | "CLOSED" = next ? "OPEN" : "CLOSED";
                 const currentOp = tenantOps[tId] || {
                   tenantId: tId,
@@ -1609,24 +1955,36 @@ export default function SettingsPage() {
                     manualOverride: nextManualOverride,
                   },
                 };
-                setTenantOps(updated);
-                setTenantStatus(tId, next ? "ACTIVE" : "INACTIVE");
-                refreshAllTenantStatuses();
-
-                updateSettings({ tenantOperations: updated });
 
                 try {
-                  await fetch("/api/tenant/operations", {
+                  const res = await fetch("/api/tenant/operations", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ tenantOperations: updated }),
                   });
-                } catch {}
-
-                notify.success(
-                  "Status pesanan diubah",
-                  `${name}: ${next ? "Buka (override manual)" : "Tutup sementara (override manual)"}.`
-                );
+                  const data = await res.json().catch(() => null);
+                  if (!res.ok || !data?.success) {
+                    notify.error(
+                      "Gagal mengubah status pesanan",
+                      data?.error || "Server menolak pembaruan status operasional mitra."
+                    );
+                    return;
+                  }
+                  setTenantOps(updated);
+                  setTenantStatus(tId, next ? "ACTIVE" : "INACTIVE");
+                  refreshAllTenantStatuses();
+                  updateSettings({ tenantOperations: updated });
+                  notify.success(
+                    "Status pesanan diubah",
+                    `${name}: ${next ? "Buka (override manual)" : "Tutup sementara (override manual)"}.`
+                  );
+                } catch (err) {
+                  console.error("Gagal mengubah status pesanan mitra:", err);
+                  notify.error(
+                    "Kendala jaringan",
+                    "Gagal menghubungi server saat mengubah status operasional mitra."
+                  );
+                }
               }}
               onSaveTenantOperations={handleSaveTenantOperations}
               isSavingTenantOperations={isSavingTenantOps}
@@ -1885,63 +2243,158 @@ export default function SettingsPage() {
           ) : null}
 
           {selectedAdminTab === "CONFIG" ? (
-            <PlatformConfigTab
-              moduleDefinitions={moduleDefinitions}
-              activeOrgModules={activeOrgModules}
-              onToggleOrgModule={(code) => toggleOrgModule(code as any)}
-              language={language}
-              onLanguageChange={setLanguage}
-              timezone={timezone}
-              onTimezoneChange={setTimezone}
-              currency={currency}
-              onCurrencyChange={setCurrency}
-              fnbTaxEnabled={fnbTaxEnabled}
-              onFnbTaxEnabledChange={setFnbTaxEnabled}
-              fnbTaxRate={fnbTaxRate}
-              onFnbTaxRateChange={setFnbTaxRate}
-              cwTaxEnabled={cwTaxEnabled}
-              onCwTaxEnabledChange={setCwTaxEnabled}
-              cwTaxType={cwTaxType}
-              onCwTaxTypeChange={setCwTaxType}
-              cwTaxRate={cwTaxRate}
-              onCwTaxRateChange={setCwTaxRate}
-              serviceCharge={serviceCharge}
-              onServiceChargeChange={setServiceCharge}
-              lowStock={lowStock}
-              onLowStockChange={setLowStock}
-              silverPts={silverPts}
-              onSilverPtsChange={setSilverPts}
-              goldPts={goldPts}
-              onGoldPtsChange={setGoldPts}
-              platPts={platPts}
-              onPlatPtsChange={setPlatPts}
-              cwOpenTime={cwOpenTime}
-              onCwOpenTimeChange={setCwOpenTime}
-              cwCloseTime={cwCloseTime}
-              onCwCloseTimeChange={setCwCloseTime}
-              fnbOpenTime={fnbOpenTime}
-              onFnbOpenTimeChange={setFnbOpenTime}
-              fnbCloseTime={fnbCloseTime}
-              onFnbCloseTimeChange={setFnbCloseTime}
-              qrSelfOrderQrisOnly={qrSelfOrderQrisOnly}
-              onQrSelfOrderQrisOnlyChange={setQrSelfOrderQrisOnly}
-              receiptCombineMode={receiptCombineMode}
-              onReceiptCombineModeChange={setReceiptCombineMode}
-              cwWeekendClosed={cwWeekendClosed}
-              onCwWeekendClosedChange={setCwWeekendClosed}
-              cwNationalHolidaysClosed={cwNationalHolidaysClosed}
-              onCwNationalHolidaysClosedChange={setCwNationalHolidaysClosed}
-              cwOverrides={cwOverrides}
-              newOverrideDate={newOverrideDate}
-              onNewOverrideDateChange={setNewOverrideDate}
-              newOverrideType={newOverrideType}
-              onNewOverrideTypeChange={setNewOverrideType}
-              newOverrideReason={newOverrideReason}
-              onNewOverrideReasonChange={setNewOverrideReason}
-              onAddHolidayOverride={handleAddHolidayOverride}
-              onRemoveHolidayOverride={handleRemoveHolidayOverride}
-              onSaveSettings={handleSaveSettings}
-            />
+            <div className="flex flex-col gap-6">
+              <Card>
+                <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <MapPin className="size-4 text-muted-foreground" />
+                      <span>Daftar outlet</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Kelola cabang operasional Dago Creative Hub dan status pembukaannya.
+                    </CardDescription>
+                  </div>
+                  <Button type="button" size="sm" onClick={handleOpenAddOutlet}>
+                    <Plus />
+                    <span>Tambah outlet</span>
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-hidden rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Outlet</TableHead>
+                          <TableHead className="hidden sm:table-cell">Kode</TableHead>
+                          <TableHead className="hidden md:table-cell">Telepon</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="w-0 text-right">
+                            <span className="sr-only">Aksi</span>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allOutlets.map((outlet) => (
+                          <TableRow key={outlet.id}>
+                            <TableCell className="whitespace-normal">
+                              <p className="text-sm font-medium text-foreground">{outlet.name}</p>
+                              <p className="text-xs text-muted-foreground">{outlet.address}</p>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell font-mono text-xs text-foreground">
+                              {outlet.code}
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">
+                              {outlet.phone || "—"}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge
+                                status={
+                                  outlet.status === "ACTIVE"
+                                    ? "success"
+                                    : outlet.status === "COMING_SOON"
+                                      ? "info"
+                                      : "neutral"
+                                }
+                              >
+                                {outlet.status === "ACTIVE"
+                                  ? "Aktif"
+                                  : outlet.status === "COMING_SOON"
+                                    ? "Segera hadir"
+                                    : "Nonaktif"}
+                              </StatusBadge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditOutlet(outlet)}
+                                  aria-label={`Edit ${outlet.name}`}
+                                >
+                                  <Pencil />
+                                  <span className="hidden sm:inline">Edit</span>
+                                </Button>
+                                {outlet.id !== "outlet-sgr" ? (
+                                  <Button
+                                    type="button"
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    onClick={() => setDeletingOutlet(outlet)}
+                                    aria-label={`Hapus ${outlet.name}`}
+                                  >
+                                    <Trash2 />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <PlatformConfigTab
+                moduleDefinitions={moduleDefinitions}
+                activeOrgModules={activeOrgModules}
+                onToggleOrgModule={(code) => toggleOrgModule(code as any)}
+                language={language}
+                onLanguageChange={setLanguage}
+                timezone={timezone}
+                onTimezoneChange={setTimezone}
+                currency={currency}
+                onCurrencyChange={setCurrency}
+                fnbTaxEnabled={fnbTaxEnabled}
+                onFnbTaxEnabledChange={setFnbTaxEnabled}
+                fnbTaxRate={fnbTaxRate}
+                onFnbTaxRateChange={setFnbTaxRate}
+                cwTaxEnabled={cwTaxEnabled}
+                onCwTaxEnabledChange={setCwTaxEnabled}
+                cwTaxType={cwTaxType}
+                onCwTaxTypeChange={setCwTaxType}
+                cwTaxRate={cwTaxRate}
+                onCwTaxRateChange={setCwTaxRate}
+                serviceCharge={serviceCharge}
+                onServiceChargeChange={setServiceCharge}
+                lowStock={lowStock}
+                onLowStockChange={setLowStock}
+                silverPts={silverPts}
+                onSilverPtsChange={setSilverPts}
+                goldPts={goldPts}
+                onGoldPtsChange={setGoldPts}
+                platPts={platPts}
+                onPlatPtsChange={setPlatPts}
+                cwOpenTime={cwOpenTime}
+                onCwOpenTimeChange={setCwOpenTime}
+                cwCloseTime={cwCloseTime}
+                onCwCloseTimeChange={setCwCloseTime}
+                fnbOpenTime={fnbOpenTime}
+                onFnbOpenTimeChange={setFnbOpenTime}
+                fnbCloseTime={fnbCloseTime}
+                onFnbCloseTimeChange={setFnbCloseTime}
+                qrSelfOrderQrisOnly={qrSelfOrderQrisOnly}
+                onQrSelfOrderQrisOnlyChange={setQrSelfOrderQrisOnly}
+                receiptCombineMode={receiptCombineMode}
+                onReceiptCombineModeChange={setReceiptCombineMode}
+                cwWeekendClosed={cwWeekendClosed}
+                onCwWeekendClosedChange={setCwWeekendClosed}
+                cwNationalHolidaysClosed={cwNationalHolidaysClosed}
+                onCwNationalHolidaysClosedChange={setCwNationalHolidaysClosed}
+                cwOverrides={cwOverrides}
+                newOverrideDate={newOverrideDate}
+                onNewOverrideDateChange={setNewOverrideDate}
+                newOverrideType={newOverrideType}
+                onNewOverrideTypeChange={setNewOverrideType}
+                newOverrideReason={newOverrideReason}
+                onNewOverrideReasonChange={setNewOverrideReason}
+                onAddHolidayOverride={handleAddHolidayOverride}
+                onRemoveHolidayOverride={handleRemoveHolidayOverride}
+                onSaveSettings={handleSaveSettings}
+              />
+            </div>
           ) : null}
 
           {selectedAdminTab === "SUBSCRIPTION" ? (
@@ -2079,13 +2532,41 @@ export default function SettingsPage() {
       {/* Modal-modal Partner & Penyelenggara */}
       <PartnerModals
         isAddTenantOpen={isAddTenantModalOpen}
-        onAddTenantOpenChange={setIsAddTenantModalOpen}
+        onAddTenantOpenChange={(open) => {
+          setIsAddTenantModalOpen(open);
+          if (!open) resetTenantModalForm();
+        }}
+        isEditingTenant={Boolean(editingTenantId)}
         formTenantName={formTenantName}
         onFormTenantNameChange={setFormTenantName}
         formTenantCode={formTenantCode}
         onFormTenantCodeChange={setFormTenantCode}
         formTenantBadge={formTenantBadge}
         onFormTenantBadgeChange={setFormTenantBadge}
+        formTenantPartnerType={formTenantPartnerType}
+        onFormTenantPartnerTypeChange={setFormTenantPartnerType}
+        formTenantPIC={formTenantPIC}
+        onFormTenantPICChange={setFormTenantPIC}
+        formTenantPhone={formTenantPhone}
+        onFormTenantPhoneChange={setFormTenantPhone}
+        formTenantEmail={formTenantEmail}
+        onFormTenantEmailChange={setFormTenantEmail}
+        formTenantNPWP={formTenantNPWP}
+        onFormTenantNPWPChange={setFormTenantNPWP}
+        formTenantBankName={formTenantBankName}
+        onFormTenantBankNameChange={setFormTenantBankName}
+        formTenantBankAccountNumber={formTenantBankAccountNumber}
+        onFormTenantBankAccountNumberChange={setFormTenantBankAccountNumber}
+        formTenantBankAccountHolder={formTenantBankAccountHolder}
+        onFormTenantBankAccountHolderChange={setFormTenantBankAccountHolder}
+        formTenantPksNumber={formTenantPksNumber}
+        onFormTenantPksNumberChange={setFormTenantPksNumber}
+        formTenantContractStart={formTenantContractStart}
+        onFormTenantContractStartChange={setFormTenantContractStart}
+        formTenantContractEnd={formTenantContractEnd}
+        onFormTenantContractEndChange={setFormTenantContractEnd}
+        formTenantPksFile={formTenantPksFile}
+        onFormTenantPksFileChange={setFormTenantPksFile}
         onSaveNewTenant={handleSaveNewTenant}
         isAddOrgOpen={isAddOrganizerModalOpen}
         onAddOrgOpenChange={setIsAddOrganizerModalOpen}
@@ -2115,6 +2596,126 @@ export default function SettingsPage() {
         onToggleOrganizerStatus={handleToggleOrganizerStatus}
         onGenerateActivationLink={handleGenerateActivationLink}
         isGeneratingInvite={isGeneratingInvite}
+        onToggleTenantStatus={handleToggleTenantStatusFromModal}
+        onGenerateTenantActivationLink={handleGenerateTenantActivationLink}
+        onEditTenant={handleOpenEditTenant}
+        onRecordTenantDeposit={handleRecordTenantDeposit}
+      />
+
+      {/* Modal Tambah / Edit Outlet */}
+      <Dialog
+        open={isOutletModalOpen}
+        onOpenChange={(open) => {
+          setIsOutletModalOpen(open);
+          if (!open) setEditingOutlet(null);
+        }}
+      >
+        <DialogContent className="max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <DialogTitle>{editingOutlet ? "Edit outlet" : "Tambah outlet"}</DialogTitle>
+            <DialogDescription>
+              {editingOutlet
+                ? "Perbarui informasi cabang outlet yang tersimpan di server."
+                : "Daftarkan outlet baru agar tersedia pada pemilih cabang."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveOutlet} className="flex flex-1 min-h-0 flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="outletName">Nama outlet</Label>
+                <Input
+                  id="outletName"
+                  type="text"
+                  required
+                  value={formOutletName}
+                  onChange={(e) => setFormOutletName(e.target.value)}
+                  placeholder="Contoh: Dago Creative Hub Canggu"
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="outletCode">Kode outlet</Label>
+                  <Input
+                    id="outletCode"
+                    type="text"
+                    required
+                    value={formOutletCode}
+                    onChange={(e) => setFormOutletCode(e.target.value)}
+                    placeholder="Contoh: DCH-CGU"
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="outletStatus">Status</Label>
+                  <NativeSelect
+                    id="outletStatus"
+                    value={formOutletStatus}
+                    onChange={(e) => setFormOutletStatus(e.target.value as OutletItem["status"])}
+                  >
+                    <NativeSelectOption value="ACTIVE">Aktif</NativeSelectOption>
+                    <NativeSelectOption value="COMING_SOON">Segera hadir</NativeSelectOption>
+                    <NativeSelectOption value="INACTIVE">Nonaktif</NativeSelectOption>
+                  </NativeSelect>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="outletAddress">Alamat lengkap</Label>
+                <Input
+                  id="outletAddress"
+                  type="text"
+                  required
+                  value={formOutletAddress}
+                  onChange={(e) => setFormOutletAddress(e.target.value)}
+                  placeholder="Jl. Pantai Berawa No. 10, Bali"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="outletPhone">Nomor telepon</Label>
+                <Input
+                  id="outletPhone"
+                  type="tel"
+                  value={formOutletPhone}
+                  onChange={(e) => setFormOutletPhone(e.target.value)}
+                  placeholder="+62 8..."
+                />
+              </div>
+            </div>
+            <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => setIsOutletModalOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button type="submit" size="lg" disabled={isSavingOutlet}>
+                {isSavingOutlet ? "Menyimpan..." : "Simpan outlet"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingOutlet)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingOutlet(null);
+        }}
+        title="Hapus outlet?"
+        description={
+          deletingOutlet
+            ? `Outlet ${deletingOutlet.name} (${deletingOutlet.code}) akan dihapus dari daftar cabang.`
+            : undefined
+        }
+        confirmLabel="Hapus outlet"
+        destructive
+        onConfirm={() => {
+          const target = deletingOutlet;
+          if (target) {
+            void handleDeleteOutlet(target);
+          }
+        }}
       />
     </div>
   );
