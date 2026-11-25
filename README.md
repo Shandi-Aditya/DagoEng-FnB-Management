@@ -290,6 +290,7 @@ Tabel berikut memetakan seluruh dokumen teknis, panduan operasional, laporan uji
 | [`./docs/AKUN_SISTEM.md`](./docs/AKUN_SISTEM.md) | Daftar kredensial resmi `16` persona demo UAT, rute awal per peran, dan `2` akun penyelenggara staging |
 | [`./docs/DEPLOY_COOLIFY.md`](./docs/DEPLOY_COOLIFY.md) | Panduan langkah deploy GitLab ke Coolify, kunci Node.js `22.20.0` di Nixpacks, dan aturan volume `/app/data/proofs` |
 | [`./docs/TESTING.md`](./docs/TESTING.md) | Empat gerbang kualitas wajib, isolasi `DATA_DIR_OVERRIDE`, cakupan pengujian utama, dan rincian `4` baseline gagal |
+| [`./docs/DOKUMENTASI_TEKNIS_POS_V35.md`](./docs/DOKUMENTASI_TEKNIS_POS_V35.md) | Catatan alur pembayaran, status pesanan, BOM/stok, rekap review MR POS Shandi, audit laporan `#1–11`, dan audit Role Matriks (`V-35`) |
 | [`./docs/test-cases/TC-V19-POS-REGRESSION-REPORT.md`](./docs/test-cases/TC-V19-POS-REGRESSION-REPORT.md) | Laporan kelulusan `37` skenario regresi P1 dan pengaman P2 pada modul POS |
 | [`./docs/test-cases/TC-S07-PAID-EVENT-E2E.md`](./docs/test-cases/TC-S07-PAID-EVENT-E2E.md) | Skenario dan bukti uji ujung-ke-ujung siklus pemesanan serta penerbitan e-tiket event berbayar |
 | [`./docs/DESIGN_SYSTEM.md`](./docs/DESIGN_SYSTEM.md) | Standar token warna, tipografi, komponen shadcn `@base-ui/react`, dan glosarium antarmuka |
