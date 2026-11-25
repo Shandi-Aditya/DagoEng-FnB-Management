@@ -66,8 +66,10 @@ export async function PATCH(req: NextRequest) {
     const enforceDateWindow = !reset;
 
     if (reset || checkInStatus === "REGISTERED") {
-      const allEvents = await getAdminEvents();
-      const booking = await getBookingById(identifier);
+      const [allEvents, booking] = await Promise.all([
+        getAdminEvents(),
+        getBookingById(identifier),
+      ]);
       if (booking) {
         const event = allEvents.find((e) => e.id === booking.eventId);
         if (event && getEventDateStatusWita(event) !== "TODAY") {

@@ -577,7 +577,7 @@ describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", ()
           booking.ticketCode,
           "CHECKED_IN"
         )
-      ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("22. Tiket dari event lain tidak dapat digunakan pada event terpilih", async () => {

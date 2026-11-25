@@ -569,7 +569,7 @@ describe("Check-in Validation Engine (updateBookingCheckIn)", () => {
     // Second check in attempt should fail
     await expect(
       eventsLib.updateBookingCheckIn("tkt-paid-test-1", "CHECKED_IN")
-    ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+    ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
   });
 
   it("should safely sequentialize concurrent check-ins and prevent exceeding ticketCount", async () => {
@@ -728,7 +728,7 @@ describe("Multi-Ticket Individual Sub-Ticket QR & Gate Check-in", () => {
     // Attempt double check in on seat 2
     await expect(
       eventsLib.updateBookingCheckIn(`${booking.ticketCode}-02`, "PARTIALLY_CHECKED_IN", { incrementQty: 1 })
-    ).rejects.toThrow("sudah digunakan");
+    ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
     // Check in remaining seats
     await eventsLib.updateBookingCheckIn(`${booking.ticketCode}-01`, "PARTIALLY_CHECKED_IN", { incrementQty: 1 });

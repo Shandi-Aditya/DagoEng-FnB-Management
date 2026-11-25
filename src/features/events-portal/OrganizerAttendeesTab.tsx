@@ -42,7 +42,11 @@ import {
   paymentStatusTone,
 } from "./events-portal-domain";
 import { checkedInGuests } from "./events-portal-groups";
-import { getBookingAttendance } from "@/features/events-checkin/events-checkin-domain";
+import {
+  formatCheckInTime,
+  getBookingAttendance,
+} from "@/features/events-checkin/events-checkin-domain";
+import { getSubTicketDetails } from "@/features/events-tickets/ticket-pass-domain";
 import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
 
 interface OrganizerAttendeesTabProps {
@@ -325,13 +329,10 @@ export function OrganizerAttendeesTab({
                               Kursi: {b.selectedSeats.join(", ")}
                             </div>
                           )}
-                          {isCheckedIn && b.checkInTime ? (
+                          {(isCheckedIn || isPartial) && b.checkInTime ? (
                             <div className="text-xs text-muted-foreground mt-0.5">
-                              {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                timeZone: "Asia/Makassar",
-                              })} WITA{b.checkedInBy ? ` · ${b.checkedInBy}` : ""}
+                              {formatCheckInTime(b.checkInTime)}
+                              {b.checkedInBy ? ` · ${b.checkedInBy}` : ""}
                             </div>
                           ) : null}
                           {b.ticketCount > 1 ? (
@@ -437,10 +438,8 @@ export function OrganizerAttendeesTab({
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
                                 {Array.from({ length: b.ticketCount }).map((_, idx) => {
                                   const seatNum = idx + 1;
-                                  const seatCode = `${b.ticketCode}-${String(seatNum).padStart(2, "0")}`;
-                                  const isSeatCheckedIn = Array.isArray(b.checkedInSeats)
-                                    ? b.checkedInSeats.includes(seatNum)
-                                    : idx < (b.checkedInQty || (isCheckedIn ? b.ticketCount : 0));
+                                  const { subTicketCode: seatCode, isCheckedIn: isSeatCheckedIn } =
+                                    getSubTicketDetails(b, seatNum);
                                   const seatTime = b.seatCheckInTimes?.[String(seatNum)] || (isSeatCheckedIn ? b.checkInTime : null);
                                   const seatOfficer = b.seatCheckInBy?.[String(seatNum)] || (isSeatCheckedIn ? b.checkedInBy : null);
 
@@ -456,9 +455,7 @@ export function OrganizerAttendeesTab({
                                         </span>
                                         <span className="text-muted-foreground text-xs block">
                                           Tiket #{seatNum}
-                                          {seatTime ? (
-                                            <> · {new Date(seatTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Makassar" })} WITA</>
-                                          ) : null}
+                                          {seatTime ? <> · {formatCheckInTime(seatTime)}</> : null}
                                           {seatOfficer ? (
                                             <> · {seatOfficer}</>
                                           ) : null}

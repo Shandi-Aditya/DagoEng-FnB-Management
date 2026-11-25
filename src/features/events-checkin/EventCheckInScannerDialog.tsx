@@ -174,7 +174,7 @@ export function EventCheckInScannerDialog({
           else if (validation.code === "WRONG_EVENT") title = "Bukan event ini";
           else if (validation.code === "UNPAID") title = "Tiket belum lunas";
           else if (validation.code === "ALREADY_USED" || validation.code === "SEAT_ALREADY_USED") {
-            title = "Tiket sudah digunakan";
+            title = "Tiket sudah dipakai";
           }
 
           setFeedback({

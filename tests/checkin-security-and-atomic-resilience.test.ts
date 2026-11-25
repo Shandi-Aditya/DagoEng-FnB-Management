@@ -230,7 +230,7 @@ describe("Check-in Security, Anti-Bypass, and Atomic Resilience Test Suite", () 
         updateBookingCheckIn(booking.ticketCode, "CHECKED_IN", {
           enforceDateWindow: false,
         })
-      ).rejects.toThrow(/sudah digunakan untuk check-in sebelumnya/i);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("memproses dua tiket berbeda dalam booking yang sama secara terpisah", async () => {

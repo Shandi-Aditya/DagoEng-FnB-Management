@@ -108,7 +108,11 @@ import {
   BankAccountHolderCandidate,
 } from "@/lib/payout";
 import { dispatchPaidTicketEmail } from "@/lib/email";
-import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
+import {
+  getEventDateStatusWita,
+  formatDuplicateCheckInMessage,
+  formatCheckInTime,
+} from "@/features/events-checkin/events-checkin-domain";
 import {
   generateTierSeats,
   getEventOccupiedSeats,
@@ -382,26 +386,31 @@ export async function loadEventsFromTxOrDisk(tx?: any): Promise<CommunityEvent[]
 }
 
 /**
- * Re-reads the latest bookings collection from PostgreSQL SystemSetting directly inside tx.
+ * Re-reads the latest bookings collection and snapshot updatedAt from PostgreSQL SystemSetting directly inside tx.
  */
-export async function loadBookingsFromTxOrDisk(tx?: any): Promise<EventTicketOrder[]> {
+export async function loadBookingsSnapshotFromTxOrDisk(
+  tx?: any
+): Promise<{ bookings: EventTicketOrder[]; updatedAt?: Date }> {
   if (tx) {
-    const bookingsRow = await tx.systemSetting.findUnique({
-      where: { key: "STORAGE_event_bookings.json" },
-    }).catch((dbErr: any) => {
-      console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi:", dbErr);
-      throw new DatabasePersistenceError(
-        `Gagal membaca snapshot bookings dari database PostgreSQL: ${dbErr?.message || "Koneksi terputus"}`,
-        "event_bookings.json",
-        true
-      );
-    });
+    const bookingsRow = await tx.systemSetting
+      .findUnique({
+        where: { key: "STORAGE_event_bookings.json" },
+      })
+      .catch((dbErr: any) => {
+        console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi:", dbErr);
+        throw new DatabasePersistenceError(
+          `Gagal membaca snapshot bookings dari database PostgreSQL: ${dbErr?.message || "Koneksi terputus"}`,
+          "event_bookings.json",
+          true
+        );
+      });
 
     if (bookingsRow?.value) {
       try {
         const parsed = JSON.parse(bookingsRow.value);
         if (Array.isArray(parsed)) {
-          return parsed;
+          const updatedAt = bookingsRow.updatedAt ? new Date(bookingsRow.updatedAt) : undefined;
+          return { bookings: parsed, updatedAt };
         }
         throw new Error("Format STORAGE_event_bookings.json di database bukan array valid.");
       } catch (jsonErr: any) {
@@ -414,7 +423,12 @@ export async function loadBookingsFromTxOrDisk(tx?: any): Promise<EventTicketOrd
     }
   }
 
-  return loadBookingsFromDisk();
+  return { bookings: loadBookingsFromDisk() };
+}
+
+export async function loadBookingsFromTxOrDisk(tx?: any): Promise<EventTicketOrder[]> {
+  const { bookings } = await loadBookingsSnapshotFromTxOrDisk(tx);
+  return bookings;
 }
 
 let cachedPolicy: EventRevenueSharingPolicy | null = null;
@@ -3263,7 +3277,7 @@ export function syncBookingsToLocalDiskAndCache(
  */
 export async function saveBookingsToDisk(
   bookings: EventTicketOrder[],
-  options?: { persistToDb?: boolean; tx?: any; skipDiskWrite?: boolean }
+  options?: { persistToDb?: boolean; tx?: any; skipDiskWrite?: boolean; expectedUpdatedAt?: Date }
 ): Promise<void> {
   try {
     const isInsideTx = Boolean(options?.tx);
@@ -3275,7 +3289,10 @@ export async function saveBookingsToDisk(
 
     // Explicitly await persistence to distributed PostgreSQL SystemSetting unless bypassed
     if (options?.persistToDb !== false) {
-      await persistStorageToDb("event_bookings.json", JSON.stringify(bookings, null, 2), { tx: options?.tx });
+      await persistStorageToDb("event_bookings.json", JSON.stringify(bookings, null, 2), {
+        tx: options?.tx,
+        expectedUpdatedAt: options?.expectedUpdatedAt,
+      });
     }
   } catch (err) {
     if (!options?.tx) {
@@ -4779,22 +4796,15 @@ export interface CheckInOptions {
   seatNumber?: number;
   currentTimestamp?: number | string;
   checkedInBy?: string;
+  skipInitialSync?: boolean;
 }
 
 /**
  * Formats check-in timestamp into WITA representation for error messages and UI displays.
  */
 export function formatCheckInTimeWita(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  return (
-    d.toLocaleTimeString("id-ID", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "Asia/Makassar",
-    }) + " WITA"
-  );
+  const formatted = formatCheckInTime(iso);
+  return formatted === "—" ? "" : formatted;
 }
 
 let checkInLockPromise: Promise<void> = Promise.resolve();
@@ -4826,6 +4836,13 @@ export async function updateBookingCheckIn(
       attempt++;
 
       try {
+        if (!options?.skipInitialSync || attempt > 1) {
+          await Promise.all([
+            syncStorageFromDb("event_bookings.json"),
+            syncStorageFromDb("events.json"),
+          ]);
+        }
+
         const effectiveIdentifier = (options?.ticketCode || bookingId || "").trim().toUpperCase();
         const matchSub = effectiveIdentifier.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
         const baseCode = matchSub ? matchSub[1] : effectiveIdentifier;
@@ -4847,12 +4864,15 @@ export async function updateBookingCheckIn(
         const candidateEventId = initialBookings[candidateIndex].eventId;
         let committedBooking: EventTicketOrder | null = null;
         let committedBookingsList: EventTicketOrder[] | null = null;
+        let committedUpdatedAt: Date | undefined = undefined;
 
         // 2. Execute within PostgreSQL distributed event advisory lock
         await runWithDistributedEventLock(candidateEventId, async (tx) => {
           // 3. Re-read bookings and events inside transaction
           let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
-          let bookingsInTx: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
+          const bookingsSnapshot = await loadBookingsSnapshotFromTxOrDisk(tx);
+          let bookingsInTx: EventTicketOrder[] = bookingsSnapshot.bookings;
+          const expectedUpdatedAt = bookingsSnapshot.updatedAt;
 
           // 4. Validate booking still exists in transaction snapshot
           const index = bookingsInTx.findIndex(
@@ -5096,13 +5116,7 @@ export async function updateBookingCheckIn(
               } catch { }
             }
           } else {
-            // Skenario B: Check-In (Increment atau Target)
-            if (currentCheckedInQty >= ticketCount) {
-              const timeFormatted = formatCheckInTimeWita(existing.checkInTime);
-              throw new Error(
-                `Tiket sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pukul ${timeFormatted})` : ""} (semua tiket dalam pemesanan ini sudah selesai check-in).`
-              );
-            }
+            const seatsToClaim: number[] = [];
 
             if (requestedSeat !== undefined) {
               if (requestedSeat < 1 || requestedSeat > ticketCount) {
@@ -5110,43 +5124,26 @@ export async function updateBookingCheckIn(
                   `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`
                 );
               }
-              if (newCheckedInSeats.includes(requestedSeat)) {
-                const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
-                const timeFormatted = formatCheckInTimeWita(priorTime);
+              if (newCheckedInSeats.includes(requestedSeat) || currentCheckedInQty >= ticketCount) {
                 throw new Error(
-                  `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pukul ${timeFormatted})` : ""}.`
+                  formatDuplicateCheckInMessage({
+                    seatNumber: requestedSeat,
+                    ticketCode: effectiveIdentifier,
+                    checkInTimeIso:
+                      existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime,
+                  })
+                );
+              }
+              seatsToClaim.push(requestedSeat);
+            } else {
+              if (currentCheckedInQty >= ticketCount) {
+                throw new Error(
+                  formatDuplicateCheckInMessage({
+                    checkInTimeIso: existing.checkInTime,
+                  })
                 );
               }
 
-              if (tx) {
-                const lockKey = `CHECKIN_${existing.id}_SEAT_${requestedSeat}`;
-                try {
-                  await tx.systemSetting.create({
-                    data: {
-                      key: lockKey,
-                      value: new Date().toISOString(),
-                      description: `Atomic check-in token for booking ${existing.id} seat ${requestedSeat}`,
-                    },
-                  });
-                } catch (dbErr: any) {
-                  if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
-                    const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
-                    const timeFormatted = formatCheckInTimeWita(priorTime);
-                    throw new Error(
-                      `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}.`
-                    );
-                  }
-                  throw dbErr;
-                }
-              }
-
-              const nowIso = new Date().toISOString();
-              newCheckedInSeats.push(requestedSeat);
-              newSeatTimes[String(requestedSeat)] = nowIso;
-              newSeatOfficers[String(requestedSeat)] = officerName;
-              newCheckedInQty = newCheckedInSeats.length;
-              newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
-            } else {
               let increment = 1;
               if (options?.incrementQty !== undefined) {
                 increment = options.incrementQty;
@@ -5159,41 +5156,50 @@ export async function updateBookingCheckIn(
               if (increment <= 0) {
                 throw new Error("Kuantitas check-in yang ditambahkan harus lebih besar dari 0.");
               }
-
               if (currentCheckedInQty + increment > ticketCount) {
                 throw new Error(
                   `Jumlah check-in melebihi total tiket (tersisa ${ticketCount - currentCheckedInQty} dari ${ticketCount} tiket).`
                 );
               }
 
-              const nowIso = new Date().toISOString();
-              for (let s = 1; s <= ticketCount && newCheckedInSeats.length < currentCheckedInQty + increment; s++) {
+              for (let s = 1; s <= ticketCount && seatsToClaim.length < increment; s++) {
                 if (!newCheckedInSeats.includes(s)) {
-                  if (tx) {
-                    const lockKey = `CHECKIN_${existing.id}_SEAT_${s}`;
-                    try {
-                      await tx.systemSetting.create({
-                        data: {
-                          key: lockKey,
-                          value: nowIso,
-                          description: `Atomic check-in token for booking ${existing.id} seat ${s}`,
-                        },
-                      });
-                    } catch (dbErr: any) {
-                      if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
-                        throw new Error(`Tiket #${s} sudah digunakan untuk check-in sebelumnya.`);
-                      }
-                      throw dbErr;
-                    }
-                  }
-                  newCheckedInSeats.push(s);
-                  newSeatTimes[String(s)] = nowIso;
-                  newSeatOfficers[String(s)] = officerName;
+                  seatsToClaim.push(s);
                 }
               }
-              newCheckedInQty = newCheckedInSeats.length;
-              newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
             }
+
+            const nowIso = new Date().toISOString();
+            for (const seat of seatsToClaim) {
+              if (tx) {
+                const lockKey = `CHECKIN_${existing.id}_SEAT_${seat}`;
+                try {
+                  await tx.systemSetting.create({
+                    data: {
+                      key: lockKey,
+                      value: nowIso,
+                      description: `Atomic check-in token for booking ${existing.id} seat ${seat}`,
+                    },
+                  });
+                } catch (dbErr: any) {
+                  if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
+                    throw new Error(
+                      formatDuplicateCheckInMessage({
+                        seatNumber: seat,
+                        ticketCode: requestedSeat !== undefined ? effectiveIdentifier : undefined,
+                        checkInTimeIso: existing.seatCheckInTimes?.[String(seat)] || existing.checkInTime,
+                      })
+                    );
+                  }
+                  throw dbErr;
+                }
+              }
+              newCheckedInSeats.push(seat);
+              newSeatTimes[String(seat)] = nowIso;
+              newSeatOfficers[String(seat)] = officerName;
+            }
+            newCheckedInQty = newCheckedInSeats.length;
+            newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
           }
 
           const updated: EventTicketOrder = {
@@ -5210,7 +5216,17 @@ export async function updateBookingCheckIn(
           };
 
           bookingsInTx[index] = updated;
-          await saveBookingsToDisk(bookingsInTx, { tx });
+          await saveBookingsToDisk(bookingsInTx, { tx, expectedUpdatedAt });
+
+          if (tx?.systemSetting?.findUnique) {
+            const refreshed = await tx.systemSetting.findUnique({
+              where: { key: "STORAGE_event_bookings.json" },
+              select: { updatedAt: true },
+            });
+            if (refreshed?.updatedAt) {
+              committedUpdatedAt = new Date(refreshed.updatedAt);
+            }
+          }
 
           committedBooking = updated;
           committedBookingsList = bookingsInTx;
@@ -5219,7 +5235,7 @@ export async function updateBookingCheckIn(
         // 12. Post-Commit: Sinkronisasi ke disk lokal dan in-memory cache
         if (committedBookingsList && committedBooking) {
           syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
-          markStorageSyncSynced("event_bookings.json");
+          markStorageSyncSynced("event_bookings.json", committedUpdatedAt);
           return committedBooking;
         }
 
@@ -5836,6 +5852,11 @@ export async function organizerCheckInAttendee(
   const matchSub = normalizedIdentifier.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
   const baseCode = matchSub ? matchSub[1] : normalizedIdentifier;
 
+  await Promise.all([
+    syncStorageFromDb("event_bookings.json"),
+    syncStorageFromDb("events.json"),
+  ]);
+
   const allBookings = loadBookingsFromDisk();
   const booking = allBookings.find(
     (b) =>
@@ -5907,6 +5928,7 @@ export async function organizerCheckInAttendee(
   return updateBookingCheckIn(bookingId, checkInStatus, {
     ...options,
     ticketCode: options?.ticketCode || normalizedIdentifier,
+    skipInitialSync: true,
   });
 }
 

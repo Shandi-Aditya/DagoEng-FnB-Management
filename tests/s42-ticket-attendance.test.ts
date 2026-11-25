@@ -5,13 +5,23 @@ import {
   calculateCheckInStats,
   formatCheckInTime,
   getBookingAttendance,
+  parseTicketScanCode,
 } from "@/features/events-checkin/events-checkin-domain";
 import {
   filterOrganizerAttendees,
   buildAttendeesExportRows,
 } from "@/features/events-portal/events-portal-domain";
+import { getSubTicketDetails } from "@/features/events-tickets/ticket-pass-domain";
 import { checkedInGuests } from "@/features/events-portal/events-portal-groups";
-import { updateBookingCheckIn, formatCheckInTimeWita } from "@/lib/events";
+import {
+  updateBookingCheckIn,
+  formatCheckInTimeWita,
+  loadBookingsSnapshotFromTxOrDisk,
+  createEventSubmission,
+  updateEventStatus,
+  createEventBooking,
+  updateBookingPaymentStatus,
+} from "@/lib/events";
 
 function createMockTicket(override: Partial<EventTicketOrder> = {}): EventTicketOrder {
   return {
@@ -74,7 +84,7 @@ describe("Task S-42: Status Kehadiran Tiket & Check-In", () => {
       expect(result.isComplete).toBe(true);
     });
 
-    it("menolak scan kedua dengan pesan bahwa tiket sudah digunakan beserta jam check-in", () => {
+    it("menolak scan kedua dengan pesan bahwa tiket sudah dipakai beserta jam check-in", () => {
       const checkInIso = "2026-12-07T14:30:00+08:00";
       const checkedTicket = createMockTicket({
         paymentStatus: "PAID",
@@ -86,8 +96,8 @@ describe("Task S-42: Status Kehadiran Tiket & Check-In", () => {
       const result = validateTicketCheckIn(checkedTicket, checkedTicket.eventId);
       expect(result.valid).toBe(false);
       expect(result.code).toBe("ALREADY_USED");
-      expect(result.message).toContain("sudah digunakan untuk check-in sebelumnya");
-      expect(result.message).toMatch(/check-in pukul \d{2}[:.]\d{2} WITA/i);
+      expect(result.message).toContain("Tiket sudah dipakai");
+      expect(result.message).toMatch(/sudah dipakai, check-in pukul \d{2}[:.]\d{2} WITA/i);
     });
 
     it("menolak scan kedua sub-tiket rombongan yang sama beserta jam check-in sub-tiket", () => {
@@ -105,8 +115,8 @@ describe("Task S-42: Status Kehadiran Tiket & Check-In", () => {
       const resSeat1 = validateTicketCheckIn(groupTicket, groupTicket.eventId, 1);
       expect(resSeat1.valid).toBe(false);
       expect(resSeat1.code).toBe("SEAT_ALREADY_USED");
-      expect(resSeat1.message).toContain("Tiket #1 sudah digunakan untuk check-in sebelumnya");
-      expect(resSeat1.message).toMatch(/check-in pukul \d{2}[:.]\d{2} WITA/i);
+      expect(resSeat1.message).toContain("Tiket #1 sudah dipakai");
+      expect(resSeat1.message).toMatch(/sudah dipakai, check-in pukul \d{2}[:.]\d{2} WITA/i);
 
       // Scan tiket #2 diizinkan
       const resSeat2 = validateTicketCheckIn(groupTicket, groupTicket.eventId, 2);
@@ -317,6 +327,132 @@ describe("Task S-42: Status Kehadiran Tiket & Check-In", () => {
       expect(formatCheckInTimeWita("not-a-valid-date")).toBe("");
       const formatted = formatCheckInTimeWita("2026-12-07T14:30:00+08:00");
       expect(formatted).toMatch(/\d{2}[:.]\d{2} WITA/i);
+    });
+  });
+
+  describe("5. QR Sub-Tiket, Ekspor Parsial X/Y, & Snapshot CAS", () => {
+    it("menghasilkan payload QR sub-tiket yang terbaca scanner (bukan guestToken hex)", () => {
+      const multiTicket = createMockTicket({
+        ticketCode: "DAGO-EVT-CUST1",
+        ticketCount: 2,
+        guestToken: "deadbeef".repeat(6),
+      });
+
+      const sub2 = getSubTicketDetails(multiTicket, 2);
+      expect(sub2.subTicketCode).toBe("DAGO-EVT-CUST1-02");
+      expect(sub2.subPayload).not.toContain(multiTicket.guestToken!);
+
+      const parsed = parseTicketScanCode(sub2.subPayload);
+      expect(parsed.cleanCode).toBe("DAGO-EVT-CUST1-02");
+      expect(parsed.baseCode).toBe("DAGO-EVT-CUST1");
+      expect(parsed.seatNumber).toBe(2);
+    });
+
+    it("mengekspor status Hadir Sebagian (X/Y) pada buildAttendeesExportRows", () => {
+      const partialBooking = createMockTicket({
+        ticketCode: "EVT-PART-01",
+        ticketCount: 3,
+        checkedInQty: 1,
+        checkInStatus: "PARTIALLY_CHECKED_IN",
+        checkInTime: "2026-12-07T15:00:00+08:00",
+        checkedInBy: "Bagus Staff",
+      });
+
+      const rows = buildAttendeesExportRows([partialBooking]);
+      expect(rows[0][8]).toBe("Hadir Sebagian (1/3)");
+    });
+
+    it("memprioritaskan jam check-in spesifik sub-tiket -02 saat seluruh pemesanan sudah check-in", () => {
+      const fullGroup = createMockTicket({
+        ticketCount: 2,
+        checkInStatus: "CHECKED_IN",
+        checkedInQty: 2,
+        checkedInSeats: [1, 2],
+        checkInTime: "2026-12-07T09:10:00+08:00",
+        seatCheckInTimes: {
+          "1": "2026-12-07T09:10:00+08:00",
+          "2": "2026-12-07T11:45:00+08:00",
+        },
+      });
+
+      const resSeat2 = validateTicketCheckIn(fullGroup, fullGroup.eventId, 2);
+      expect(resSeat2.valid).toBe(false);
+      expect(resSeat2.code).toBe("SEAT_ALREADY_USED");
+      expect(resSeat2.message).toMatch(/11[:.]45 WITA/i);
+    });
+
+    it("memperbarui check-in melalui updateBookingCheckIn dan mencatat jam sub-tiket ke-2 terpisah dari ke-1", async () => {
+      const nowIso = new Date(Date.now() - 1800000).toISOString();
+      const endIso = new Date(Date.now() + 7200000).toISOString();
+      const ev = await createEventSubmission({
+        organizerName: "Komunitas S42",
+        organizerEmail: "s42-sub@dagocreative.id",
+        organizerPhone: "081234567890",
+        title: "Event Sub-Tiket S42",
+        category: "COMMUNITY",
+        description: "Test check-in sub-tiket",
+        startDate: nowIso,
+        endDate: endIso,
+        location: "Dago Hub",
+        isPaid: true,
+        price: 50000,
+        posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      });
+      await updateEventStatus(ev.id, "APPROVED");
+
+      const booking = await createEventBooking({
+        eventId: ev.id,
+        guestName: "Sari Group",
+        guestEmail: "sari.group@example.com",
+        guestPhone: "081299001122",
+        ticketCount: 2,
+        paymentMethod: "CASH",
+      });
+      await updateBookingPaymentStatus(booking.id, "PAID");
+
+      await updateBookingCheckIn(booking.id, "PARTIALLY_CHECKED_IN", {
+        ticketCode: `${booking.ticketCode}-01`,
+        seatNumber: 1,
+        incrementQty: 1,
+        enforceDateWindow: false,
+      });
+
+      const seat2Result = await updateBookingCheckIn(booking.id, "CHECKED_IN", {
+        ticketCode: `${booking.ticketCode}-02`,
+        seatNumber: 2,
+        incrementQty: 1,
+        enforceDateWindow: false,
+      });
+      expect(seat2Result.checkInStatus).toBe("CHECKED_IN");
+      expect(seat2Result.seatCheckInTimes?.["1"]).toBeDefined();
+      expect(seat2Result.seatCheckInTimes?.["2"]).toBeDefined();
+
+      await expect(
+        updateBookingCheckIn(booking.id, "CHECKED_IN", {
+          ticketCode: `${booking.ticketCode}-02`,
+          seatNumber: 2,
+          enforceDateWindow: false,
+        })
+      ).rejects.toThrow(/Tiket #2 .*sudah dipakai, check-in pukul \d{2}[:.]\d{2} WITA/i);
+    });
+
+    it("loadBookingsSnapshotFromTxOrDisk membaca updatedAt transaksi secara murni tanpa memutasi status sync sebelum commit", async () => {
+      const { getStorageSyncStatus, markStorageSyncSynced } = await import("@/lib/data-storage");
+      markStorageSyncSynced("event_bookings.json", new Date("2026-11-25T01:00:00.000Z"));
+      const beforeStatus = getStorageSyncStatus("event_bookings.json");
+      const txMock = {
+        systemSetting: {
+          findUnique: async () => ({
+            key: "STORAGE_event_bookings.json",
+            value: JSON.stringify([]),
+            updatedAt: new Date("2026-11-25T03:00:00.000Z"),
+          }),
+        },
+      };
+      const snapshot = await loadBookingsSnapshotFromTxOrDisk(txMock);
+      expect(snapshot.bookings).toEqual([]);
+      expect(snapshot.updatedAt?.toISOString()).toBe("2026-11-25T03:00:00.000Z");
+      expect(getStorageSyncStatus("event_bookings.json")).toBe(beforeStatus);
     });
   });
 });

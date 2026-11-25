@@ -250,7 +250,7 @@ describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
     // Check-in kedua DITOLAK
     await expect(
       updateBookingCheckIn(booking.id, "CHECKED_IN")
-    ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+    ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
 
     // Fitur koreksi/undo tetap berfungsi normal
     const undone = await updateBookingCheckIn(booking.id, "REGISTERED");

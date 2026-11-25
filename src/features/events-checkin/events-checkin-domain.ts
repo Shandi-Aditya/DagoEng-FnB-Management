@@ -205,12 +205,13 @@ export function validateTicketCheckIn(
 
     if (currentCheckedSeats.includes(requestedSeat)) {
       const priorTime = ticket.seatCheckInTimes?.[String(requestedSeat)] || ticket.checkInTime;
-      const timeFormatted = priorTime ? formatCheckInTime(priorTime) : "";
-      const timeSuffix = timeFormatted && timeFormatted !== "—" ? ` (check-in pukul ${timeFormatted})` : "";
       return {
         valid: false,
         code: "SEAT_ALREADY_USED",
-        message: `Tiket #${requestedSeat} sudah digunakan untuk check-in sebelumnya${timeSuffix}.`,
+        message: formatDuplicateCheckInMessage({
+          seatNumber: requestedSeat,
+          checkInTimeIso: priorTime,
+        }),
       };
     }
 
@@ -225,13 +226,12 @@ export function validateTicketCheckIn(
 
   // General check-in
   if (currentCheckedSeats.length >= ticketCount) {
-    const priorTime = ticket.checkInTime;
-    const timeFormatted = priorTime ? formatCheckInTime(priorTime) : "";
-    const timeSuffix = timeFormatted && timeFormatted !== "—" ? ` (check-in pukul ${timeFormatted})` : "";
     return {
       valid: false,
       code: "ALREADY_USED",
-      message: `Tiket sudah digunakan untuk check-in sebelumnya${timeSuffix}.`,
+      message: formatDuplicateCheckInMessage({
+        checkInTimeIso: ticket.checkInTime,
+      }),
     };
   }
 
@@ -305,6 +305,26 @@ export function filterCheckInTickets(
     const matchInst = (b.institution || "").toLowerCase().includes(q);
     return matchCode || matchName || matchEmail || matchPhone || matchInst;
   });
+}
+
+/**
+ * Formats a standardized duplicate check-in rejection message with WITA timestamp.
+ */
+export function formatDuplicateCheckInMessage(params: {
+  seatNumber?: number;
+  ticketCode?: string;
+  checkInTimeIso?: string | null;
+}): string {
+  const formattedTime = params.checkInTimeIso ? formatCheckInTime(params.checkInTimeIso) : "";
+  const timePart =
+    formattedTime && formattedTime !== "—"
+      ? `check-in pukul ${formattedTime}`
+      : "sudah check-in sebelumnya";
+  if (params.seatNumber !== undefined) {
+    const codeLabel = params.ticketCode ? ` (${params.ticketCode})` : "";
+    return `Tiket #${params.seatNumber}${codeLabel} sudah dipakai, ${timePart}.`;
+  }
+  return `Tiket sudah dipakai, ${timePart}.`;
 }
 
 /**

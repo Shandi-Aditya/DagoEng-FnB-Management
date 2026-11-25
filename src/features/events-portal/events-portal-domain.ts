@@ -259,7 +259,7 @@ export function buildAttendeesExportRows(
   bookings: readonly EventTicketOrder[]
 ): string[][] {
   return bookings.map((b) => {
-    const { isCheckedIn, isPartial } = getBookingAttendance(b);
+    const { isCheckedIn, isPartial, checkedInQty, ticketCount } = getBookingAttendance(b);
 
     const paymentLabel =
       b.refundStatus === "REQUESTED"
@@ -277,7 +277,7 @@ export function buildAttendeesExportRows(
     const checkInLabel = isCheckedIn
       ? "Hadir"
       : isPartial
-      ? "Sebagian hadir"
+      ? `Hadir Sebagian (${checkedInQty}/${ticketCount})`
       : "Belum hadir";
 
     const formattedTime = b.checkInTime

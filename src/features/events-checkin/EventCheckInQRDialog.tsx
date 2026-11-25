@@ -85,7 +85,7 @@ export function EventCheckInQRDialog({
             <CheckCircle2 />
             <span>
               {isFullyCheckedIn
-                ? "Tiket sudah digunakan"
+                ? "Tiket sudah dipakai"
                 : ticketCount > 1
                 ? "Check-in rombongan ini"
                 : "Simulasikan scan tiket"}

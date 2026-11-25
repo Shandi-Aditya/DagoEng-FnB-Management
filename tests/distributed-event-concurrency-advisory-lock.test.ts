@@ -1214,7 +1214,7 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
       expect(rejected.length).toBe(1);
 
       const err = (rejected[0] as PromiseRejectedResult).reason;
-      expect(err.message).toContain("sudah digunakan untuk check-in sebelumnya");
+      expect(err.message).toMatch(/sudah dipakai, check-in pukul/i);
 
       const bookingsAfter = loadBookingsFromDisk();
       const target = bookingsAfter.find((b) => b.id === booking.id);
