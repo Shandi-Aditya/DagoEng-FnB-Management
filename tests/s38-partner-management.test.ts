@@ -20,6 +20,7 @@ import {
   calculateSettlement,
 } from "@/lib/settlement";
 import type { OrderRecord } from "@/types/order";
+import type { ServerAuthResult } from "@/lib/server-auth";
 
 describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persistence", () => {
   beforeEach(() => {
@@ -145,8 +146,13 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
     });
 
     it("mengizinkan superadmin mengubah status mitra menjadi SUSPENDED pada domain spec", () => {
-      const auth = { isAuthenticated: true, role: "SUPER_ADMIN" };
-      const authResult = tenantsDomainSpec.authorizeWrite(auth as any, {
+      const auth: ServerAuthResult = {
+        isAuthenticated: true,
+        role: "SUPER_ADMIN",
+        userId: "usr-super-admin",
+        scopeLevel: "PLATFORM",
+      };
+      const authResult = tenantsDomainSpec.authorizeWrite(auth, {
         op: "SET_TENANT_STATUS",
         tenantId: "tenant-ks",
         status: "SUSPENDED",
@@ -157,15 +163,22 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
     });
 
     it("menolak perubahan status mitra atau revenue split oleh peran yang tidak berwenang", () => {
-      const auth = { isAuthenticated: true, role: "CASHIER" };
-      const authResult = tenantsDomainSpec.authorizeWrite(auth as any, {
+      const auth: ServerAuthResult = {
+        isAuthenticated: true,
+        role: "CASHIER",
+        userId: "usr-cashier",
+        scopeLevel: "OUTLET",
+      };
+      const authResult = tenantsDomainSpec.authorizeWrite(auth, {
         op: "SET_TENANT_STATUS",
         tenantId: "tenant-ks",
         status: "SUSPENDED",
       });
 
       expect(authResult.allowed).toBe(false);
-      expect(authResult.status).toBe(403);
+      if (!authResult.allowed) {
+        expect(authResult.status).toBe(403);
+      }
     });
 
     it("setTenantRevenueSplit memutasi konfigurasi pembagian hasil", () => {
@@ -198,23 +211,28 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
         {
           id: "ord-1",
           orderNumber: "ORD-001",
-          orderType: "DINE_IN",
+          organizationId: "org-1",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
           tableNumber: "01",
+          customerName: "Pelanggan 1",
+          orderType: "DINE_IN",
           status: "COMPLETED",
           paymentStatus: "PAID",
           paymentMethod: "CASH",
-          grossTotal: 100000,
+          targetServiceMinutes: 15,
+          statusHistory: [],
+          subtotal: 100000,
           tax: 10000,
           serviceCharge: 5000,
           discount: 0,
-          netTotal: 115000,
-          subtotal: 100000,
+          total: 115000,
           items: [
             // Produk dari mitra eksternal (Kopi Senja)
             {
               id: "item-1",
               productId: "prod-1",
-              name: "Espresso",
+              productName: "Espresso",
               tenantId: "tenant-ks",
               unitPrice: 50000,
               quantity: 1,
@@ -223,14 +241,13 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
             {
               id: "item-2",
               productId: "prod-2",
-              name: "Croissant Butter",
+              productName: "Croissant Butter",
               tenantId: "tenant-bakery",
               unitPrice: 50000,
               quantity: 1,
             },
           ],
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         },
       ];
 
@@ -251,28 +268,33 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
         {
           id: "ord-2",
           orderNumber: "ORD-002",
+          organizationId: "org-1",
+          outletId: "outlet-sgr",
+          outletName: "Singaraja",
+          tableNumber: "01",
+          customerName: "Pelanggan 2",
           orderType: "TAKEAWAY",
           status: "COMPLETED",
           paymentStatus: "PAID",
           paymentMethod: "QRIS",
-          grossTotal: 50000,
+          targetServiceMinutes: 15,
+          statusHistory: [],
+          subtotal: 50000,
           tax: 5000,
           serviceCharge: 0,
           discount: 0,
-          netTotal: 55000,
-          subtotal: 50000,
+          total: 55000,
           items: [
             {
               id: "item-3",
               productId: "prod-3",
-              name: "Croissant Cheese",
+              productName: "Croissant Cheese",
               tenantId: "tenant-bakery",
               unitPrice: 50000,
               quantity: 1,
             },
           ],
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         },
       ];
 
@@ -334,16 +356,20 @@ describe("Task S-38: Kelola Data Mitra Lengkap, Auto-Suspension & Server Persist
 
       const unauthenticatedAuth: ServerAuthResult = {
         isAuthenticated: false,
+        role: null,
+        userId: null,
+        scopeLevel: null,
         error: "Unauthenticated",
       };
 
       const decision = tenantsDomainSpec.authorizeRead(unauthenticatedAuth);
       expect(decision.allowed).toBe(true);
-      const transformed = decision.transform!(state);
-
-      expect(transformed.profiles["tenant-ks"].npwp).toBeUndefined();
-      expect(transformed.profiles["tenant-ks"].contactPhone).toBe("••••••••");
-      expect(transformed.revenueSplits).toEqual({});
+      if (decision.allowed) {
+        const transformed = decision.transform!(state);
+        expect(transformed.profiles["tenant-ks"].npwp).toBeUndefined();
+        expect(transformed.profiles["tenant-ks"].contactPhone).toBe("••••••••");
+        expect(transformed.revenueSplits).toEqual({});
+      }
     });
   });
 });

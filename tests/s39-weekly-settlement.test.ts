@@ -344,6 +344,10 @@ describe("Task S-39: Skema Bagi Hasil per Metode Bayar dan Settlement Mingguan",
         bankAccountNumber: "12345678",
         bankAccountHolder: "Dago Internal",
         partnerType: "INTERNAL",
+        status: "ACTIVE",
+        receiptHeader: "",
+        receiptFooter: "",
+        lowStockThresholdPercent: 20,
       });
 
       // Default: exclude internal

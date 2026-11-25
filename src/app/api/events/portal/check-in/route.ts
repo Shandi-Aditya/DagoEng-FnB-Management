@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { organizerCheckInAttendee, getBookingById, getAdminEvents } from "@/lib/events";
 import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
-import { assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import { assertOrganizerAuth, sanitizeBookingForResponse } from "@/lib/server-auth";
 import { AttendeeCheckInStatus } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -105,12 +105,7 @@ export async function PATCH(req: NextRequest) {
         ? `Kehadiran parsial tercatat: ${updated.checkedInQty} dari ${updated.ticketCount} tiket telah hadir.`
         : "Status kehadiran peserta berhasil dibatalkan.";
 
-    const { guestToken: _token, ...sanitized } = updated;
-    const maskedUpdated = {
-      ...sanitized,
-      guestEmail: maskEmail(updated.guestEmail),
-      guestPhone: maskPhoneNumber(updated.guestPhone),
-    };
+    const maskedUpdated = sanitizeBookingForResponse(updated, { maskPii: true });
 
     return NextResponse.json({
       success: true,

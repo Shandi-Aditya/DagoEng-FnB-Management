@@ -15,34 +15,33 @@ Dokumen ini merupakan laporan serah terima teknis menyeluruh (*technical handove
 | **Cabang Git Kerja** | `shandi-dev` |
 | **Target Integrasi** | `develop` ➔ `main` (Production) |
 | **Repositori Resmi** | `https://gitlab.com/devdagoeng/dagoeng-management.git` |
-| **Hasil Regresi Otomatis** | **191 file lulus dari 195 file uji** (**2.206 skenario uji lulus 100%**) |
+| **Hasil Regresi Otomatis** | **191 file lulus dari 195 file uji** (**2.213 skenario uji lulus** dari **2.222 skenario**) |
 | **Status Baseline Error** | Tepat 4 file kegagalan baseline yang diizinkan sesuai panduan `AGENTS.md` |
 
 ---
 
 ## 2. Ringkasan Eksekutif & Status Uji Regresi
 
-Pekerjaan magang POS dan Web Event telah menuntaskan seluruh paket task yang tercantum dalam lembar kerja `Task-List-Magang-POS-WebEvent-23Nov-18Des.xlsx` (M1 s/d M4), mencakup rangkaian Task **S-01 s/d S-16**, Task **S-31 s/d S-39**, Task **S-42**, Task **S-43**, dan ditutup dengan Task **S-41** (Regression test & dokumentasi serah terima).
+Pekerjaan magang POS dan Web Event mengimplementasikan paket task yang tercantum dalam lembar kerja `Task-List-Magang-POS-WebEvent-23Nov-18Des.xlsx` (M1 s/d M4), mencakup rangkaian Task **S-01 s/d S-16**, Task **S-31 s/d S-39**, Task **S-42**, Task **S-43**, dan dokumentasi serah terima **S-41**.
 
 ### 2.1 Hasil Eksekusi Regresi Vitest
-Pengujian regresi penuh dijalankan menggunakan perintah:
+Pengujian regresi penuh dijalankan dalam mode lokal terisolasi (tanpa menyentuh database Neon) menggunakan perintah:
 ```bash
-node ./node_modules/vitest/vitest.mjs run
+DATABASE_URL="" DIRECT_URL="" npx vitest run --reporter=basic
 ```
 - **Total Test Files**: 195 file
 - **File Lulus**: 191 file (97,95%)
-- **Total Skenario Uji**: 2.215 skenario
-- **Skenario Lulus**: 2.206 skenario (99,59%)
-- **Skenario Gagal**: 9 skenario (terkonsentrasi tepat pada 4 file baseline resmi: `tests/etl-data-validation.test.ts`, `tests/final-demo-readiness.test.ts`, `tests/organizer-activation-hardening.test.ts`, dan `tests/storage-sync-safety.test.ts`).
-- **File Uji Baru & Terpelihara (100% Lulus)**:
-  - `tests/tables-domain.test.ts` (10/10 lulus)
-  - `tests/community-events-hardening.test.ts` (11/11 lulus)
-  - `tests/v18-receipt-settlement-and-roles.test.ts` (9/9 lulus)
-  - `tests/v33-ui-settings-integration.test.ts` (7/7 lulus)
+- **Total Skenario Uji**: 2.222 skenario
+- **Skenario Lulus**: 2.213 skenario (99,59%)
+- **Skenario Gagal**: 9 skenario (terkonsentrasi pada file baseline `AGENTS.md`: `tests/etl-data-validation.test.ts`, `tests/final-demo-readiness.test.ts`, `tests/organizer-activation-hardening.test.ts`, dan `tests/storage-sync-safety.test.ts`).
+- **File Uji Keamanan & Domain Utama (100% Lulus)**:
+  - `tests/events-portal-domain.test.ts` (11/11 lulus)
+  - `tests/checkin-security-and-atomic-resilience.test.ts` (13/13 lulus)
+  - `tests/v20-pos-handover-docs.test.ts` (5/5 lulus)
   - `tests/s39-weekly-settlement.test.ts` (11/11 lulus)
   - `tests/s42-ticket-attendance.test.ts` (10/10 lulus)
-  - `tests/s43-event-seat-selection.test.ts` (12/12 lulus)
-  - `tests/s38-tenant-management-and-addons.test.ts` (10/10 lulus)
+  - `tests/s43-seat-selection.test.ts` (12/12 lulus)
+  - `tests/s38-partner-management.test.ts` (15/15 lulus)
 
 ---
 
@@ -56,7 +55,7 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
 | **2** | **Customer Booking Coworking** | **Lulus 100%** | Alur reservasi & OTS Coworking terintegrasi dengan POS. Pemisahan tagihan PB1 0% dan Service Charge 0% khusus meja Hot Desk/Ruang Kerja berhasil diuji pada `tests/v33-ui-settings-integration.test.ts`. |
 | **3** | **Pembersihan Data Uji Aman** | **Lulus 100%** | Mekanisme penghapusan event & tiket uji menggunakan proteksi *Compare-And-Swap (CAS)* berbasis `updatedAt` untuk mencegah tabrakan konkurensi antar-admin. Uji: `tests/admin-event-delete-and-cleanup.test.ts`. |
 | **4** | **Validasi Harga & Kuota Aman** | **Lulus 100%** | Menolak harga desimal/negatif dan kuota di luar batas *safe integer*. Akses pembuatan event dikunci dari role Petugas Check-In (`CHECKIN_STAFF`). Uji: `tests/admin-event-validation-hardening.test.ts`. |
-| **5** | **Sentralisasi Kontak CS Resmi** | **Lulus 100%** | Kontak WhatsApp Customer Service resmi (+62 821-1550-1995) disentralisasi di konstanta `OFFICIAL_CS_WHATSAPP` tanpa nomor contoh `081234567890`. |
+| **5** | **Sentralisasi Kontak CS Resmi** | **Lulus 100%** | Kontak WhatsApp Customer Service resmi (+62 821-1550-1995) disentralisasi di konstanta `OFFICIAL_CS_WHATSAPP_NUMBER` tanpa nomor contoh `081234567890`. |
 | **6** | **Pengiriman E-Tiket Pasca Lunas** | **Lulus 100%** | Pengiriman otomatis tautan privat tiket dan kode QR melalui email dispatcher dengan fallback tautan aman saat SMTP belum terpasang. Uji: `tests/ticket-paid-email.test.ts`. |
 | **7** | **Restriksi Meja Check-in WITA** | **Lulus 100%** | Meja check-in lapangan (`/events/checkin`) terkunci ketat pada jendela tanggal hari ini waktu Indonesia Tengah (WITA). Event kemarin/besok ditolak otomatis. Uji: `tests/events-checkin-domain.test.ts`. |
 | **8** | **Siklus Transaksi Event Berbayar** | **Lulus 100%** | Siklus end-to-end: pesan tiket -> upload bukti -> verifikasi kasir/admin -> kode sub-tiket terbit -> scan QR anti-duplikasi per sub-tiket. Uji: `tests/paid-event-e2e.test.ts`. |
@@ -71,11 +70,11 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
   - Visualisasi tata letak panggung, denah kursi baris A–H, nomor kursi 01–10.
   - Pewarnaan status semantik (Tersedia, Terpilih, Terisi/Habis).
   - Pemilihan kursi instan pada saat checkout dengan alokasi nomor kursi persisten di e-tiket dan invoice.
-  - File uji: `tests/s43-event-seat-selection.test.ts`.
+  - File uji: `tests/s43-seat-selection.test.ts`.
 - **Task S-38 (Kelola Mitra & Add-on Langganan Server-Side)**:
   - Migrasi status mitra dan add-on fitur dari penyimpanan lokal browser ke database PostgreSQL via endpoint `/api/sync/subscription` dan `/api/sync/tenants`.
   - Normalisasi data profil perbankan mitra untuk pencairan settlement.
-  - File uji: `tests/s38-tenant-management-and-addons.test.ts`.
+  - File uji: `tests/s38-partner-management.test.ts`.
 - **Task S-39 (Bagi Hasil per Metode Bayar, MDR QRIS, Laporan #10 & #11)**:
   - Logika pemisahan kas fisik (Tunai: mitra setor 15% ke Dago) dan uang digital (QRIS: Dago transfer 85% ke mitra setelah MDR).
   - Pilihan pembebanan MDR QRIS 0,7%: Ditanggung Mitra, Ditanggung Dago, atau Dibagi Proporsional (85/15).
@@ -92,10 +91,10 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
    - URL: `/events`, `/events/[id]`
    - Fitur: Penjelajahan event komunitas aktif, filter kategori & tanggal, kartu kapasitas tiket real-time, lencana status event (*Open, Sold Out, Past*).
 2. **Checkout Tiket & Denah Kursi Interaktif (S-43)**:
-   - URL: `/events/[id]/book`
+   - URL: `/events/[id]`
    - Fitur: Pilihan tiket bertingkat (*multi-tier*), kode promo / tiket undangan gratis (S-13), pemilihan nomor kursi visual interaktif baris A–H.
 3. **Portal Pembayaran & E-Tiket Privat**:
-   - URL: `/events/pay/[bookingId]`, `/events/tickets/[token]`
+   - URL: `/events/tickets/[token]`
    - Fitur: Instruksi transfer bank resmi, unggah bukti bayar (PNG/JPG/PDF < 5MB), penerbitan e-tiket ber-QR pasca verifikasi, unduh tiket PDF/cetak.
 4. **Portal Penyelenggara Komunitas (Organizer Portal)**:
    - URL: `/events/portal`
@@ -109,10 +108,10 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
    - URL: `/pos`
    - Fitur: Multi-tenant basket (pesanan gabungan tenant F&B dan coworking), diskon prorata, perhitungan PB1 10% dan service charge 5% (bebas pajak untuk coworking), pencetakan struk kasir dan dapur.
 2. **Kelola Meja & Reservasi WITA**:
-   - URL: `/pos/tables`
+   - URL: `/tables`
    - Fitur: Denah meja visual, status ketersediaan, reservasi pelanggan dengan tanggal & jam berzona WITA, penggabungan meja (*merge*), pindah meja (*move*), dan pembagian tagihan (*split bill*).
 3. **Kelola Mitra & Add-on (S-38)**:
-   - URL: `/settings/tenants`
+   - URL: `/settings` (Tab Mitra)
    - Fitur: Pendaftaran tenant, persentase bagi hasil kustom per tenant, pengaturan nomor rekening bank pencairan, aktivasi add-on langganan tersinkronisasi server.
 4. **Laporan Keuangan & Rekonsiliasi Mingguan (S-39)**:
    - URL: `/reports`
@@ -122,20 +121,22 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
 
 ## 5. Daftar Akun Uji Sistem (Test Accounts)
 
-Seluruh akun pengujian telah distandarisasi pada file `docs/AKUN_SISTEM.md`. Berikut kredensial utama untuk verifikasi staging dan demonstrasi:
+Seluruh akun pengujian resmi merujuk pada `docs/AKUN_SISTEM.md` (menggunakan kata sandi `Password123!` atau kata sandi singkat `demo` pada mode UAT staging):
 
-| Peran (*Role*) | Email Akun | Kata Sandi | Lingkup Akses (*Scope*) |
-| :--- | :--- | :--- | :--- |
-| **Super Admin** | `superadmin@dagoeng.com` | `SuperAdmin@123` | Akses penuh ke seluruh outlet, pengaturan sistem, dan database |
-| **Owner (Pemilik)** | `owner@dagoeng.com` | `Owner@123` | Laporan finansial, analitik outlet, audit log, persentase bagi hasil |
-| **Manager Outlet** | `manager.singaraja@dagoeng.com` | `Manager@123` | Operasional outlet Singaraja, approval void/refund, stok inventaris |
-| **Kasir (Cashier)** | `kasir.singaraja@dagoeng.com` | `Kasir@123` | POS transaksi, buka/tutup shift kasir, cetak struk |
-| **Pelayan (Waiter)** | `waiter.singaraja@dagoeng.com` | `Waiter@123` | Pemesanan meja tamu, status pesanan dapur |
-| **Staf Dapur** | `kitchen.singaraja@dagoeng.com` | `Kitchen@123` | Antarmuka Kitchen Display System (KDS), pemenuhan menu |
-| **Petugas Check-In** | `checkin@dagoeng.com` | `Checkin@123` | Khusus meja check-in event hari H (`/events/checkin`) |
-| **Penyelenggara A** | `komunitas.bali@dagoeng.com` | `Komunitas@123` | Portal Penyelenggara Event Komunitas Bali Creative |
-| **Penyelenggara B** | `dev.community@dagoeng.com` | `Community@123` | Portal Penyelenggara Event Developer Meetup |
-| **Pelanggan (Customer)**| `customer@dagoeng.com` | `Customer@123` | Self-order web, riwayat poin loyalitas, reservasi meja |
+| Peran (*RoleSlug*) | Lingkup (*ScopeLevel*) | Email Akun | Kata Sandi | Deskripsi Akses |
+| :--- | :--- | :--- | :--- | :--- |
+| **SUPER_ADMIN** | `PLATFORM` | `admin@dagoeng.com` | `Password123!` | Akses penuh platform, konfigurasi sistem, dan data global |
+| **OWNER** | `ORGANIZATION` | `owner.dago@dagoeng.com` | `Password123!` | Pemilik Dago Creative Hub, laporan finansial, audit log |
+| **MANAGER** (Commercial) | `ORGANIZATION` | `manager.commercial@dagoeng.com` | `Password123!` | Manajer komersial & event, approval revisi, laporan |
+| **MANAGER** (Co-Working) | `ORGANIZATION` | `manager.cowork@dagoeng.com` | `Password123!` | Manajer co-working & space, denah meja, reservasi |
+| **CHECKIN_STAFF** | `ORGANIZATION` | `eventstaff@dagoeng.com` | `Password123!` | Meja check-in lapangan event hari H (`/events/checkin`) |
+| **OWNER** (Tenant F&B) | `TENANT` | `owner.kopisenja@dagoeng.com` | `Password123!` | Pemilik mitra F&B Kopi Senja, profil tenant, dashboard |
+| **CASHIER** | `OUTLET` | `cashier.sgr@kopisenja.com` | `Password123!` | Kasir outlet Singaraja, POS terpadu, shift kasir |
+| **WAITER** | `OUTLET` | `waiter.sgr@kopisenja.com` | `Password123!` | Pramusaji Singaraja, pemesanan meja, status pesanan |
+| **KITCHEN_STAFF** | `OUTLET` | `kitchen.sgr@kopisenja.com` | `Password123!` | Staf dapur Singaraja, Kitchen Display System (KDS) |
+| **CUSTOMER** (Komunitas) | `OUTLET` | `baristaguild@dagocreative.id` | `Password123!` | Penyelenggara event komunitas (Dago Barista Guild) |
+| **CUSTOMER** (Komunitas) | `OUTLET` | `halo@bandungdev.org` | `Password123!` | Penyelenggara event komunitas (Bandung Game Creators) |
+| **CUSTOMER** (Pelanggan) | `OUTLET` | `customer@gmail.com` | `Password123!` | Pelanggan demo, e-tiket, reservasi meja |
 
 ---
 
@@ -147,13 +148,13 @@ Pastikan file `.env` pada lingkungan Staging/Production terisi parameter berikut
 # Database PostgreSQL (Neon / Supabase / VPS)
 DATABASE_URL="postgresql://user:password@ep-host.ap-southeast-1.neon.tech/neondb?sslmode=require"
 
-# NextAuth Authentication
-NEXTAUTH_URL="https://staging.dagoeng.com"
-NEXTAUTH_SECRET="kunci-rahasia-enkripsi-jwt-minimal-32-karakter"
+# Keamanan Sesi & Verifikasi POS (mengacu pada DEPLOY_COOLIFY.md)
+SESSION_SECRET="kunci-rahasia-hmac-sesi-minimal-32-karakter"
+QRIS_WEBHOOK_SECRET="kunci-rahasia-hmac-sha256-qris"
+SUPERVISOR_OVERRIDE_PIN="pin-override-supervisor"
 
 # Alamat Aplikasi & API
-NEXT_PUBLIC_APP_URL="https://staging.dagoeng.com"
-APP_URL="https://staging.dagoeng.com"
+NEXT_PUBLIC_APP_URL="https://staging.pos.veryyyy.com"
 
 # Layanan Pengiriman Email Tiket (Opsional, gunakan SMTP aktif)
 SMTP_HOST="smtp.mailtrap.io"
@@ -186,7 +187,7 @@ NEXT_PUBLIC_CS_WHATSAPP="+6282115501995"
    npm run build
    ```
 5. **Restart Service Node.js / Kontainer Docker**:
-   Ikuti panduan lengkap pada [docs/DEPLOY_COOLIFY.md](docs/DEPLOY_COOLIFY.md) dan [docs/SOP_RILIS_DAN_STAGING.md](docs/SOP_RILIS_DAN_STAGING.md).
+   Ikuti panduan lengkap pada [DEPLOY_COOLIFY.md](./DEPLOY_COOLIFY.md) dan [SOP_RILIS_DAN_STAGING.md](./SOP_RILIS_DAN_STAGING.md).
 
 ---
 
@@ -207,7 +208,7 @@ Sebagai bagian dari prinsip transparansi rekayasa perangkat lunak, berikut catat
 
 3. **Keputusan Persentase Bagi Hasil Final (85/15 vs 70/30)**:
    - Sistem saat ini menerapkan konfigurasi default bagi hasil 85% Mitra / 15% Dago sesuai sistem operasional POS.
-   - Tersedia opsi *Custom Revenue Splits* di menu Kelola Mitra (`/settings/tenants`) jika terdapat kesepakatan rasio khusus (misal 80/20 atau 70/30) tanpa perlu mengubah kode sumber.
+   - Tersedia opsi *Custom Revenue Splits* di menu Kelola Mitra (`/settings`) jika terdapat kesepakatan rasio khusus (misal 80/20 atau 70/30) tanpa perlu mengubah kode sumber.
    - *Rekomendasi*: Tunggu arahan final dari Ka Ari sebelum mengunci nilai default pada template onboarding tenant baru.
 
 ---
