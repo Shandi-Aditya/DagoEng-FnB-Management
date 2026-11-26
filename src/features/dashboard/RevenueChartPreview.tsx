@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -12,10 +12,25 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Clock, ShoppingBag, TrendingDown, TrendingUp, Users } from "lucide-react";
+import {
+  Clock,
+  Flame,
+  ShoppingBag,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   type ChartConfig,
   ChartContainer,
@@ -26,7 +41,7 @@ import {
 } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { toWitaDateKey, useDateFilter } from "@/contexts/DateFilterContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
@@ -40,34 +55,38 @@ import {
   extractOrderCustomerCount,
   findPeakAndQuietHours,
   formatCompactIDR,
-  getPreviousPeriodRange,
   projectDashboardOrdersForTenant,
+  resolveComparisonRange,
   scopeDashboardOrders,
   splitPromoOrders,
+  type ComparisonMode,
+  type ForecastMethod,
   type TrafficMetric,
 } from "./dashboard-metrics";
 
 type ChartView = "weekly" | "hourly" | "dayOfWeek" | "comparison" | "forecast" | "promo";
 
 const VIEW_DESCRIPTIONS: Record<ChartView, string> = {
-  weekly: "Omzet harian pada periode terpilih dibanding HPP dan diskon promo",
+  weekly: "Tren harian omzet dan volume traffic transaksi pada periode terpilih",
   hourly: "Distribusi volume transaksi dan customer per jam operasional",
-  dayOfWeek: "Tren traffic dan penjualan berdasarkan hari dalam seminggu",
-  comparison: "Perbandingan performa traffic dan penjualan antarperiode",
-  forecast: "Estimasi proyeksi penjualan dan traffic untuk 7 hari ke depan",
+  dayOfWeek: "Combo chart traffic dan omzet berdasarkan hari dalam seminggu",
+  comparison: "Perbandingan performa traffic dan penjualan antarperiode (Period-over-Period)",
+  forecast: "Estimasi proyeksi statistik penjualan dan traffic untuk periode berikutnya",
   promo: "Omzet transaksi promo dibanding transaksi reguler",
 };
 
 const chartConfig = {
-  revenue: { label: "Omzet", color: "var(--primary)" },
+  revenue: { label: "Omzet", color: "var(--chart-1)" },
+  orders: { label: "Traffic Transaksi", color: "var(--chart-2)" },
   cost: { label: "HPP (estimasi 38%)", color: "var(--muted-foreground)" },
-  discount: { label: "Diskon promo", color: "var(--muted-foreground)" },
-  orders: { label: "Transaksi", color: "var(--primary)" },
-  customers: { label: "Customer", color: "var(--primary)" },
-  currentRevenue: { label: "Omzet periode ini", color: "var(--primary)" },
+  discount: { label: "Diskon promo", color: "var(--destructive)" },
+  customers: { label: "Customer", color: "var(--chart-3)" },
+  currentRevenue: { label: "Omzet periode ini", color: "var(--chart-1)" },
   previousRevenue: { label: "Omzet periode lalu", color: "var(--muted-foreground)" },
-  projectedRevenue: { label: "Proyeksi omzet", color: "var(--primary)" },
-  upperBoundRevenue: { label: "Batas atas", color: "var(--muted-foreground)" },
+  currentOrders: { label: "Transaksi periode ini", color: "var(--chart-2)" },
+  previousOrders: { label: "Transaksi periode lalu", color: "var(--muted)" },
+  projectedRevenue: { label: "Proyeksi omzet", color: "var(--chart-1)" },
+  upperBoundRevenue: { label: "Batas atas proyeksi", color: "var(--muted-foreground)" },
 } satisfies ChartConfig;
 
 const currencyFormatter = (value: unknown) => formatCurrencyIDR(Number(value) || 0);
@@ -86,8 +105,12 @@ export function RevenueChartPreview() {
   const { startDate, endDate, isDateInRange } = useDateFilter();
   const { orders: allOrders, filteredOrders } = useOrders();
   const { activeOutletId, isAllOutlets } = useOutlet();
+
   const [view, setView] = useState<ChartView>("weekly");
   const [trafficMetric, setTrafficMetric] = useState<TrafficMetric>("orders");
+  const [compareMode, setCompareMode] = useState<ComparisonMode>("PREVIOUS_PERIOD");
+  const [forecastMethod, setForecastMethod] = useState<ForecastMethod>("WEIGHTED_MOVING_AVERAGE");
+  const [weeklyComboMode, setWeeklyComboMode] = useState<"combo" | "financial">("combo");
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
   const tenantId = user?.tenant?.id;
@@ -115,15 +138,16 @@ export function RevenueChartPreview() {
     [hourly, trafficMetric],
   );
 
-  const prevRange = useMemo(
-    () => getPreviousPeriodRange(startDate, endDate),
-    [startDate, endDate],
+  const compareRange = useMemo(
+    () => resolveComparisonRange(startDate, endDate, compareMode),
+    [startDate, endDate, compareMode],
   );
 
   const previousScopedOrders = useMemo(() => {
     const isPrevInRange = (dateStr: string) => {
-      const dKey = toWitaDateKey(dateStr);
-      return Boolean(dKey) && dKey >= prevRange.startDate && dKey <= prevRange.endDate;
+      if (!dateStr) return false;
+      const key = dateStr.slice(0, 10);
+      return key >= compareRange.startDate && key <= compareRange.endDate;
     };
     const outletOrders = isAllOutlets
       ? allOrders
@@ -136,7 +160,7 @@ export function RevenueChartPreview() {
       requirePaid: true,
     });
     return isTenantOwner && tenantId ? projectDashboardOrdersForTenant(paid, tenantId) : paid;
-  }, [allOrders, tenantId, isTenantOwner, isAllOutlets, activeOutletId, prevRange.startDate, prevRange.endDate]);
+  }, [allOrders, tenantId, isTenantOwner, isAllOutlets, activeOutletId, compareRange.startDate, compareRange.endDate]);
 
   const periodComparison = useMemo(
     () =>
@@ -144,22 +168,57 @@ export function RevenueChartPreview() {
         scopedOrders,
         previousScopedOrders,
         { startDate, endDate },
-        prevRange,
+        compareRange,
       ),
-    [scopedOrders, previousScopedOrders, startDate, endDate, prevRange],
+    [scopedOrders, previousScopedOrders, startDate, endDate, compareRange],
   );
 
   const comparisonChartData = useMemo(() => {
     return [
       {
-        name: "Omzet (dalam ribuan)",
+        category: "Omzet (ribuan Rp)",
         currentRevenue: Math.round(periodComparison.current.revenue / 1000),
         previousRevenue: Math.round(periodComparison.previous.revenue / 1000),
       },
     ];
   }, [periodComparison]);
 
-  const forecast = useMemo(() => calculateSalesForecast(daily, 7), [daily]);
+  const forecast = useMemo(
+    () => calculateSalesForecast(daily, 7, forecastMethod),
+    [daily, forecastMethod],
+  );
+
+  // Transition historical daily data into projected days for seamless visualization
+  const forecastCombinedChartData = useMemo(() => {
+    const recentHistorical = daily.slice(-7).map((d) => ({
+      label: d.day,
+      fullDate: d.date,
+      historicalRevenue: d.revenue,
+      projectedRevenue: undefined as number | undefined,
+      upperBound: undefined as number | undefined,
+      orders: d.orders,
+      isForecast: false,
+    }));
+
+    if (recentHistorical.length > 0 && forecast.forecastDays.length > 0) {
+      // Anchor projection at the last known historical point
+      const lastHist = recentHistorical[recentHistorical.length - 1];
+      lastHist.projectedRevenue = lastHist.historicalRevenue;
+      lastHist.upperBound = lastHist.historicalRevenue;
+    }
+
+    const projectedPoints = forecast.forecastDays.map((f) => ({
+      label: `${f.day}*`,
+      fullDate: f.date,
+      historicalRevenue: undefined as number | undefined,
+      projectedRevenue: f.projectedRevenue,
+      upperBound: f.upperBoundRevenue,
+      orders: f.projectedOrders,
+      isForecast: true,
+    }));
+
+    return [...recentHistorical, ...projectedPoints];
+  }, [daily, forecast]);
 
   const periodRevenue = daily.reduce((sum, day) => sum + day.revenue, 0);
   const periodCost = daily.reduce((sum, day) => sum + day.cost, 0);
@@ -188,11 +247,11 @@ export function RevenueChartPreview() {
 
   const hasData =
     view === "weekly"
-      ? periodRevenue > 0
+      ? periodRevenue > 0 || periodOrders > 0
       : view === "hourly"
         ? hourly.some((slot) => slot[trafficMetric] > 0)
         : view === "dayOfWeek"
-          ? dayOfWeek.some((d) => d.orders > 0)
+          ? dayOfWeek.some((d) => d.orders > 0 || d.revenue > 0)
           : view === "comparison"
             ? periodComparison.current.orders > 0 || periodComparison.previous.orders > 0
             : view === "forecast"
@@ -210,18 +269,17 @@ export function RevenueChartPreview() {
       }
     />
   );
-  const yAxisCurrency = (
-    <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatCompactIDR} />
-  );
 
   return (
     <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">Tren penjualan dan traffic</CardTitle>
-        <CardDescription>{VIEW_DESCRIPTIONS[view]}</CardDescription>
-        <CardAction>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-1 min-w-0">
+          <CardTitle className="text-sm font-medium">Tren penjualan dan traffic</CardTitle>
+          <CardDescription>{VIEW_DESCRIPTIONS[view]}</CardDescription>
+        </div>
+        <CardAction className="w-full sm:w-auto overflow-x-auto">
           <Tabs value={view} onValueChange={(value) => setView(value as ChartView)}>
-            <TabsList className="h-8 max-w-full overflow-x-auto p-0.5">
+            <TabsList className="h-8 w-full sm:w-auto overflow-x-auto p-0.5 justify-start">
               <TabsTrigger value="weekly">Harian</TabsTrigger>
               <TabsTrigger value="hourly">Jam sibuk</TabsTrigger>
               <TabsTrigger value="dayOfWeek">Pola hari</TabsTrigger>
@@ -234,59 +292,208 @@ export function RevenueChartPreview() {
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
+        {/* Kontrol dan kartu ringkasan Jam Sibuk */}
         {view === "hourly" ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Metrik traffic sumbu Y:</span>
+                <div className="inline-flex rounded-md border bg-background p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setTrafficMetric("orders")}
+                    className={cn(
+                      "flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                      trafficMetric === "orders"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <ShoppingBag className="size-3.5" />
+                    Jumlah transaksi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrafficMetric("customers")}
+                    className={cn(
+                      "flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                      trafficMetric === "customers"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Users className="size-3.5" />
+                    Jumlah customer
+                  </button>
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Sumbu Y dihitung dari kuantitas ({trafficMetric === "orders" ? "transaksi" : "customer"}), bukan nominal harga
+              </span>
+            </div>
+
+            {/* Highlight cards: Jam Paling Ramai & Jam Paling Sepi */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center gap-3 rounded-lg border bg-card p-3 shadow-xs">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Flame className="size-5" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs text-muted-foreground font-medium">Jam Paling Ramai</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-semibold tabular-nums">
+                      {peakAndQuiet.busiest ? peakAndQuiet.busiest.hour : "-"}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {peakAndQuiet.busiest
+                        ? `${peakAndQuiet.busiest[trafficMetric]} ${trafficMetric === "orders" ? "transaksi" : "customer"} (${formatCompactIDR(peakAndQuiet.busiest.revenue)})`
+                        : "Belum ada transaksi"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 rounded-lg border bg-card p-3 shadow-xs">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <Clock className="size-5" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs text-muted-foreground font-medium">Jam Paling Sepi</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-semibold tabular-nums">
+                      {peakAndQuiet.quietest ? peakAndQuiet.quietest.hour : "-"}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {peakAndQuiet.quietest
+                        ? `${peakAndQuiet.quietest[trafficMetric]} ${trafficMetric === "orders" ? "transaksi" : "customer"} (${formatCompactIDR(peakAndQuiet.quietest.revenue)})`
+                        : "Belum ada transaksi"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Kontrol tren harian: Combo vs Finansial */}
+        {view === "weekly" ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Metrik traffic:</span>
+            <span className="text-xs text-muted-foreground">Tampilan visual:</span>
+            <div className="inline-flex rounded-md border bg-background p-0.5">
+              <button
+                type="button"
+                onClick={() => setWeeklyComboMode("combo")}
+                className={cn(
+                  "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                  weeklyComboMode === "combo"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Combo (Bar Transaksi + Line Omzet)
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeeklyComboMode("financial")}
+                className={cn(
+                  "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                  weeklyComboMode === "financial"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Rincian Biaya & Diskon
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Kontrol filter Perbandingan Antarperiode */}
+        {view === "comparison" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Periode pembanding:</span>
               <div className="inline-flex rounded-md border bg-background p-0.5">
                 <button
                   type="button"
-                  onClick={() => setTrafficMetric("orders")}
+                  onClick={() => setCompareMode("PREVIOUS_PERIOD")}
                   className={cn(
-                    "flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                    trafficMetric === "orders"
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    compareMode === "PREVIOUS_PERIOD"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <ShoppingBag className="size-3.5" />
-                  Transaksi
+                  Periode sebelumnya
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTrafficMetric("customers")}
+                  onClick={() => setCompareMode("LAST_WEEK")}
                   className={cn(
-                    "flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                    trafficMetric === "customers"
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    compareMode === "LAST_WEEK"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <Users className="size-3.5" />
-                  Customer
+                  Minggu lalu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompareMode("LAST_MONTH")}
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    compareMode === "LAST_MONTH"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Bulan lalu
                 </button>
               </div>
             </div>
+            <span className="text-xs text-muted-foreground">
+              Membandingkan rentang <span className="font-medium text-foreground">{startDate} s.d. {endDate}</span> dengan{" "}
+              <span className="font-medium text-foreground">{compareRange.label}</span> ({compareRange.startDate} s.d. {compareRange.endDate})
+            </span>
+          </div>
+        ) : null}
 
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <div className="flex items-center gap-1.5">
-                <Clock className="size-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Jam paling ramai:</span>
-                <span className="font-medium tabular-nums">
-                  {peakAndQuiet.busiest
-                    ? `${peakAndQuiet.busiest.hour} (${peakAndQuiet.busiest[trafficMetric]} ${trafficMetric === "orders" ? "transaksi" : "customer"})`
-                    : "Belum ada data"}
-                </span>
+        {/* Kontrol metode Forecasting */}
+        {view === "forecast" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Metode prediksi statistik:</span>
+              <div className="inline-flex rounded-md border bg-background p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setForecastMethod("WEIGHTED_MOVING_AVERAGE")}
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    forecastMethod === "WEIGHTED_MOVING_AVERAGE"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Weighted Moving Average
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForecastMethod("LINEAR_REGRESSION")}
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    forecastMethod === "LINEAR_REGRESSION"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Linear Regression
+                </button>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Clock className="size-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Jam paling sepi:</span>
-                <span className="font-medium tabular-nums">
-                  {peakAndQuiet.quietest
-                    ? `${peakAndQuiet.quietest.hour} (${peakAndQuiet.quietest[trafficMetric]} ${trafficMetric === "orders" ? "transaksi" : "customer"})`
-                    : "Belum ada data"}
-                </span>
-              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Sparkles className="size-3.5 text-primary" />
+              <span>Garis putus-putus (*): Proyeksi 7 hari ke depan</span>
             </div>
           </div>
         ) : null}
@@ -294,29 +501,79 @@ export function RevenueChartPreview() {
         {hasData ? (
           <ChartContainer config={chartConfig} className="aspect-auto h-72 w-full">
             {view === "weekly" ? (
-              <ComposedChart data={daily} margin={{ left: 0, right: 8, top: 12 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
-                {yAxisCurrency}
-                {currencyTooltip}
-                <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="revenue" fill="var(--color-revenue)" radius={4} maxBarSize={32} />
-                <Bar
-                  dataKey="cost"
-                  fill="var(--color-cost)"
-                  fillOpacity={0.35}
-                  radius={4}
-                  maxBarSize={32}
-                />
-                <Line
-                  dataKey="discount"
-                  type="monotone"
-                  stroke="var(--color-discount)"
-                  strokeDasharray="4 4"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </ComposedChart>
+              weeklyComboMode === "combo" ? (
+                <ComposedChart data={daily} margin={{ left: 0, right: 16, top: 12 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
+                  <YAxis
+                    yAxisId="left"
+                    tickLine={false}
+                    axisLine={false}
+                    width={64}
+                    tickFormatter={formatCompactIDR}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tickLine={false}
+                    axisLine={false}
+                    width={48}
+                    allowDecimals={false}
+                    tickFormatter={(v) => `${v} trx`}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => {
+                          if (name === "revenue") return `Omzet: ${currencyFormatter(value)}`;
+                          if (name === "orders") return `Transaksi: ${value} pesanan`;
+                          return `${name}: ${value}`;
+                        }}
+                      />
+                    }
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar
+                    yAxisId="right"
+                    dataKey="orders"
+                    fill="var(--color-orders)"
+                    radius={4}
+                    maxBarSize={32}
+                  />
+                  <Line
+                    yAxisId="left"
+                    dataKey="revenue"
+                    type="monotone"
+                    stroke="var(--color-revenue)"
+                    strokeWidth={2.5}
+                    dot={{ r: 4 }}
+                  />
+                </ComposedChart>
+              ) : (
+                <ComposedChart data={daily} margin={{ left: 0, right: 8, top: 12 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
+                  <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatCompactIDR} />
+                  {currencyTooltip}
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="revenue" fill="var(--color-revenue)" radius={4} maxBarSize={32} />
+                  <Bar
+                    dataKey="cost"
+                    fill="var(--color-cost)"
+                    fillOpacity={0.35}
+                    radius={4}
+                    maxBarSize={32}
+                  />
+                  <Line
+                    dataKey="discount"
+                    type="monotone"
+                    stroke="var(--color-discount)"
+                    strokeDasharray="4 4"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </ComposedChart>
+              )
             ) : view === "hourly" ? (
               <BarChart data={hourly} margin={{ left: 0, right: 8, top: 12 }}>
                 <CartesianGrid vertical={false} />
@@ -331,9 +588,12 @@ export function RevenueChartPreview() {
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value) =>
-                        `${value} ${trafficMetric === "orders" ? "transaksi" : "customer"}`
-                      }
+                      formatter={(value, name, item) => {
+                        const payload = item.payload as { revenue?: number };
+                        const countLabel = `${value} ${trafficMetric === "orders" ? "transaksi" : "customer"}`;
+                        const revLabel = payload.revenue ? ` (${currencyFormatter(payload.revenue)})` : "";
+                        return `${countLabel}${revLabel}`;
+                      }}
                     />
                   }
                 />
@@ -345,16 +605,32 @@ export function RevenueChartPreview() {
                 />
               </BarChart>
             ) : view === "dayOfWeek" ? (
-              <ComposedChart data={dayOfWeek} margin={{ left: 0, right: 8, top: 12 }}>
+              // Combo chart: Bar for Traffic (orders) and Line for Revenue
+              <ComposedChart data={dayOfWeek} margin={{ left: 0, right: 16, top: 12 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="dayName" tickLine={false} axisLine={false} tickMargin={8} />
-                {yAxisCurrency}
+                <YAxis
+                  yAxisId="left"
+                  tickLine={false}
+                  axisLine={false}
+                  width={64}
+                  tickFormatter={formatCompactIDR}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  allowDecimals={false}
+                  tickFormatter={(v) => `${v} trx`}
+                />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
                       formatter={(value, name) => {
                         if (name === "revenue") return `Omzet: ${currencyFormatter(value)}`;
-                        if (name === "orders") return `Transaksi: ${value} pesanan`;
+                        if (name === "orders") return `Traffic transaksi: ${value} pesanan`;
                         if (name === "customers") return `Customer: ${value} orang`;
                         return `${name}: ${value}`;
                       }}
@@ -362,19 +638,26 @@ export function RevenueChartPreview() {
                   }
                 />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="revenue" fill="var(--color-revenue)" radius={4} maxBarSize={36} />
-                <Line
+                <Bar
+                  yAxisId="right"
                   dataKey="orders"
+                  fill="var(--color-orders)"
+                  radius={4}
+                  maxBarSize={36}
+                />
+                <Line
+                  yAxisId="left"
+                  dataKey="revenue"
                   type="monotone"
-                  stroke="var(--color-orders)"
-                  strokeWidth={2}
+                  stroke="var(--color-revenue)"
+                  strokeWidth={2.5}
                   dot={{ r: 4 }}
                 />
               </ComposedChart>
             ) : view === "comparison" ? (
               <BarChart data={comparisonChartData} margin={{ left: 0, right: 8, top: 12 }}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
+                <XAxis dataKey="category" tickLine={false} axisLine={false} tickMargin={8} />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
@@ -387,7 +670,7 @@ export function RevenueChartPreview() {
                       formatter={(value, name) => {
                         const nominal = Number(value) * 1000;
                         const label =
-                          name === "currentRevenue" ? "Periode ini" : "Periode sebelumnya";
+                          name === "currentRevenue" ? "Periode ini" : "Periode pembanding";
                         return `${label}: ${currencyFormatter(nominal)}`;
                       }}
                     />
@@ -409,47 +692,61 @@ export function RevenueChartPreview() {
                 />
               </BarChart>
             ) : view === "forecast" ? (
-              <AreaChart data={forecast.forecastDays} margin={{ left: 0, right: 8, top: 12 }}>
+              <ComposedChart data={forecastCombinedChartData} margin={{ left: 0, right: 8, top: 12 }}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="dayName" tickLine={false} axisLine={false} tickMargin={8} />
-                {yAxisCurrency}
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatCompactIDR} />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value, name) => {
-                        if (name === "projectedRevenue") {
-                          return `Estimasi omzet: ${currencyFormatter(value)}`;
+                      formatter={(value, name, item) => {
+                        const payload = item.payload as { isForecast?: boolean; fullDate?: string; orders?: number };
+                        if (name === "historicalRevenue") {
+                          return `Omzet historis: ${currencyFormatter(value)} (${payload.orders ?? 0} trx)`;
                         }
-                        if (name === "upperBoundRevenue") {
-                          return `Batas atas: ${currencyFormatter(value)}`;
+                        if (name === "projectedRevenue") {
+                          return `Estimasi proyeksi*: ${currencyFormatter(value)} (${payload.orders ?? 0} trx)`;
+                        }
+                        if (name === "upperBound") {
+                          return `Batas atas estimasi: ${currencyFormatter(value)}`;
                         }
                         return `${name}: ${currencyFormatter(value)}`;
                       }}
                     />
                   }
                 />
+                <ChartLegend content={<ChartLegendContent />} />
+                {/* Confidence interval band for projections */}
                 <Area
-                  dataKey="upperBoundRevenue"
+                  dataKey="upperBound"
                   type="monotone"
                   stroke="transparent"
                   fill="var(--color-projectedRevenue)"
-                  fillOpacity={0.1}
+                  fillOpacity={0.12}
                 />
-                <Area
+                {/* Historical solid line */}
+                <Line
+                  dataKey="historicalRevenue"
+                  type="monotone"
+                  stroke="var(--color-revenue)"
+                  strokeWidth={2.5}
+                  dot={{ r: 3.5 }}
+                />
+                {/* Projected dashed line */}
+                <Line
                   dataKey="projectedRevenue"
                   type="monotone"
                   stroke="var(--color-projectedRevenue)"
-                  fill="var(--color-projectedRevenue)"
-                  fillOpacity={0.25}
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
+                  strokeWidth={2.5}
+                  strokeDasharray="5 5"
+                  dot={{ r: 4, strokeDasharray: "" }}
                 />
-              </AreaChart>
+              </ComposedChart>
             ) : (
               <BarChart data={promo} margin={{ left: 0, right: 8, top: 12 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
-                {yAxisCurrency}
+                <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatCompactIDR} />
                 {currencyTooltip}
                 <ChartLegend content={<ChartLegendContent />} />
                 <Bar dataKey="revenue" fill="var(--color-revenue)" radius={4} maxBarSize={56} />
@@ -471,11 +768,12 @@ export function RevenueChartPreview() {
           />
         )}
 
+        {/* Ringkasan metrik di bagian bawah kartu */}
         {view === "weekly" ? (
           <div className="grid grid-cols-3 gap-4 border-t pt-4">
             <Summary label="Omzet periode" value={formatCurrencyIDR(periodRevenue)} />
             <Summary label="Margin kotor (estimasi)" value={`${grossMargin}%`} />
-            <Summary label="Diskon promo" value={formatCurrencyIDR(periodDiscount)} />
+            <Summary label="Total transaksi" value={`${periodOrders} transaksi`} />
           </div>
         ) : view === "hourly" ? (
           <div className="grid grid-cols-3 gap-4 border-t pt-4">
@@ -520,7 +818,7 @@ export function RevenueChartPreview() {
         ) : view === "comparison" ? (
           <div className="grid grid-cols-3 gap-4 border-t pt-4">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Pertumbuhan omzet</span>
+              <span className="text-xs text-muted-foreground">Delta penjualan (omzet)</span>
               <div className="flex items-center gap-1.5 font-medium tabular-nums">
                 {periodComparison.deltas.revenuePercent >= 0 ? (
                   <TrendingUp className="size-4 text-success" />
@@ -538,7 +836,7 @@ export function RevenueChartPreview() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Pertumbuhan transaksi</span>
+              <span className="text-xs text-muted-foreground">Delta traffic (transaksi)</span>
               <div className="flex items-center gap-1.5 font-medium tabular-nums">
                 {periodComparison.deltas.ordersPercent >= 0 ? (
                   <TrendingUp className="size-4 text-success" />
@@ -557,7 +855,7 @@ export function RevenueChartPreview() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Pertumbuhan customer</span>
+              <span className="text-xs text-muted-foreground">Delta customer</span>
               <div className="flex items-center gap-1.5 font-medium tabular-nums">
                 {periodComparison.deltas.customersPercent >= 0 ? (
                   <TrendingUp className="size-4 text-success" />
@@ -576,19 +874,26 @@ export function RevenueChartPreview() {
             </div>
           </div>
         ) : view === "forecast" ? (
-          <div className="grid grid-cols-3 gap-4 border-t pt-4">
-            <Summary
-              label="Proyeksi 7 hari ke depan"
-              value={formatCurrencyIDR(forecast.totalProjectedRevenue)}
-            />
-            <Summary
-              label="Rata-rata proyeksi / hari"
-              value={formatCurrencyIDR(forecast.dailyAverageProjectedRevenue)}
-            />
-            <Summary
-              label="Estimasi total transaksi"
-              value={`${forecast.totalProjectedOrders} transaksi`}
-            />
+          <div className="flex flex-col gap-3 border-t pt-4">
+            <div className="grid grid-cols-3 gap-4">
+              <Summary
+                label="Proyeksi 7 hari ke depan"
+                value={formatCurrencyIDR(forecast.totalProjectedRevenue)}
+              />
+              <Summary
+                label="Rata-rata proyeksi / hari"
+                value={formatCurrencyIDR(forecast.dailyAverageProjectedRevenue)}
+              />
+              <Summary
+                label="Estimasi total transaksi"
+                value={`${forecast.totalProjectedOrders} transaksi`}
+              />
+            </div>
+            <div className="rounded-md border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">Catatan proyeksi:</span> Angka bersifat estimasi statistik ({forecast.methodology}) berdasarkan tren data harian dan faktor musiman hari operasional.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-4 border-t pt-4">

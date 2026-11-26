@@ -5,7 +5,7 @@ import {
   getWitaHour,
   normalizeDateRange,
   toWitaDateKey,
-} from "@/contexts/DateFilterContext";
+} from "@/lib/date-utils";
 import { calculateSettlement, resolveItemTenantId } from "@/lib/settlement";
 import {
   allocateCategoryDiscounts,
@@ -359,6 +359,55 @@ export function getPreviousPeriodRange(
   };
 }
 
+export type ComparisonMode = "PREVIOUS_PERIOD" | "LAST_WEEK" | "LAST_MONTH" | "CUSTOM";
+
+/** Resolves comparison date range based on the selected mode. */
+export function resolveComparisonRange(
+  startDate: string,
+  endDate: string,
+  mode: ComparisonMode = "PREVIOUS_PERIOD",
+  customRange?: { startDate: string; endDate: string }
+): { startDate: string; endDate: string; label: string } {
+  if (mode === "CUSTOM" && customRange?.startDate && customRange?.endDate) {
+    return {
+      startDate: customRange.startDate,
+      endDate: customRange.endDate,
+      label: "Periode kustom",
+    };
+  }
+
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const startUtc = Date.UTC(sy, sm - 1, sd);
+  const endUtc = Date.UTC(ey, em - 1, ed);
+
+  if (mode === "LAST_WEEK") {
+    const prevStartUtc = startUtc - 7 * 86_400_000;
+    const prevEndUtc = endUtc - 7 * 86_400_000;
+    return {
+      startDate: new Date(prevStartUtc).toISOString().slice(0, 10),
+      endDate: new Date(prevEndUtc).toISOString().slice(0, 10),
+      label: "Minggu lalu",
+    };
+  }
+
+  if (mode === "LAST_MONTH") {
+    const prevStart = new Date(Date.UTC(sy, sm - 2, sd));
+    const prevEnd = new Date(Date.UTC(ey, em - 2, ed));
+    return {
+      startDate: prevStart.toISOString().slice(0, 10),
+      endDate: prevEnd.toISOString().slice(0, 10),
+      label: "Bulan lalu",
+    };
+  }
+
+  const prev = getPreviousPeriodRange(startDate, endDate);
+  return {
+    ...prev,
+    label: "Periode sebelumnya",
+  };
+}
+
 export interface PeriodTrafficComparison {
   current: {
     startDate: string;
@@ -443,6 +492,8 @@ export interface ForecastDayItem {
   upperBoundRevenue: number;
 }
 
+export type ForecastMethod = "WEIGHTED_MOVING_AVERAGE" | "LINEAR_REGRESSION";
+
 export interface SalesForecastResult {
   forecastDays: ForecastDayItem[];
   totalProjectedRevenue: number;
@@ -450,12 +501,14 @@ export interface SalesForecastResult {
   totalProjectedCustomers: number;
   dailyAverageProjectedRevenue: number;
   hasSufficientData: boolean;
+  methodology: string;
 }
 
-/** Projects sales and traffic for the upcoming period using weighted average and day-of-week seasonality. */
+/** Projects sales and traffic for the upcoming period using weighted average or linear regression with day-of-week seasonality. */
 export function calculateSalesForecast(
   historicalDaily: readonly DayBucket[],
-  horizonDays: number = 7
+  horizonDays: number = 7,
+  method: ForecastMethod = "WEIGHTED_MOVING_AVERAGE"
 ): SalesForecastResult {
   if (historicalDaily.length === 0) {
     return {
@@ -465,6 +518,7 @@ export function calculateSalesForecast(
       totalProjectedCustomers: 0,
       dailyAverageProjectedRevenue: 0,
       hasSufficientData: false,
+      methodology: "Tidak ada data historis yang memadai",
     };
   }
 
@@ -493,6 +547,24 @@ export function calculateSalesForecast(
     return Math.max(0.5, Math.min(2.0, factor));
   };
 
+  let slope = 0;
+  let intercept = baseDailyRev;
+  if (method === "LINEAR_REGRESSION" && dayCount >= 2) {
+    const xMean = (dayCount - 1) / 2;
+    const yMean = baseDailyRev;
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < dayCount; i += 1) {
+      const xDiff = i - xMean;
+      num += xDiff * (historicalDaily[i].revenue - yMean);
+      den += xDiff * xDiff;
+    }
+    if (den > 0) {
+      slope = num / den;
+      intercept = yMean - slope * xMean;
+    }
+  }
+
   const lastDateKey = historicalDaily[historicalDaily.length - 1].date;
   const [ly, lm, ld] = lastDateKey.split("-").map(Number);
 
@@ -507,7 +579,14 @@ export function calculateSalesForecast(
     const dow = nextDate.getUTCDay();
     const multiplier = dowMultiplier(dow);
 
-    const projectedRevenue = Math.round(baseDailyRev * multiplier);
+    let projectedRevenue: number;
+    if (method === "LINEAR_REGRESSION" && dayCount >= 2) {
+      const trendValue = Math.max(0, slope * (dayCount - 1 + offset) + intercept);
+      projectedRevenue = Math.round(trendValue * multiplier);
+    } else {
+      projectedRevenue = Math.round(baseDailyRev * multiplier);
+    }
+
     const projectedOrders = Math.max(0, Math.round(baseDailyOrd * multiplier));
     const projectedCustomers = Math.max(0, Math.round(baseDailyCust * multiplier));
 
@@ -537,6 +616,10 @@ export function calculateSalesForecast(
     totalProjectedCustomers,
     dailyAverageProjectedRevenue: horizonDays > 0 ? Math.round(totalProjectedRevenue / horizonDays) : 0,
     hasSufficientData: totalRev > 0,
+    methodology:
+      method === "LINEAR_REGRESSION"
+        ? "Linear regression dengan pembobotan faktor musiman hari"
+        : "Weighted moving average dengan pembobotan faktor musiman hari",
   };
 }
 

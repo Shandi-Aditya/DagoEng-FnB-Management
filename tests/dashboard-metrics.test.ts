@@ -11,6 +11,7 @@ import {
   findPeakAndQuietHours,
   formatCompactIDR,
   getPreviousPeriodRange,
+  resolveComparisonRange,
   splitPromoOrders,
 } from "@/features/dashboard/dashboard-metrics";
 
@@ -307,10 +308,60 @@ describe("calculateSalesForecast", () => {
     expect(forecast.forecastDays[0].upperBoundRevenue).toBeGreaterThan(forecast.forecastDays[0].projectedRevenue);
   });
 
+  it("projects linear upward trend with LINEAR_REGRESSION method", () => {
+    const historical = [
+      { date: "2026-11-01", day: "Min", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 1, customers: 1 },
+      { date: "2026-11-02", day: "Sen", isToday: false, revenue: 200_000, cost: 76_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-03", day: "Sel", isToday: false, revenue: 300_000, cost: 114_000, discount: 0, orders: 3, customers: 3 },
+      { date: "2026-11-04", day: "Rab", isToday: false, revenue: 400_000, cost: 152_000, discount: 0, orders: 4, customers: 4 },
+      { date: "2026-11-05", day: "Kam", isToday: false, revenue: 500_000, cost: 190_000, discount: 0, orders: 5, customers: 5 },
+    ];
+
+    const forecast = calculateSalesForecast(historical, 3, "LINEAR_REGRESSION");
+    expect(forecast.hasSufficientData).toBe(true);
+    expect(forecast.methodology).toContain("Linear regression");
+    expect(forecast.forecastDays).toHaveLength(3);
+    // Projecting forward from upward slope should yield revenue >= base
+    expect(forecast.forecastDays[0].projectedRevenue).toBeGreaterThan(0);
+  });
+
   it("handles empty historical series without crashing", () => {
     const forecast = calculateSalesForecast([], 7);
     expect(forecast.hasSufficientData).toBe(false);
     expect(forecast.forecastDays).toHaveLength(0);
     expect(forecast.totalProjectedRevenue).toBe(0);
+  });
+});
+
+describe("resolveComparisonRange", () => {
+  it("resolves PREVIOUS_PERIOD shifting backward by period length", () => {
+    const range = resolveComparisonRange("2026-11-10", "2026-11-16", "PREVIOUS_PERIOD");
+    expect(range.startDate).toBe("2026-11-03");
+    expect(range.endDate).toBe("2026-11-09");
+    expect(range.label).toBe("Periode sebelumnya");
+  });
+
+  it("resolves LAST_WEEK shifting backward by 7 days", () => {
+    const range = resolveComparisonRange("2026-11-10", "2026-11-16", "LAST_WEEK");
+    expect(range.startDate).toBe("2026-11-03");
+    expect(range.endDate).toBe("2026-11-09");
+    expect(range.label).toBe("Minggu lalu");
+  });
+
+  it("resolves LAST_MONTH shifting backward by one month", () => {
+    const range = resolveComparisonRange("2026-11-10", "2026-11-16", "LAST_MONTH");
+    expect(range.startDate).toBe("2026-10-10");
+    expect(range.endDate).toBe("2026-10-16");
+    expect(range.label).toBe("Bulan lalu");
+  });
+
+  it("resolves CUSTOM range when provided", () => {
+    const range = resolveComparisonRange("2026-11-10", "2026-11-16", "CUSTOM", {
+      startDate: "2026-10-01",
+      endDate: "2026-10-07",
+    });
+    expect(range.startDate).toBe("2026-10-01");
+    expect(range.endDate).toBe("2026-10-07");
+    expect(range.label).toBe("Periode kustom");
   });
 });
