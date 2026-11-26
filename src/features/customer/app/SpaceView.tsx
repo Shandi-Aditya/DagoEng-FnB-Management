@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Laptop, Minus, Plus, Users } from "lucide-react";
+import { Award, Check, Laptop, Minus, Plus, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,21 @@ import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField
 import { isRangeFree, slotAvailability } from "@/features/customer/space-slots";
 import { COWORKING_MAX_HOURS, isWithinCoworkingHours } from "@/lib/operating-hours";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
-import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import {
+  formatCoworkingTaxLabel,
+  calculateCoworkingPrice,
+  resolveSpaceCapacity,
+  getSpaceImageUrl,
+} from "@/features/coworking/coworking-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
+import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import { useSettings } from "@/contexts/SettingsContext";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
-import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
+import type {
+  CoworkingBooking,
+  CoworkingMembershipPlan,
+  CoworkingSpaceItem,
+} from "@/types/coworking";
 
 const DAYS_AHEAD = 10;
 const WITA = "Asia/Makassar";
@@ -35,6 +47,7 @@ export interface SpaceBookingRequest {
 interface SpaceViewProps {
   spaces: readonly CoworkingSpaceItem[];
   bookings: readonly CoworkingBooking[];
+  plans?: readonly CoworkingMembershipPlan[];
   isDateOpen: (date: string) => { isOpen: boolean; reason: string };
   defaultName: string;
   defaultPhone: string;
@@ -60,7 +73,7 @@ interface Selection {
 }
 
 function spaceMaxCapacity(space: CoworkingSpaceItem): number {
-  return space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
+  return resolveSpaceCapacity(space);
 }
 
 /** Pick a day, see each room's free hours, tap one to book it. */
@@ -84,31 +97,60 @@ export function SpaceView(props: SpaceViewProps) {
 
   const slots = getAvailableTimeSlots();
   const bookable = props.spaces.filter((space) => space.status !== "MAINTENANCE");
+  const membershipPlans = props.plans ?? MEMBERSHIP_PLANS;
   const dayStatus = props.isDateOpen(date);
+
+  const isSpaceSlotRangeFree = (
+    space: CoworkingSpaceItem,
+    start: string,
+    duration: number
+  ) =>
+    duration >= 1 &&
+    duration <= COWORKING_MAX_HOURS &&
+    isWithinCoworkingHours(start, duration) &&
+    isRangeFree(
+      props.bookings,
+      space.id,
+      date,
+      start,
+      duration,
+      spaceMaxCapacity(space)
+    );
 
   const open = (space: CoworkingSpaceItem, start: string) => {
     setSelection({ space, start });
-    setHours(1);
+    const tieredOptions = Array.isArray(space.tieredRates) ? space.tieredRates : [];
+    const firstFreeTier = tieredOptions.find((t) =>
+      isSpaceSlotRangeFree(space, start, t.hours)
+    );
+    const defaultHours = firstFreeTier ? firstFreeTier.hours : 1;
+    setHours(defaultHours);
     setName((current) => current || props.defaultName);
     setPhone((current) => current || props.defaultPhone);
   };
 
-  const canExtend =
-    selection !== null &&
-    hours < COWORKING_MAX_HOURS &&
-    isWithinCoworkingHours(selection.start, hours + 1) &&
-    isRangeFree(
-      props.bookings,
-      selection.space.id,
-      date,
-      selection.start,
-      hours + 1,
-      spaceMaxCapacity(selection.space)
-    );
-  const basePrice = selection ? selection.space.hourlyRate * hours : 0;
+  const getPriceForHours = (space: CoworkingSpaceItem, h: number) => {
+    return calculateCoworkingPrice(space, {
+      bookingType: "HOURLY",
+      duration: h,
+    }).basePrice;
+  };
+
+  const checkSlotRangeFree = (duration: number) => {
+    if (!selection) return false;
+    return isSpaceSlotRangeFree(selection.space, selection.start, duration);
+  };
+
+  const basePrice = selection ? getPriceForHours(selection.space, hours) : 0;
   const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
   const total = basePrice + taxAmount;
-  const canSubmit = selection !== null && name.trim() !== "" && phone.trim() !== "";
+  const canSubmit =
+    selection !== null &&
+    dayStatus.isOpen &&
+    hours >= 1 &&
+    name.trim() !== "" &&
+    phone.trim() !== "" &&
+    checkSlotRangeFree(hours);
 
   return (
     <div className="flex flex-col gap-5">
@@ -151,6 +193,12 @@ export function SpaceView(props: SpaceViewProps) {
         <ul className="flex flex-col gap-3">
           {bookable.map((space) => (
             <li key={space.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+              <SpacePhotoThumbnail
+                src={getSpaceImageUrl(space)}
+                alt={space.name}
+                aspectRatio="aspect-video"
+                className="border"
+              />
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">{space.name}</span>
@@ -165,7 +213,7 @@ export function SpaceView(props: SpaceViewProps) {
                   <span className="block text-xs text-muted-foreground">per jam</span>
                 </span>
               </div>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
                 {slotAvailability(
                   props.bookings,
                   space.id,
@@ -206,6 +254,54 @@ export function SpaceView(props: SpaceViewProps) {
         </ul>
       )}
 
+      {/* Paket Membership Co-Working */}
+      <div className="flex flex-col gap-3 pt-6 border-t">
+        <div>
+          <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Award className="size-4 text-muted-foreground" />
+            <span>Paket membership</span>
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Akses fleksibel tanpa repot bayar harian dengan kuota jam dan benefit lengkap.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+          {membershipPlans.map((plan) => (
+            <div key={plan.id} className="flex flex-col justify-between rounded-xl border bg-card overflow-hidden">
+              <div className="flex flex-col">
+                <SpacePhotoThumbnail
+                  src={getSpaceImageUrl(plan)}
+                  alt={plan.name}
+                  aspectRatio="aspect-video"
+                  className="border-b rounded-none"
+                />
+                <div className="p-3.5 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{plan.name}</span>
+                    <Badge variant="secondary" className="text-xs">{plan.billingCycle}</Badge>
+                  </div>
+                  <span className="font-mono text-sm font-medium text-foreground tabular-nums mt-1 block">
+                    {plan.priceFormatted}
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{plan.deskAccess}</p>
+                </div>
+                <div className="p-3.5 pt-1">
+                  <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                    {plan.amenities?.map((item, i) => (
+                      <li key={i} className="flex items-center gap-1.5">
+                        <Check className="size-3 text-success shrink-0" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <Sheet open={selection !== null} onOpenChange={(isOpen) => !isOpen && setSelection(null)}>
         <SheetContent side="bottom" className="mx-auto max-h-[92svh] max-w-2xl rounded-t-2xl">
           {selection ? (
@@ -217,19 +313,93 @@ export function SpaceView(props: SpaceViewProps) {
                 </SheetDescription>
               </SheetHeader>
               <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-4">
-                <div className="flex items-center justify-between rounded-xl border p-4">
-                  <span className="text-sm font-medium">Durasi</span>
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" size="icon" disabled={hours <= 1} onClick={() => setHours((h) => h - 1)} aria-label="Kurangi satu jam">
-                      <Minus />
-                    </Button>
-                    <span className="w-14 text-center text-sm">
-                      <span className="font-mono tabular-nums">{hours}</span> jam
+                <SpacePhotoThumbnail
+                  src={getSpaceImageUrl(selection.space)}
+                  alt={selection.space.name}
+                  aspectRatio="aspect-video"
+                  className="border"
+                />
+                <div className="flex flex-col gap-2 rounded-xl border p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Paket durasi</span>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {hours === 8 ? "Seharian (8 jam)" : `${hours} jam`}
                     </span>
-                    <Button variant="outline" size="icon" disabled={!canExtend} onClick={() => setHours((h) => h + 1)} aria-label="Tambah satu jam">
-                      <Plus />
-                    </Button>
                   </div>
+                  {selection.space.tieredRates && selection.space.tieredRates.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {(() => {
+                        const baseTiers = selection.space.tieredRates.map((t) => ({
+                          hours: t.hours,
+                          price: t.price,
+                        }));
+                        const hasOneHourTier = baseTiers.some((t) => Number(t.hours) === 1);
+                        const tierOptions =
+                          !hasOneHourTier && checkSlotRangeFree(1)
+                            ? [
+                                {
+                                  hours: 1,
+                                  price: getPriceForHours(selection.space, 1),
+                                },
+                                ...baseTiers,
+                              ]
+                            : baseTiers;
+
+                        return tierOptions.map((tier) => {
+                          const isAvailable = checkSlotRangeFree(tier.hours);
+                          const isSelected = hours === tier.hours;
+                          return (
+                            <button
+                              key={tier.hours}
+                              type="button"
+                              disabled={!isAvailable}
+                              onClick={() => setHours(tier.hours)}
+                              className={cn(
+                                "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-colors touch-manipulation",
+                                isSelected
+                                  ? "border-primary bg-primary/10 text-primary font-medium ring-1 ring-primary"
+                                  : !isAvailable
+                                  ? "cursor-not-allowed border-border/40 bg-muted/30 text-muted-foreground opacity-50"
+                                  : "border-border bg-card hover:bg-muted/40 text-foreground"
+                              )}
+                            >
+                              <span className="text-xs font-medium">{tier.hours} Jam</span>
+                              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                                {formatCurrencyIDR(tier.price)}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Pilih durasi</span>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          disabled={hours <= 1}
+                          onClick={() => setHours((h) => h - 1)}
+                          aria-label="Kurangi satu jam"
+                        >
+                          <Minus />
+                        </Button>
+                        <span className="w-14 text-center text-sm">
+                          <span className="font-mono tabular-nums">{hours}</span> jam
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          disabled={!checkSlotRangeFree(hours + 1)}
+                          onClick={() => setHours((h) => h + 1)}
+                          aria-label="Tambah satu jam"
+                        >
+                          <Plus />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <FieldGroup>
                   <Field>

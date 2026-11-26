@@ -41,6 +41,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
+import { getSpaceImageUrl } from "@/features/coworking/coworking-domain";
 import { useOutlet, type OutletItem } from "@/contexts/OutletContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -375,8 +376,8 @@ export default function SettingsPage() {
   const [isDeleteSpaceOpen, setIsDeleteSpaceOpen] = useState(false);
   const [deletingSpace, setDeletingSpace] = useState<any>(null);
   const [formSpaceName, setFormSpaceName] = useState("");
-  const [formSpaceType, setFormSpaceType] = useState<string>("HOT_DESK");
-  const [formSpaceArea, setFormSpaceArea] = useState("Ground Floor Main");
+  const [formSpaceType, setFormSpaceType] = useState<string>("OPEN_SPACE");
+  const [formSpaceArea, setFormSpaceArea] = useState("Main Open Area");
   const [formSpaceCap, setFormSpaceCap] = useState(4);
   const [formSpaceHourly, setFormSpaceHourly] = useState(15000);
   const [formSpaceDaily, setFormSpaceDaily] = useState(65000);
@@ -746,12 +747,13 @@ export default function SettingsPage() {
     if (!formSpaceName.trim()) return;
     const created = addSpace({
       name: formSpaceName.trim(),
-      type: formSpaceType.trim() || "HOT_DESK",
-      area: formSpaceArea.trim() || "Ground Floor Main",
+      type: formSpaceType.trim() || "OPEN_SPACE",
+      area: formSpaceArea.trim() || "Main Open Area",
       capacity: Number(formSpaceCap) || 1,
       hourlyRate: Number(formSpaceHourly) || 15000,
       dailyRate: Number(formSpaceDaily) || 65000,
       status: formSpaceStatus as any,
+      imageUrl: getSpaceImageUrl({ type: formSpaceType.trim() }),
       amenities: ["WiFi 100Mbps", "Power Hub", "Air Conditioner"],
     });
     setLocalSpaces((prev) => [...prev, created]);
@@ -762,14 +764,16 @@ export default function SettingsPage() {
   const handleSaveEditSpace = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSpace || !formSpaceName.trim()) return;
+    const resolvedType = formSpaceType.trim() || editingSpace.type || "OPEN_SPACE";
     const updates = {
       name: formSpaceName.trim(),
-      type: formSpaceType.trim() || "HOT_DESK",
-      area: formSpaceArea.trim() || "Ground Floor Main",
+      type: resolvedType,
+      area: formSpaceArea.trim() || editingSpace.area || "Main Open Area",
       capacity: Number(formSpaceCap) || 1,
-      hourlyRate: Number(formSpaceHourly) || 15000,
-      dailyRate: Number(formSpaceDaily) || 65000,
+      hourlyRate: Number(formSpaceHourly) || 10000,
+      dailyRate: Number(formSpaceDaily) || 70000,
       status: formSpaceStatus as any,
+      imageUrl: editingSpace.imageUrl || getSpaceImageUrl({ type: resolvedType }),
     };
     updateSpace(editingSpace.id, updates);
     setLocalSpaces((prev) => prev.map((s) => (s.id === editingSpace.id ? { ...s, ...updates } : s)));
@@ -791,10 +795,10 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!formPlanName.trim()) return;
     const priceNum = Number(formPlanPrice) || 0;
+    const validCycles = ["1 Minggu", "2 Minggu", "1 Bulan", "Harian", "Paket 10 Hari", "Bulanan"] as const;
     const cycle: CoworkingMembershipPlan["billingCycle"] =
-      formPlanCycle === "Harian" || formPlanCycle === "Paket 10 Hari"
-        ? formPlanCycle
-        : "Bulanan";
+      (validCycles.find((c) => c.toLowerCase() === formPlanCycle.trim().toLowerCase()) as CoworkingMembershipPlan["billingCycle"]) ||
+      "1 Bulan";
     const newPlan: CoworkingMembershipPlan = {
       id: `plan-${Date.now()}`,
       name: formPlanName.trim(),
@@ -802,6 +806,13 @@ export default function SettingsPage() {
       priceNumber: priceNum,
       priceFormatted: `Rp ${priceNum.toLocaleString("id-ID")}`,
       color: "blue",
+      imageUrl: getSpaceImageUrl({
+        roomCategory: formPlanName.toLowerCase().includes("large")
+          ? "LARGE_MEETING_ROOM"
+          : formPlanName.toLowerCase().includes("small") || formPlanName.toLowerCase().includes("meeting")
+          ? "SMALL_MEETING_ROOM"
+          : "OPEN_SPACE",
+      }),
       deskAccess: formPlanDeskAccess.trim() || "Akses Hot Desk Bebas Pakai",
       meetingCredits: "Termasuk kuota ruang rapat standar",
       fnbPerk: "Diskon 10% mitra F&B",
@@ -817,10 +828,10 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!editingPlan || !formPlanName.trim()) return;
     const priceNum = Number(formPlanPrice) || 0;
+    const validCycles = ["1 Minggu", "2 Minggu", "1 Bulan", "Harian", "Paket 10 Hari", "Bulanan"] as const;
     const cycle: CoworkingMembershipPlan["billingCycle"] =
-      formPlanCycle === "Harian" || formPlanCycle === "Paket 10 Hari"
-        ? formPlanCycle
-        : "Bulanan";
+      (validCycles.find((c) => c.toLowerCase() === formPlanCycle.trim().toLowerCase()) as CoworkingMembershipPlan["billingCycle"]) ||
+      "1 Bulan";
     cwUpdatePlan(editingPlan.id, {
       name: formPlanName.trim(),
       billingCycle: cycle,
@@ -1653,20 +1664,20 @@ export default function SettingsPage() {
             value={tenantActiveTab}
             onValueChange={(val) => setTenantActiveTab(val as typeof tenantActiveTab)}
           >
-            <TabsList className="w-full justify-start overflow-x-auto no-scrollbar">
-              <TabsTrigger value="PRODUCTS" className="gap-1.5">
+            <TabsList className="group-data-horizontal/tabs:h-auto w-full flex-wrap justify-start gap-1 p-1">
+              <TabsTrigger value="PRODUCTS" className="flex-none h-7 gap-1.5 px-2.5">
                 <UtensilsCrossed />
                 <span>Katalog menu ({displayedProducts.length})</span>
               </TabsTrigger>
-              <TabsTrigger value="PROFILE" className="gap-1.5">
+              <TabsTrigger value="PROFILE" className="flex-none h-7 gap-1.5 px-2.5">
                 <Store />
                 <span>Profil gerai</span>
               </TabsTrigger>
-              <TabsTrigger value="PROMOS" className="gap-1.5">
+              <TabsTrigger value="PROMOS" className="flex-none h-7 gap-1.5 px-2.5">
                 <Tag />
                 <span>Voucher & promo</span>
               </TabsTrigger>
-              <TabsTrigger value="ADDONS" className="gap-1.5">
+              <TabsTrigger value="ADDONS" className="flex-none h-7 gap-1.5 px-2.5">
                 <Sparkles />
                 <span>Add-on gerai</span>
               </TabsTrigger>
@@ -1836,36 +1847,36 @@ export default function SettingsPage() {
             value={selectedAdminTab}
             onValueChange={setSelectedAdminTab}
           >
-            <TabsList className="w-full justify-start overflow-x-auto no-scrollbar">
-              <TabsTrigger value="PRODUCTS" className="gap-1.5">
+            <TabsList className="group-data-horizontal/tabs:h-auto w-full flex-wrap justify-start gap-1 p-1">
+              <TabsTrigger value="PRODUCTS" className="flex-none h-7 gap-1.5 px-2.5">
                 <UtensilsCrossed />
                 <span>Menu & kategori</span>
               </TabsTrigger>
-              <TabsTrigger value="PARTNERS" className="gap-1.5">
+              <TabsTrigger value="PARTNERS" className="flex-none h-7 gap-1.5 px-2.5">
                 <Store />
                 <span>Mitra & bagi hasil</span>
               </TabsTrigger>
-              <TabsTrigger value="SPACES_TABLES" className="gap-1.5">
+              <TabsTrigger value="SPACES_TABLES" className="flex-none h-7 gap-1.5 px-2.5">
                 <Laptop />
                 <span>Ruang & meja</span>
               </TabsTrigger>
-              <TabsTrigger value="PROMOS" className="gap-1.5">
+              <TabsTrigger value="PROMOS" className="flex-none h-7 gap-1.5 px-2.5">
                 <Tag />
                 <span>Voucher & promo</span>
               </TabsTrigger>
-              <TabsTrigger value="CONFIG" className="gap-1.5">
+              <TabsTrigger value="CONFIG" className="flex-none h-7 gap-1.5 px-2.5">
                 <Settings />
                 <span>Platform & pajak</span>
               </TabsTrigger>
-              <TabsTrigger value="SUBSCRIPTION" className="gap-1.5">
+              <TabsTrigger value="SUBSCRIPTION" className="flex-none h-7 gap-1.5 px-2.5">
                 <Sparkles />
                 <span>Paket & add-on</span>
               </TabsTrigger>
-              <TabsTrigger value="WIFI" className="gap-1.5">
+              <TabsTrigger value="WIFI" className="flex-none h-7 gap-1.5 px-2.5">
                 <Wifi />
                 <span>Manajemen Wi-Fi</span>
               </TabsTrigger>
-              <TabsTrigger value="PRINTER" className="gap-1.5">
+              <TabsTrigger value="PRINTER" className="flex-none h-7 gap-1.5 px-2.5">
                 <Printer />
                 <span>Printer & nota POS</span>
               </TabsTrigger>
@@ -2035,22 +2046,22 @@ export default function SettingsPage() {
               tables={allTables}
               onOpenAddSpace={() => {
                 setFormSpaceName("");
-                setFormSpaceType("HOT_DESK");
-                setFormSpaceArea("Ground Floor Main");
-                setFormSpaceCap(4);
-                setFormSpaceHourly(15000);
-                setFormSpaceDaily(65000);
+                setFormSpaceType("OPEN_SPACE");
+                setFormSpaceArea("Main Open Area");
+                setFormSpaceCap(20);
+                setFormSpaceHourly(10000);
+                setFormSpaceDaily(70000);
                 setFormSpaceStatus("AVAILABLE");
                 setIsAddSpaceModalOpen(true);
               }}
               onOpenEditSpace={(sp) => {
                 setEditingSpace(sp);
                 setFormSpaceName(sp.name);
-                setFormSpaceType(sp.type || "HOT_DESK");
-                setFormSpaceArea(sp.area || "Ground Floor Main");
+                setFormSpaceType(sp.type || "OPEN_SPACE");
+                setFormSpaceArea(sp.area || "Main Open Area");
                 setFormSpaceCap(sp.capacity || 1);
-                setFormSpaceHourly(sp.hourlyRate || 15000);
-                setFormSpaceDaily(sp.dailyRate || 65000);
+                setFormSpaceHourly(sp.hourlyRate ?? 10000);
+                setFormSpaceDaily(sp.dailyRate ?? 70000);
                 setFormSpaceStatus(sp.status || "AVAILABLE");
                 setIsEditSpaceModalOpen(true);
               }}

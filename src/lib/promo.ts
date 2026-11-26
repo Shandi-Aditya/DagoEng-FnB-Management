@@ -1,3 +1,5 @@
+import { normalizeTenantId } from "./tax-breakdown";
+
 export type PromoType = "PERCENTAGE" | "FIXED";
 export type TargetType = "ALL" | "PRODUCT" | "CATEGORY" | "TENANT";
 export type PromoScope = "ALL" | "FNB" | "COWORKING";
@@ -102,6 +104,11 @@ export function sortPromosByPriority(promos: PromoConfig[]): PromoConfig[] {
 
 export function isPromoEligibleForItem(item: OrderItemInput, promo: PromoConfig): boolean {
   if (promo.scope === "COWORKING") return false; // F&B item is not eligible for coworking-only promo
+  const promoTenantId = normalizeTenantId(promo.tenantId);
+  if (promoTenantId && promoTenantId !== "DAGO_HUB") {
+    const itemTenantId = normalizeTenantId(item.tenantId);
+    if (itemTenantId !== promoTenantId) return false;
+  }
   if (promo.targetType === "ALL") return true;
   if (promo.targetType === "PRODUCT") {
     if (promo.applicableProductIds && promo.applicableProductIds.length > 0) {
@@ -114,7 +121,11 @@ export function isPromoEligibleForItem(item: OrderItemInput, promo: PromoConfig)
     return false;
   }
   if (promo.targetType === "CATEGORY" && promo.targetId && item.category === promo.targetId) return true;
-  if (promo.targetType === "TENANT" && promo.targetId && item.tenantId === promo.targetId) return true;
+  if (promo.targetType === "TENANT" && promo.targetId) {
+    const targetTenantId = normalizeTenantId(promo.targetId);
+    const itemTenantId = normalizeTenantId(item.tenantId);
+    return Boolean(targetTenantId && itemTenantId && itemTenantId === targetTenantId);
+  }
   return false;
 }
 
@@ -158,7 +169,30 @@ export function checkPromoValidity(
     return { isValid: false, reason: "Kuota pemakaian voucher ini sudah habis." };
   }
 
-  // Scope check (FNB vs COWORKING)
+  // Scope & tenant isolation check (FNB vs COWORKING, plus mitra-owned promos)
+  const normalizedPromoTenantId =
+    typeof promo.tenantId === "string" ? promo.tenantId.trim() : "";
+  const isTenantOwnedPromo =
+    promo.targetType === "TENANT" ||
+    (normalizedPromoTenantId.length > 0 &&
+      normalizedPromoTenantId.toUpperCase() !== "DAGO_HUB");
+  if (context?.scope === "COWORKING" && isTenantOwnedPromo) {
+    return {
+      isValid: false,
+      reason: "Voucher khusus mitra F&B tidak berlaku untuk layanan Co-Working Hub.",
+    };
+  }
+  if (
+    context?.tenantId &&
+    normalizedPromoTenantId &&
+    normalizedPromoTenantId !== context.tenantId
+  ) {
+    return {
+      isValid: false,
+      reason: "Voucher ini hanya berlaku untuk mitra yang bersangkutan.",
+    };
+  }
+
   if (context?.scope && promo.scope && promo.scope !== "ALL" && promo.scope !== context.scope) {
     return {
       isValid: false,

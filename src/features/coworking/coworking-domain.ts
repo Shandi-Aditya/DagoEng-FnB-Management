@@ -93,6 +93,103 @@ export function calculateHourlyEndTime(startTime: string, hours: number): string
   return `${endH.toString().padStart(2, "0")}:${(m || 0).toString().padStart(2, "0")}`;
 }
 
+export function resolveSpaceCapacity(space?: CoworkingSpaceItem | null): number {
+  if (!space) return 1;
+  const isShared =
+    space.type === "OPEN_SPACE" ||
+    space.type === "SPACE_MONITOR" ||
+    space.type === "HOT_DESK";
+  return isShared ? Math.max(1, space.capacity || 1) : 1;
+}
+
+export interface CoworkingPricingRequest {
+  bookingType?: "HOURLY" | "DAILY" | "MONTHLY" | string;
+  duration?: number;
+}
+
+export interface CoworkingPriceQuote {
+  basePrice: number;
+  rateDescription: string;
+  isTieredMatch: boolean;
+}
+
+export function calculateCoworkingPrice(
+  space: Pick<CoworkingSpaceItem, "hourlyRate" | "dailyRate" | "monthlyRate" | "tieredRates">,
+  request: CoworkingPricingRequest
+): CoworkingPriceQuote {
+  const duration = Math.max(1, Number(request.duration) || 1);
+  const bookingType =
+    typeof request.bookingType === "string"
+      ? request.bookingType.trim().toUpperCase()
+      : "HOURLY";
+
+  if (bookingType === "DAILY") {
+    const dailyRate = Number(space.dailyRate || 0);
+    return {
+      basePrice: Math.round(dailyRate * duration),
+      rateDescription: `${dailyRate}/hari`,
+      isTieredMatch: false,
+    };
+  }
+
+  if (bookingType === "MONTHLY") {
+    const monthlyRate = Number(space.monthlyRate ?? (space.dailyRate || 0) * 20);
+    const months = Math.max(1, Math.round(duration / 30));
+    return {
+      basePrice: Math.round(monthlyRate * months),
+      rateDescription: `${monthlyRate}/bulan`,
+      isTieredMatch: false,
+    };
+  }
+
+  // HOURLY booking: check tiered rates first
+  const hourlyRate = Number(space.hourlyRate || 0);
+  const rawHourlyTotal = Math.round(hourlyRate * duration);
+  const hasTieredRates = Array.isArray(space.tieredRates) && space.tieredRates.length > 0;
+
+  if (hasTieredRates) {
+    const matchedTier = space.tieredRates!.find((t) => Number(t.hours) === duration);
+    if (matchedTier && Number(matchedTier.price) > 0) {
+      return {
+        basePrice: Number(matchedTier.price),
+        rateDescription: `Paket ${duration} jam`,
+        isTieredMatch: true,
+      };
+    }
+
+    const higherTierPrices = space.tieredRates!
+      .filter((t) => Number(t.hours) >= duration && Number(t.price) > 0)
+      .map((t) => Number(t.price));
+    const dailyCap = Number(space.dailyRate) > 0 ? Number(space.dailyRate) : Infinity;
+    const tierCap = higherTierPrices.length > 0 ? Math.min(...higherTierPrices) : Infinity;
+    const cappedPrice = Math.min(rawHourlyTotal, tierCap, dailyCap);
+
+    return {
+      basePrice: Math.round(cappedPrice),
+      rateDescription:
+        cappedPrice === dailyCap && duration >= 8
+          ? "Seharian penuh"
+          : `${hourlyRate}/jam`,
+      isTieredMatch: false,
+    };
+  }
+
+  // Fallback: Durasi >= 8 jam otomatis pakai tarif harian jika lebih hemat
+  if (duration >= 8 && space.dailyRate && space.dailyRate < rawHourlyTotal) {
+    return {
+      basePrice: Number(space.dailyRate),
+      rateDescription: "Seharian penuh",
+      isTieredMatch: false,
+    };
+  }
+
+  return {
+    basePrice: rawHourlyTotal,
+    rateDescription: `${hourlyRate}/jam`,
+    isTieredMatch: false,
+  };
+}
+
 export function computeBookingPricing(params: {
   space: CoworkingSpaceItem;
   bookType: "HOURLY" | "DAILY" | "MONTHLY";
@@ -110,8 +207,12 @@ export function computeBookingPricing(params: {
   const { space, bookType, durationHours, dailyPreset, startDate, endDate, startTime } = params;
 
   if (bookType === "HOURLY") {
-    const computedDuration = Math.max(2, Number(durationHours) || 2);
-    const computedTotal = (space.hourlyRate || 0) * computedDuration;
+    const computedDuration = Math.max(1, Number(durationHours) || 1);
+    const quote = calculateCoworkingPrice(space, {
+      bookingType: "HOURLY",
+      duration: computedDuration,
+    });
+    const computedTotal = quote.basePrice;
     const computedEndTime = `${calculateHourlyEndTime(startTime, computedDuration)} WITA`;
     return {
       computedDuration,
@@ -321,7 +422,7 @@ export function buildCoworkingExportData(
       : b.bookingType === "DAILY"
       ? `${b.duration} Hari`
       : b.duration >= 28
-      ? "1 Bulan"
+      ? `${Math.max(1, Math.round(b.duration / 30))} Bulan`
       : `${b.duration} Bulan`,
     `Rp ${(b.totalAmount || 0).toLocaleString("id-ID")}`,
     b.paymentMethod || b.paymentStatus || "PAID",
@@ -337,6 +438,10 @@ export function buildCoworkingExportData(
 }
 
 const SPACE_TYPE_LABELS: Record<string, string> = {
+  OPEN_SPACE: "Open space",
+  SPACE_MONITOR: "Space monitor",
+  SMALL_MEETING_ROOM: "Small meeting room",
+  LARGE_MEETING_ROOM: "Large meeting room",
   HOT_DESK: "Hot desk",
   PRIVATE_POD: "Pod privat",
   MEETING_ROOM: "Ruang rapat",
@@ -423,9 +528,55 @@ export function emptyCoworkingMessage(
 
 /**
  * Validates whether a coworking space/desk is currently available for new walk-in or booking.
- * Returns true only if status is AVAILABLE and no active session is attached.
+ * Supports shared multi-seat spaces via resolveSpaceCapacity and optional activeCheckedInCount.
  */
-export function isSpaceAvailableNow(space: CoworkingSpaceItem): boolean {
+export function isSpaceAvailableNow(
+  space: CoworkingSpaceItem,
+  activeCheckedInCount?: number
+): boolean {
+  if (space.status === "MAINTENANCE") {
+    return false;
+  }
+  const maxCap = resolveSpaceCapacity(space);
+  if (activeCheckedInCount !== undefined) {
+    return activeCheckedInCount < maxCap;
+  }
+  if (maxCap > 1) {
+    return space.status !== "OCCUPIED";
+  }
   return space.status === "AVAILABLE" && !space.currentSession;
+}
+
+export const SPACE_DEFAULT_IMAGES: Record<string, string> = {
+  OPEN_SPACE: "/images/spaces/openspace.jpeg",
+  SPACE_MONITOR: "/images/spaces/spacemonitor.jpeg",
+  SMALL_MEETING_ROOM: "/images/spaces/smallmeetingroom.jpeg",
+  LARGE_MEETING_ROOM: "/images/spaces/largemeetingroom.jpeg",
+  // Legacy mappings
+  HOT_DESK: "/images/spaces/openspace.jpeg",
+  DEDICATED_DESK: "/images/spaces/spacemonitor.jpeg",
+  MEETING_ROOM: "/images/spaces/smallmeetingroom.jpeg",
+  PRIVATE_POD: "/images/spaces/spacemonitor.jpeg",
+};
+
+/**
+ * Returns the effective image URL for a coworking space or membership plan,
+ * falling back gracefully to category-based and default images.
+ */
+export function getSpaceImageUrl(space?: {
+  imageUrl?: string;
+  type?: string;
+  roomCategory?: string;
+}): string {
+  if (space?.imageUrl && typeof space.imageUrl === "string" && space.imageUrl.trim().length > 0) {
+    return space.imageUrl;
+  }
+  if (space?.type && SPACE_DEFAULT_IMAGES[space.type]) {
+    return SPACE_DEFAULT_IMAGES[space.type];
+  }
+  if (space?.roomCategory && SPACE_DEFAULT_IMAGES[space.roomCategory]) {
+    return SPACE_DEFAULT_IMAGES[space.roomCategory];
+  }
+  return "/images/spaces/openspace.jpeg";
 }
 

@@ -67,7 +67,6 @@ interface CartOrderSetupProps {
   corporateDraft?: CorporateOrderDraft;
   onCorporateDraftChange?: (draft: CorporateOrderDraft) => void;
   meetingRooms?: { id: string; name: string; hourlyRate: number; capacity?: number }[];
-  onSelectedMeetingRoomChange?: (roomId: string) => void;
   coworkingBookings?: CoworkingBooking[];
   coworkingSpaces?: CoworkingSpaceItem[];
 }
@@ -91,7 +90,6 @@ export function CartOrderSetup({
   corporateDraft = DEFAULT_CORPORATE_DRAFT,
   onCorporateDraftChange,
   meetingRooms = [],
-  onSelectedMeetingRoomChange,
   coworkingBookings = [],
   coworkingSpaces = [],
 }: CartOrderSetupProps) {
@@ -295,12 +293,11 @@ export function CartOrderSetup({
                     value={selectedMeetingRoomId}
                     onChange={(e) => {
                       updateDraft({
-                        meetingRoomId: e.target.value,
+                        meetingRoomId: e.target.value || undefined,
                         meetingBookingDate: meetingBookingDate || todayWita,
                         meetingStartTime,
                         meetingDurationHours: meetingDurationHours || 1,
                       });
-                      onSelectedMeetingRoomChange?.(e.target.value);
                     }}
                   >
                     <NativeSelectOption value="">Tanpa ruang pertemuan (hanya F&B)</NativeSelectOption>

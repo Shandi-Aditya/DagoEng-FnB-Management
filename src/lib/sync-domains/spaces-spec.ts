@@ -13,7 +13,7 @@ import {
   type TablesCommand,
   type TablesDomainState,
 } from "@/lib/domain-sync-types";
-import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
+import { MEMBERSHIP_PLANS, DAGO_SPACES, LEGACY_SPACES } from "@/features/coworking/coworking-data";
 import type { ServerAuthResult } from "@/lib/server-auth";
 import type { RoleSlug } from "@/types/auth";
 import type {
@@ -88,75 +88,9 @@ export const INITIAL_AREAS: AreaItem[] = [
 
 export const INITIAL_RESERVATIONS: ScheduledReservation[] = [];
 
-export const INITIAL_SPACES: CoworkingSpaceItem[] = [
-  {
-    id: "sp-hot-1",
-    name: "Hot Desk Flex #01 - #08",
-    type: "HOT_DESK",
-    area: "Ground Floor Main",
-    capacity: 8,
-    hourlyRate: 15000,
-    dailyRate: 65000,
-    status: "AVAILABLE",
-    amenities: ["High-speed Fiber WiFi", "Power Outlet", "Free Flow Infused Water"],
-    description: "Meja kerja komunal yang nyaman dengan akses power outlet individual, koneksi fiber internet 100 Mbps, dan free-flow infused water.",
-    imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=600&auto=format&fit=crop",
-  },
-  {
-    id: "sp-ded-1",
-    name: "Dedicated Desk D-01",
-    type: "DEDICATED_DESK",
-    area: "Mezzanine Quiet Zone",
-    capacity: 1,
-    hourlyRate: 25000,
-    dailyRate: 120000,
-    monthlyRate: 1850000,
-    status: "AVAILABLE",
-    amenities: ["Ergonomic Herman Miller Chair", "Dual Monitor 27-inch", "Locker Pribadi", "Free 2 Jam Meeting Room"],
-    description: "Meja kerja pribadi khusus dengan kursi ergonomis Herman Miller, dual-monitor 27 inch 4K, dan locker penyimpanan personal.",
-    imageUrl: "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?q=80&w=600&auto=format&fit=crop",
-  },
-  {
-    id: "sp-ded-2",
-    name: "Dedicated Desk D-02",
-    type: "DEDICATED_DESK",
-    area: "Mezzanine Quiet Zone",
-    capacity: 1,
-    hourlyRate: 25000,
-    dailyRate: 120000,
-    monthlyRate: 1850000,
-    status: "AVAILABLE",
-    amenities: ["Ergonomic Chair", "Locker", "Free Coffee 1 Cup/Day"],
-    description: "Meja kerja tetap di Mezzanine Quiet Zone untuk kenyamanan konsentrasi penuh dengan free coffee 1 cup/hari.",
-    imageUrl: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=600&auto=format&fit=crop",
-  },
-  {
-    id: "sp-meet-1",
-    name: "Executive Glass Meeting Room (Room Alpha)",
-    type: "MEETING_ROOM",
-    area: "VIP Meeting Wing",
-    capacity: 10,
-    hourlyRate: 150000,
-    dailyRate: 900000,
-    status: "AVAILABLE",
-    amenities: ["4K Smart TV Screen Share", "Whiteboard", "Jabra Conference Mic", "Soundproof Acoustic Walls"],
-    description: "Ruang meeting premium berkapasitas 10 orang dengan Smart TV 4K, conference mic Jabra, dan dinding peredam suara akustik.",
-    imageUrl: "https://images.unsplash.com/photo-1517502884422-41eaead166d4?q=80&w=600&auto=format&fit=crop",
-  },
-  {
-    id: "sp-pod-1",
-    name: "Focus Audio Pod #01",
-    type: "PRIVATE_POD",
-    area: "Mezzanine Quiet Zone",
-    capacity: 1,
-    hourlyRate: 35000,
-    dailyRate: 180000,
-    status: "AVAILABLE",
-    amenities: ["Soundproof 35dB", "Ring Light Zoom Video", "Ventilation Fan"],
-    description: "Pod kedap suara individual untuk panggilan video, podcast, dan interview online tanpa gangguan kebisingan.",
-    imageUrl: "https://images.unsplash.com/photo-1573164713988-8665fc963095?q=80&w=600&auto=format&fit=crop",
-  },
-];
+export { DAGO_SPACES, LEGACY_SPACES };
+
+export const INITIAL_SPACES: CoworkingSpaceItem[] = [...DAGO_SPACES, ...LEGACY_SPACES];
 
 export const INITIAL_MEMBERSHIPS: CoworkingMemberProfile[] = [
   {
@@ -756,6 +690,104 @@ export const tablesSyncClient: SyncedDomainClient<"tables"> =
     applyCommandLocally: applyTablesCommand,
   });
 
+const LEGACY_PLAN_IDS = new Set(["plan-nomad", "plan-flexi", "plan-resident"]);
+
+/**
+ * Reconciles legacy `coworking_master` state with official Dago spaces and membership plans
+ * without discarding existing members, checkLogs, custom spaces/plans, or admin edits.
+ */
+export function reconcileCoworkingMasterDefaults(
+  state: CoworkingMasterState
+): CoworkingMasterState {
+  const existingSpaces = Array.isArray(state.spaces) ? state.spaces : [];
+  const dagoById = new Map(DAGO_SPACES.map((s) => [s.id, s]));
+  const existingSpaceIds = new Set<string>();
+  let spacesChanged = false;
+
+  const reconciledExistingSpaces = existingSpaces.map((sp) => {
+    existingSpaceIds.add(sp.id);
+    const dagoDefault = dagoById.get(sp.id);
+    if (!dagoDefault) return sp;
+    const needsTieredRates =
+      sp.tieredRates === undefined && dagoDefault.tieredRates !== undefined;
+    const needsImageUrl =
+      sp.imageUrl === undefined && dagoDefault.imageUrl !== undefined;
+    if (!needsTieredRates && !needsImageUrl) return sp;
+    spacesChanged = true;
+    return {
+      ...sp,
+      ...(needsTieredRates
+        ? { tieredRates: dagoDefault.tieredRates!.map((r) => ({ ...r })) }
+        : {}),
+      ...(needsImageUrl ? { imageUrl: dagoDefault.imageUrl } : {}),
+    };
+  });
+
+  const missingDagoSpaces = DAGO_SPACES.filter(
+    (d) => !existingSpaceIds.has(d.id)
+  ).map((d) => ({
+    ...d,
+    amenities: [...d.amenities],
+    ...(d.tieredRates
+      ? { tieredRates: d.tieredRates.map((r) => ({ ...r })) }
+      : {}),
+  }));
+
+  if (missingDagoSpaces.length > 0) {
+    spacesChanged = true;
+  }
+
+  const nextSpaces = spacesChanged
+    ? [...missingDagoSpaces, ...reconciledExistingSpaces]
+    : existingSpaces;
+
+  const existingPlans = Array.isArray(state.plans) ? state.plans : [];
+  const officialPlanIds = new Set(MEMBERSHIP_PLANS.map((p) => p.id));
+  const hasAnyOfficialPlan = existingPlans.some((p) =>
+    officialPlanIds.has(p.id)
+  );
+  const hasAllOfficialPlans = MEMBERSHIP_PLANS.every((op) =>
+    existingPlans.some((ep) => ep.id === op.id)
+  );
+
+  let nextPlans = existingPlans;
+  let plansChanged = false;
+
+  if (!hasAnyOfficialPlan) {
+    const customPlans = existingPlans.filter((p) => !LEGACY_PLAN_IDS.has(p.id));
+    const officialClones = MEMBERSHIP_PLANS.map((p) => ({
+      ...p,
+      amenities: [...p.amenities],
+      ...(p.benefits ? { benefits: [...p.benefits] } : {}),
+    }));
+    nextPlans = [...officialClones, ...customPlans];
+    plansChanged = true;
+  } else if (!hasAllOfficialPlans) {
+    const existingPlanIds = new Set(existingPlans.map((p) => p.id));
+    const missingOfficial = MEMBERSHIP_PLANS.filter(
+      (p) => !existingPlanIds.has(p.id)
+    ).map((p) => ({
+      ...p,
+      amenities: [...p.amenities],
+      ...(p.benefits ? { benefits: [...p.benefits] } : {}),
+    }));
+    if (missingOfficial.length > 0) {
+      nextPlans = [...existingPlans, ...missingOfficial];
+      plansChanged = true;
+    }
+  }
+
+  if (!spacesChanged && !plansChanged) {
+    return state;
+  }
+
+  return {
+    ...state,
+    spaces: nextSpaces,
+    plans: nextPlans,
+  };
+}
+
 export function defaultCoworkingMasterState(): CoworkingMasterState {
   return {
     spaces: INITIAL_SPACES.map((space) => ({
@@ -809,7 +841,9 @@ export function applyCoworkingMasterCommand(
           ...space,
           status: command.status,
           currentSession:
-            command.status === "AVAILABLE" ? undefined : command.currentSession,
+            command.status === "AVAILABLE" && !command.currentSession
+              ? undefined
+              : command.currentSession,
         };
       });
 
@@ -917,20 +951,26 @@ export const coworkingMasterDomainSpec: ServerDomainSpec<"coworking-master"> = {
       auth.role &&
       COWORKING_STAFF_READ_ROLES.includes(auth.role)
     ) {
-      return { allowed: true };
+      return {
+        allowed: true,
+        transform: (state) => reconcileCoworkingMasterDefaults(state),
+      };
     }
     return {
       allowed: true,
-      transform: (state) => ({
-        ...state,
-        spaces: state.spaces.map((space) => {
-          const sanitized = { ...space };
-          delete sanitized.currentSession;
-          return sanitized;
-        }),
-        members: [],
-        checkLogs: [],
-      }),
+      transform: (state) => {
+        const reconciled = reconcileCoworkingMasterDefaults(state);
+        return {
+          ...reconciled,
+          spaces: reconciled.spaces.map((space) => {
+            const sanitized = { ...space };
+            delete sanitized.currentSession;
+            return sanitized;
+          }),
+          members: [],
+          checkLogs: [],
+        };
+      },
     };
   },
   authorizeWrite(auth, command) {
@@ -974,7 +1014,10 @@ export const coworkingMasterDomainSpec: ServerDomainSpec<"coworking-master"> = {
     };
   },
   applyCommand(current, command) {
-    return applyCoworkingMasterCommand(current, command);
+    return applyCoworkingMasterCommand(
+      reconcileCoworkingMasterDefaults(current),
+      command
+    );
   },
 };
 
@@ -999,7 +1042,7 @@ function createCoworkingMasterStorageMirror(): LocalStorageMirrorAdapter<Coworki
         return cachedState;
       }
       cachedSig = sig;
-      cachedState = {
+      const parsedState: CoworkingMasterState = {
         spaces: parseRawArrayVerbatim<CoworkingSpaceItem>(
           rawSpaces,
           fallback.spaces
@@ -1017,6 +1060,7 @@ function createCoworkingMasterStorageMirror(): LocalStorageMirrorAdapter<Coworki
           fallback.plans
         ),
       };
+      cachedState = reconcileCoworkingMasterDefaults(parsedState);
       return cachedState;
     },
     writeToStorage(state) {

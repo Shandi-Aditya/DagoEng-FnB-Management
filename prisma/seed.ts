@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Starting DagoEng F&B Management Seed...");
 
-  // 1. CLEAR EXISTING DATA (Clean seed)
+  // 1. CLEAR EXISTING NON-COWORKING SEED DATA (Coworking tables use idempotent upsert below)
   await prisma.auditLog.deleteMany();
   await prisma.session.deleteMany();
   await prisma.table.deleteMany();
@@ -23,8 +23,6 @@ async function main() {
   await prisma.permission.deleteMany();
   await prisma.role.deleteMany();
   await prisma.user.deleteMany();
-  await prisma.outlet.deleteMany();
-  await prisma.organization.deleteMany();
 
   console.log("🧹 Cleaned existing database records.");
 
@@ -109,18 +107,28 @@ async function main() {
   }
   console.log("✅ Created Permissions & Assigned Role Matrix.");
 
-  // 4. CREATE 2 ORGANIZATIONS & 4 OUTLETS
+  // 4. UPSERT 2 ORGANIZATIONS & 4 OUTLETS (Preserves Room & Reservation cascades)
   // Organization 1: Kopi Senja (Singaraja, Denpasar, Ubud)
-  const orgKopiSenja = await prisma.organization.create({
-    data: {
+  const orgKopiSenja = await prisma.organization.upsert({
+    where: { code: "KOPI-SENJA" },
+    update: { name: "Kopi Senja", status: "ACTIVE" },
+    create: {
       name: "Kopi Senja",
       code: "KOPI-SENJA",
       status: "ACTIVE",
     },
   });
 
-  const outletSingaraja = await prisma.outlet.create({
-    data: {
+  const outletSingaraja = await prisma.outlet.upsert({
+    where: { code: "KS-SGR" },
+    update: {
+      organizationId: orgKopiSenja.id,
+      name: "Kopi Senja - Singaraja",
+      address: "Jl. Ngurah Rai No. 45, Singaraja",
+      phone: "+62 812-3456-7891",
+      status: "ACTIVE",
+    },
+    create: {
       organizationId: orgKopiSenja.id,
       name: "Kopi Senja - Singaraja",
       code: "KS-SGR",
@@ -130,8 +138,16 @@ async function main() {
     },
   });
 
-  const outletDenpasar = await prisma.outlet.create({
-    data: {
+  const outletDenpasar = await prisma.outlet.upsert({
+    where: { code: "KS-DPS" },
+    update: {
+      organizationId: orgKopiSenja.id,
+      name: "Kopi Senja - Denpasar",
+      address: "Jl. Teuku Umar No. 88, Denpasar",
+      phone: "+62 812-3456-7892",
+      status: "ACTIVE",
+    },
+    create: {
       organizationId: orgKopiSenja.id,
       name: "Kopi Senja - Denpasar",
       code: "KS-DPS",
@@ -141,8 +157,16 @@ async function main() {
     },
   });
 
-  const outletUbud = await prisma.outlet.create({
-    data: {
+  const outletUbud = await prisma.outlet.upsert({
+    where: { code: "KS-UBD" },
+    update: {
+      organizationId: orgKopiSenja.id,
+      name: "Kopi Senja - Ubud",
+      address: "Jl. Raya Ubud No. 12, Ubud",
+      phone: "+62 812-3456-7893",
+      status: "ACTIVE",
+    },
+    create: {
       organizationId: orgKopiSenja.id,
       name: "Kopi Senja - Ubud",
       code: "KS-UBD",
@@ -153,16 +177,26 @@ async function main() {
   });
 
   // Organization 2: Bali Brew Demo (Renon) - For Cross-Tenant Isolation Testing
-  const orgBaliBrew = await prisma.organization.create({
-    data: {
+  const orgBaliBrew = await prisma.organization.upsert({
+    where: { code: "BALI-BREW" },
+    update: { name: "Bali Brew Demo", status: "ACTIVE" },
+    create: {
       name: "Bali Brew Demo",
       code: "BALI-BREW",
       status: "ACTIVE",
     },
   });
 
-  const outletRenon = await prisma.outlet.create({
-    data: {
+  const outletRenon = await prisma.outlet.upsert({
+    where: { code: "BB-RNN" },
+    update: {
+      organizationId: orgBaliBrew.id,
+      name: "Bali Brew - Renon",
+      address: "Jl. Raya Puputan No. 20, Renon, Denpasar",
+      phone: "+62 813-9876-5432",
+      status: "ACTIVE",
+    },
+    create: {
       organizationId: orgBaliBrew.id,
       name: "Bali Brew - Renon",
       code: "BB-RNN",
@@ -172,7 +206,7 @@ async function main() {
     },
   });
 
-  console.log("✅ Created 2 Organizations and 4 Outlets.");
+  console.log("✅ Upserted 2 Organizations and 4 Outlets.");
 
   // 5. CREATE USERS & CREDENTIALS
   const defaultPasswordHash = await bcrypt.hash("Password123!", 10);
@@ -510,6 +544,256 @@ async function main() {
   await prisma.table.create({ data: { tableAreaId: areaRenon.id, number: "BB-01", capacity: 4, status: "AVAILABLE" } });
 
   console.log("✅ Created Table Areas and Tables.");
+
+  // 9. UPSERT COWORKING ROOM CATEGORIES, TIERED RATES, ROOMS & MEMBERSHIPS (Idempotent)
+  const categorySpecs = [
+    {
+      id: "cat-open-space",
+      name: "Open Space",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/openspace.jpeg",
+      tiers: [
+        { durationHrs: 2, price: 20000 },
+        { durationHrs: 3, price: 30000 },
+        { durationHrs: 6, price: 50000 },
+        { durationHrs: 8, price: 70000 },
+      ],
+    },
+    {
+      id: "cat-space-monitor",
+      name: "Space Monitor",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/spacemonitor.jpeg",
+      tiers: [
+        { durationHrs: 2, price: 26000 },
+        { durationHrs: 3, price: 40000 },
+        { durationHrs: 6, price: 60000 },
+        { durationHrs: 8, price: 80000 },
+      ],
+    },
+    {
+      id: "cat-small-meeting",
+      name: "Small Meeting Room",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+      tiers: [
+        { durationHrs: 2, price: 75000 },
+        { durationHrs: 4, price: 150000 },
+        { durationHrs: 8, price: 250000 },
+      ],
+    },
+    {
+      id: "cat-large-meeting",
+      name: "Large Meeting Room",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+      tiers: [
+        { durationHrs: 2, price: 100000 },
+        { durationHrs: 4, price: 200000 },
+        { durationHrs: 8, price: 360000 },
+      ],
+    },
+  ];
+
+  const categoriesById: Record<string, string> = {};
+  for (const cat of categorySpecs) {
+    const existingByName = await prisma.roomCategory.findFirst({ where: { name: cat.name } });
+    const categoryId = existingByName?.id ?? cat.id;
+    const savedCategory = await prisma.roomCategory.upsert({
+      where: { id: categoryId },
+      update: { name: cat.name, priceType: cat.priceType, imageUrl: cat.imageUrl },
+      create: { id: cat.id, name: cat.name, priceType: cat.priceType, imageUrl: cat.imageUrl },
+    });
+    categoriesById[cat.id] = savedCategory.id;
+
+    for (const tier of cat.tiers) {
+      await prisma.roomTieredRate.upsert({
+        where: {
+          categoryId_durationHrs: {
+            categoryId: savedCategory.id,
+            durationHrs: tier.durationHrs,
+          },
+        },
+        update: { price: tier.price },
+        create: {
+          categoryId: savedCategory.id,
+          durationHrs: tier.durationHrs,
+          price: tier.price,
+        },
+      });
+    }
+  }
+
+  const roomSpecs = [
+    {
+      id: "sp-os-01",
+      categoryId: categoriesById["cat-open-space"],
+      name: "Open Space",
+      capacity: 20,
+      hourlyRate: 10000,
+      imageUrl: "/images/spaces/openspace.jpeg",
+    },
+    {
+      id: "sp-sm-01",
+      categoryId: categoriesById["cat-space-monitor"],
+      name: "Space Monitor",
+      capacity: 8,
+      hourlyRate: 13000,
+      imageUrl: "/images/spaces/spacemonitor.jpeg",
+    },
+    {
+      id: "sp-mr-sm",
+      categoryId: categoriesById["cat-small-meeting"],
+      name: "Small Meeting Room",
+      capacity: 6,
+      hourlyRate: 37500,
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+    },
+    {
+      id: "sp-mr-lg",
+      categoryId: categoriesById["cat-large-meeting"],
+      name: "Large Meeting Room",
+      capacity: 12,
+      hourlyRate: 50000,
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+    },
+  ];
+
+  for (const room of roomSpecs) {
+    await prisma.room.upsert({
+      where: { id: room.id },
+      update: {
+        outletId: outletSingaraja.id,
+        categoryId: room.categoryId,
+        name: room.name,
+        capacity: room.capacity,
+        hourlyRate: room.hourlyRate,
+        imageUrl: room.imageUrl,
+      },
+      create: {
+        id: room.id,
+        outletId: outletSingaraja.id,
+        categoryId: room.categoryId,
+        name: room.name,
+        capacity: room.capacity,
+        hourlyRate: room.hourlyRate,
+        status: "AVAILABLE",
+        imageUrl: room.imageUrl,
+      },
+    });
+  }
+
+  const membershipBenefits = [
+    "Economical & Transparent",
+    "Flexible Terms",
+    "Priority Access",
+    "High-Speed Wi-Fi",
+    "Complimentary Printing",
+  ];
+
+  const packageSpecs = [
+    {
+      id: "plan-os-1w",
+      name: "Open Space - 1 Minggu",
+      price: 150000,
+      creditHours: 20,
+      validityDays: 7,
+      discountFnb: 10,
+      roomCategoryId: categoriesById["cat-open-space"],
+      imageUrl: "/images/spaces/openspace.jpeg",
+    },
+    {
+      id: "plan-os-2w",
+      name: "Open Space - 2 Minggu",
+      price: 300000,
+      creditHours: 40,
+      validityDays: 14,
+      discountFnb: 15,
+      roomCategoryId: categoriesById["cat-open-space"],
+      imageUrl: "/images/spaces/openspace.jpeg",
+    },
+    {
+      id: "plan-os-1m",
+      name: "Open Space - 1 Bulan",
+      price: 450000,
+      creditHours: 60,
+      validityDays: 30,
+      discountFnb: 20,
+      roomCategoryId: categoriesById["cat-open-space"],
+      imageUrl: "/images/spaces/openspace.jpeg",
+    },
+    {
+      id: "plan-smr-2w",
+      name: "Small Meeting Room - 2 Minggu",
+      price: 240000,
+      creditHours: 8,
+      validityDays: 14,
+      discountFnb: 15,
+      roomCategoryId: categoriesById["cat-small-meeting"],
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+    },
+    {
+      id: "plan-smr-1m",
+      name: "Small Meeting Room - 1 Bulan",
+      price: 450000,
+      creditHours: 15,
+      validityDays: 30,
+      discountFnb: 20,
+      roomCategoryId: categoriesById["cat-small-meeting"],
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+    },
+    {
+      id: "plan-lmr-2w",
+      name: "Large Meeting Room - 2 Minggu",
+      price: 320000,
+      creditHours: 8,
+      validityDays: 14,
+      discountFnb: 15,
+      roomCategoryId: categoriesById["cat-large-meeting"],
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+    },
+    {
+      id: "plan-lmr-1m",
+      name: "Large Meeting Room - 1 Bulan",
+      price: 600000,
+      creditHours: 15,
+      validityDays: 30,
+      discountFnb: 20,
+      roomCategoryId: categoriesById["cat-large-meeting"],
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+    },
+  ];
+
+  for (const pkg of packageSpecs) {
+    const existingByName = await prisma.membershipPackage.findFirst({ where: { name: pkg.name } });
+    const targetId = existingByName?.id ?? pkg.id;
+    await prisma.membershipPackage.upsert({
+      where: { id: targetId },
+      update: {
+        name: pkg.name,
+        price: pkg.price,
+        creditHours: pkg.creditHours,
+        validityDays: pkg.validityDays,
+        discountFnb: pkg.discountFnb,
+        roomCategoryId: pkg.roomCategoryId,
+        imageUrl: pkg.imageUrl,
+        benefits: membershipBenefits,
+      },
+      create: {
+        id: pkg.id,
+        name: pkg.name,
+        price: pkg.price,
+        creditHours: pkg.creditHours,
+        validityDays: pkg.validityDays,
+        discountFnb: pkg.discountFnb,
+        roomCategoryId: pkg.roomCategoryId,
+        imageUrl: pkg.imageUrl,
+        benefits: membershipBenefits,
+      },
+    });
+  }
+
+  console.log("✅ Upserted Coworking Room Categories, Rooms & Membership Packages with Photos.");
   console.log("🎉 Seed finished successfully!");
 }
 

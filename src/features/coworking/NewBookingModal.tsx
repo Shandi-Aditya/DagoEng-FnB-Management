@@ -27,11 +27,15 @@ import {
 import {
   computeBookingPricing,
   calculateHourlyEndTime,
+  addDaysToYmd,
   spaceTypeLabel,
   getTodayWitaDateString,
   formatCoworkingTaxLabel,
+  resolveSpaceCapacity,
+  getSpaceImageUrl,
   type DailyPreset,
 } from "./coworking-domain";
+import { SpacePhotoThumbnail } from "./SpacePhotoThumbnail";
 import {
   checkSlotAvailability,
   getValidOperationalTime,
@@ -63,7 +67,7 @@ export interface NewBookingModalProps {
   }) => void;
 }
 
-const OPERATIONAL_TIME_SLOTS = getCoworkingStartSlots(2);
+const OPERATIONAL_TIME_SLOTS = getCoworkingStartSlots(1);
 
 export function NewBookingModal({
   isOpen,
@@ -80,10 +84,14 @@ export function NewBookingModal({
   const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;
   const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
 
-  const todayStr = useMemo(
-    () => getNextOpenCoworkingDate(getTodayWitaDateString(), coworkingHolidays),
-    [coworkingHolidays]
-  );
+  const todayStr = useMemo(() => {
+    const todayWita = getTodayWitaDateString();
+    const initialDate = getNextOpenCoworkingDate(todayWita, coworkingHolidays);
+    if (initialDate === todayWita && !getValidOperationalTime(initialDate)) {
+      return getNextOpenCoworkingDate(addDaysToYmd(initialDate, 1), coworkingHolidays);
+    }
+    return initialDate;
+  }, [coworkingHolidays]);
 
   const [bookSpaceId, setBookSpaceId] = useState(defaultSpaceId || spaces[0]?.id || "");
   const [bookType, setBookType] = useState<"HOURLY" | "DAILY" | "MONTHLY">("HOURLY");
@@ -103,8 +111,18 @@ export function NewBookingModal({
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    setBookStartTime(getValidOperationalTime(bookStartDate));
-  }, [bookStartDate, isOpen]);
+    const validTime = getValidOperationalTime(bookStartDate);
+    if (!validTime && isOpen && bookStartDate === getTodayWitaDateString()) {
+      const nextOpen = getNextOpenCoworkingDate(addDaysToYmd(bookStartDate, 1), coworkingHolidays);
+      if (nextOpen !== bookStartDate) {
+        setBookStartDate(nextOpen);
+        setBookEndDate(nextOpen);
+        setBookStartTime(getValidOperationalTime(nextOpen));
+        return;
+      }
+    }
+    setBookStartTime(validTime);
+  }, [bookStartDate, isOpen, coworkingHolidays]);
 
   useEffect(() => {
     if (defaultSpaceId) {
@@ -169,7 +187,7 @@ export function NewBookingModal({
       return;
     }
 
-    if (bookType === "HOURLY" && isSlotPast(bookStartDate, bookStartTime)) {
+    if (bookType === "HOURLY" && (!bookStartTime || isSlotPast(bookStartDate, bookStartTime))) {
       setErrorMessage("Slot jam yang dipilih sudah lewat.");
       return;
     }
@@ -192,10 +210,7 @@ export function NewBookingModal({
       return;
     }
 
-    const maxCapacity =
-      selectedSpace.type === "HOT_DESK"
-        ? Math.max(1, selectedSpace.capacity || 8)
-        : 1;
+    const maxCapacity = resolveSpaceCapacity(selectedSpace);
 
     const conflict = checkCoworkingBookingConflict(bookings, {
       spaceId: selectedSpace.id,
@@ -274,7 +289,13 @@ export function NewBookingModal({
 
           {/* Selected Space Preview */}
           {selectedSpace && (
-            <div className="space-y-1.5 rounded-lg border bg-muted/40 p-3 text-xs">
+            <div className="space-y-2.5 rounded-lg border bg-muted/40 p-3 text-xs">
+              <SpacePhotoThumbnail
+                src={getSpaceImageUrl(selectedSpace)}
+                alt={selectedSpace.name}
+                aspectRatio="aspect-video"
+                className="border"
+              />
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <span className="block text-xs font-medium text-muted-foreground">
@@ -382,16 +403,16 @@ export function NewBookingModal({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="hourly-dur" className="text-xs text-foreground">Durasi (jam)</Label>
-                    <span className="text-xs text-muted-foreground">Minimal 2 jam</span>
+                    <span className="text-xs text-muted-foreground">Minimal 1 jam</span>
                   </div>
                   <Input
                     id="hourly-dur"
                     type="number"
-                    min={2}
+                    min={1}
                     max={COWORKING_MAX_HOURS}
                     value={bookDurationHours}
                     onChange={(e) =>
-                      setBookDurationHours(Math.min(COWORKING_MAX_HOURS, Math.max(2, Number(e.target.value))))
+                      setBookDurationHours(Math.min(COWORKING_MAX_HOURS, Math.max(1, Number(e.target.value))))
                     }
                     className="text-xs font-mono"
                     required
@@ -407,7 +428,7 @@ export function NewBookingModal({
                     <span>Jam mulai (jam operasional 09:00–18:00 WITA)</span>
                   </Label>
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    Selesai: {calculateHourlyEndTime(bookStartTime, bookDurationHours)} WITA
+                    {bookStartTime ? `Selesai: ${calculateHourlyEndTime(bookStartTime, bookDurationHours)} WITA` : "Tidak ada slot tersisa"}
                   </span>
                 </div>
                 <div className="grid grid-cols-5 gap-1.5">
@@ -533,6 +554,15 @@ export function NewBookingModal({
               <p className="text-xs text-muted-foreground">
                 Termasuk dedicated desk, loker pribadi, dan kuota ruang rapat.
               </p>
+            </div>
+          )}
+
+          {bookType === "HOURLY" && startDateStatus.isOpen && !bookStartTime && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs font-medium text-destructive">
+              <AlertTriangle className="size-4 shrink-0" />
+              <span>
+                Seluruh slot jam operasional hari ini (09:00–18:00 WITA) sudah lewat. Pilih tanggal hari kerja berikutnya.
+              </span>
             </div>
           )}
 
@@ -678,7 +708,11 @@ export function NewBookingModal({
             >
               Batal
             </Button>
-            <Button type="submit" size="lg" disabled={!startDateStatus.isOpen}>
+            <Button
+              type="submit"
+              size="lg"
+              disabled={!startDateStatus.isOpen || (bookType === "HOURLY" && !bookStartTime)}
+            >
               {bookIsImmediateCheckIn ? "Simpan dan check-in" : "Simpan booking"}
             </Button>
           </DialogFooter>

@@ -12,7 +12,9 @@ import {
   getSpaceStatusTone,
   isSpaceAvailableNow,
   spaceTypeLabel,
+  getSpaceImageUrl,
 } from "./coworking-domain";
+import { SpacePhotoThumbnail } from "./SpacePhotoThumbnail";
 
 export interface CoworkingSpacesTabProps {
   spaces: CoworkingSpaceItem[];
@@ -51,19 +53,12 @@ export function CoworkingSpacesTab({
           >
             <div className="space-y-3">
               {/* Space Photo Cover */}
-              {sp.imageUrl ? (
-                <div className="relative h-36 w-full overflow-hidden rounded-lg border bg-muted">
-                  <img
-                    src={sp.imageUrl}
-                    alt={sp.name}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="relative flex h-24 w-full items-center justify-center rounded-lg border bg-muted text-muted-foreground">
-                  <Laptop className="size-8 opacity-40" />
-                </div>
-              )}
+              <SpacePhotoThumbnail
+                src={getSpaceImageUrl(sp)}
+                alt={sp.name}
+                aspectRatio="aspect-video"
+                className="border"
+              />
 
               <div className="flex items-start justify-between gap-2 border-b pb-2">
                 <div className="min-w-0">
@@ -83,18 +78,36 @@ export function CoworkingSpacesTab({
               </div>
 
               <div className="space-y-1.5 py-1 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Tarif per jam</span>
-                  <span className="font-mono font-medium tabular-nums text-foreground">
-                    {formatCurrencyIDR(sp.hourlyRate)} / jam
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tarif harian</span>
-                  <span className="font-mono font-medium tabular-nums text-foreground">
-                    {formatCurrencyIDR(sp.dailyRate)} / hari
-                  </span>
-                </div>
+                {sp.tieredRates && sp.tieredRates.length > 0 ? (
+                  <div className="flex flex-col gap-1 border-b pb-1.5">
+                    <span className="font-medium text-foreground">Paket durasi:</span>
+                    <div className="grid grid-cols-2 gap-1 text-xs">
+                      {sp.tieredRates.map((t) => (
+                        <div key={t.hours} className="flex justify-between rounded bg-muted/40 px-1.5 py-0.5">
+                          <span>{t.hours} jam</span>
+                          <span className="font-mono font-medium tabular-nums text-foreground">
+                            {formatCurrencyIDR(t.price)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Tarif per jam</span>
+                      <span className="font-mono font-medium tabular-nums text-foreground">
+                        {formatCurrencyIDR(sp.hourlyRate)} / jam
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tarif harian</span>
+                      <span className="font-mono font-medium tabular-nums text-foreground">
+                        {formatCurrencyIDR(sp.dailyRate)} / hari
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span>Kapasitas</span>
                   <span>{sp.capacity} orang</span>

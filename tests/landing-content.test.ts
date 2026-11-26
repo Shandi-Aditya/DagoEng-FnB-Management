@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { POST as postCoworkingBookings } from "@/app/api/coworking/bookings/route";
 import { CONTACT, HERO } from "@/features/landing/landing-content";
 import { HOURS } from "@/features/landing/home/home-content";
-import { INITIAL_SPACES, MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
+import { DAGO_SPACES, INITIAL_SPACES, MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import {
   getCoworkingStartSlots,
   getNextOpenCoworkingDate,
@@ -123,16 +123,26 @@ describe("Dago Creative Hub and coworking office hours", () => {
     expect(CONTACT.hours).toBe("Senin sampai Jumat, 09.00 sampai 18.00 WITA");
   });
 
-  it("aligns coworking plans and dedicated desk amenities with Senin - Jumat 09:00 - 18:00 WITA", () => {
-    const nomadPlan = MEMBERSHIP_PLANS.find((plan) => plan.id === "plan-nomad");
-    const flexiPlan = MEMBERSHIP_PLANS.find((plan) => plan.id === "plan-flexi");
-    const residentPlan = MEMBERSHIP_PLANS.find((plan) => plan.id === "plan-resident");
-    expect(nomadPlan?.deskAccess).toContain("Senin - Jumat");
-    expect(nomadPlan?.deskAccess).toContain("09:00 - 18:00 WITA");
-    expect(flexiPlan?.deskAccess).toContain("Senin - Jumat");
-    expect(residentPlan?.deskAccess).toContain("Senin - Jumat");
-    expect(residentPlan?.deskAccess).not.toContain("24/7");
+  it("aligns all 7 coworking plans and Dago space amenities with Senin - Jumat 09:00 - 18:00 WITA", () => {
+    expect(MEMBERSHIP_PLANS).toHaveLength(7);
+    const expectedIds = [
+      "plan-os-1w",
+      "plan-os-2w",
+      "plan-os-1m",
+      "plan-smr-2w",
+      "plan-smr-1m",
+      "plan-lmr-2w",
+      "plan-lmr-1m",
+    ];
+    expect(MEMBERSHIP_PLANS.map((p) => p.id)).toEqual(expectedIds);
 
+    for (const plan of MEMBERSHIP_PLANS) {
+      expect(plan.deskAccess).toContain("Senin - Jumat");
+      expect(plan.deskAccess).toContain("09:00 - 18:00 WITA");
+      expect(plan.deskAccess).not.toContain("24/7");
+    }
+
+    expect(DAGO_SPACES).toHaveLength(4);
     for (const space of INITIAL_SPACES) {
       expect(space.amenities.join(" ")).not.toContain("24/7");
     }

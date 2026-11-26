@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useEffect } from "react";
-import { Check, Clock, Laptop, Users, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,12 @@ import type { CoworkingSpaceItem } from "@/types/coworking";
 import type { PromoConfig } from "@/lib/promo";
 import { useSettings } from "@/contexts/SettingsContext";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
-import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import {
+  formatCoworkingTaxLabel,
+  calculateCoworkingPrice,
+  getSpaceImageUrl,
+} from "@/features/coworking/coworking-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
 
 import {
   COWORKING_CLOSE_MINUTES,
@@ -113,6 +118,24 @@ export function CustomerBookingModal({
     }
   }, [qrisOnly, paymentMethod, onPaymentMethodChange]);
 
+  useEffect(() => {
+    if (!space || bookingDurationMode !== "HOURLY") return;
+    if (isWithinCoworkingHours(bookingStartTime, bookingDurationHours)) return;
+    const maxAvailableHours = Math.max(
+      1,
+      Math.floor((COWORKING_CLOSE_MINUTES - parseTimeToMinutes(bookingStartTime)) / 60)
+    );
+    if (bookingDurationHours !== maxAvailableHours) {
+      onBookingDurationHoursChange(maxAvailableHours);
+    }
+  }, [
+    space,
+    bookingDurationMode,
+    bookingStartTime,
+    bookingDurationHours,
+    onBookingDurationHoursChange,
+  ]);
+
   if (!space) return null;
 
   const cwTaxConfig = settings?.categoryTax?.coworking;
@@ -121,8 +144,11 @@ export function CustomerBookingModal({
   const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
 
   const isHourly = bookingDurationMode === "HOURLY";
-  const rate = isHourly ? space.hourlyRate : (space.dailyRate || space.hourlyRate * 8);
-  const baseCost = isHourly ? rate * bookingDurationHours : rate;
+  const quote = calculateCoworkingPrice(space, {
+    bookingType: bookingDurationMode,
+    duration: isHourly ? bookingDurationHours : 1,
+  });
+  const baseCost = quote.basePrice;
 
   let discount = 0;
   if (activePromo && activePromo.isActive) {
@@ -154,6 +180,13 @@ export function CustomerBookingModal({
             Kapasitas maksimal {space.capacity} orang · {space.area || "Area Utama"}
           </DialogDescription>
         </DialogHeader>
+
+        <SpacePhotoThumbnail
+          src={getSpaceImageUrl(space)}
+          alt={space.name}
+          aspectRatio="aspect-video"
+          className="border"
+        />
 
         <form onSubmit={onSubmitBooking} className="flex flex-col gap-4 py-2 text-xs">
           {/* 1. Mode Durasi: Per Jam vs Harian */}
@@ -228,19 +261,65 @@ export function CustomerBookingModal({
                   Selesai pukul {endTime} WITA
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {[1, 2, 4, 8].map((hrs) => {
-                  const exceedsClosing = !isWithinCoworkingHours(bookingStartTime, hrs);
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(() => {
+                  const maxAvailableHours = Math.max(
+                    1,
+                    Math.floor((COWORKING_CLOSE_MINUTES - parseTimeToMinutes(bookingStartTime)) / 60)
+                  );
+                  if (space.tieredRates && space.tieredRates.length > 0) {
+                    const hasOneHourTier = space.tieredRates.some((t) => Number(t.hours) === 1);
+                    const baseOptions = space.tieredRates.map((t) => ({
+                      hours: t.hours,
+                      price: t.price,
+                    }));
+                    const canFitOneHour = isWithinCoworkingHours(bookingStartTime, 1);
+                    const noTierFits = !space.tieredRates.some((t) =>
+                      isWithinCoworkingHours(bookingStartTime, t.hours)
+                    );
+                    if (
+                      !hasOneHourTier &&
+                      canFitOneHour &&
+                      (bookingStartTime === "17:00" ||
+                        maxAvailableHours === 1 ||
+                        bookingDurationHours === 1 ||
+                        noTierFits)
+                    ) {
+                      return [
+                        {
+                          hours: 1,
+                          price: calculateCoworkingPrice(space, {
+                            bookingType: "HOURLY",
+                            duration: 1,
+                          }).basePrice,
+                        },
+                        ...baseOptions,
+                      ];
+                    }
+                    return baseOptions;
+                  }
+                  return [
+                    { hours: 1, price: space.hourlyRate },
+                    { hours: 2, price: space.hourlyRate * 2 },
+                    { hours: 4, price: space.hourlyRate * 4 },
+                    { hours: 8, price: space.dailyRate || space.hourlyRate * 8 },
+                  ];
+                })().map((t) => {
+                  const exceedsClosing = !isWithinCoworkingHours(bookingStartTime, t.hours);
                   return (
                     <Button
-                      key={hrs}
+                      key={t.hours}
                       type="button"
                       size="sm"
                       disabled={exceedsClosing}
-                      variant={bookingDurationHours === hrs ? "default" : "outline"}
-                      onClick={() => onBookingDurationHoursChange(hrs)}
+                      variant={bookingDurationHours === t.hours ? "default" : "outline"}
+                      onClick={() => onBookingDurationHoursChange(t.hours)}
+                      className="flex flex-col h-auto py-1.5"
                     >
-                      {hrs} jam
+                      <span>{t.hours} jam</span>
+                      <span className="text-xs font-mono opacity-80">
+                        {formatCurrencyIDR(t.price)}
+                      </span>
                     </Button>
                   );
                 })}
@@ -268,7 +347,7 @@ export function CustomerBookingModal({
               <NativeSelect
                 id="bookUsageType"
                 value={bookingUsageType}
-                onChange={(e) => onBookingUsageTypeChange(e.target.value as any)}
+                onChange={(e) => onBookingUsageTypeChange(e.target.value as "INDIVIDUAL" | "TEAM")}
               >
                 <NativeSelectOption value="INDIVIDUAL">Individu / Pribadi</NativeSelectOption>
                 <NativeSelectOption value="TEAM">Tim / Perusahaan</NativeSelectOption>

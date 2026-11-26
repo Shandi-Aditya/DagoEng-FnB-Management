@@ -1,12 +1,33 @@
 import type { QRISVerificationDetail } from "@/lib/qris-verification";
 
-export type PresetSpaceType = "HOT_DESK" | "DEDICATED_DESK" | "MEETING_ROOM" | "PRIVATE_POD";
+export type PresetSpaceType =
+  | "OPEN_SPACE"
+  | "SPACE_MONITOR"
+  | "SMALL_MEETING_ROOM"
+  | "LARGE_MEETING_ROOM"
+  // Legacy backward-compatibility types
+  | "HOT_DESK"
+  | "DEDICATED_DESK"
+  | "MEETING_ROOM"
+  | "PRIVATE_POD";
 export type SpaceType = PresetSpaceType | (string & {});
 
-export type PresetSpaceArea = "Ground Floor Main" | "Mezzanine Quiet Zone" | "VIP Meeting Wing";
+export type PresetSpaceArea =
+  | "Main Open Area"
+  | "Focus & Monitor Zone"
+  | "Meeting Room Wing"
+  // Legacy backward-compatibility areas
+  | "Ground Floor Main"
+  | "Mezzanine Quiet Zone"
+  | "VIP Meeting Wing";
 export type SpaceArea = PresetSpaceArea | (string & {});
 
 export type SpaceStatus = "AVAILABLE" | "OCCUPIED" | "RESERVED" | "MAINTENANCE";
+
+export interface RoomTieredRateItem {
+  hours: number;
+  price: number;
+}
 
 export interface CoworkingSpaceItem {
   id: string;
@@ -15,6 +36,7 @@ export interface CoworkingSpaceItem {
   area: SpaceArea;
   capacity: number;
   hourlyRate: number;
+  tieredRates?: RoomTieredRateItem[];
   dailyRate: number;
   monthlyRate?: number;
   status: SpaceStatus;
@@ -90,7 +112,12 @@ export interface CoworkingMembershipPlan {
   name: string;
   priceFormatted: string;
   priceNumber: number;
-  billingCycle: "Harian" | "Bulanan" | "Paket 10 Hari";
+  billingCycle: "Harian" | "Bulanan" | "Paket 10 Hari" | "1 Minggu" | "2 Minggu" | "1 Bulan";
+  creditHours?: number;
+  validityDays?: number;
+  roomCategory?: SpaceType;
+  imageUrl?: string;
+  benefits?: string[];
   popular?: boolean;
   color: string;
   deskAccess: string;

@@ -6,6 +6,13 @@ import {
   validateCoworkingBookingSchedule,
 } from "@/lib/operating-hours";
 import {
+  addDaysToYmd,
+  calculateCoworkingPrice,
+  getTodayWitaDateString,
+  resolveSpaceCapacity,
+} from "@/features/coworking/coworking-domain";
+import {
+  applyPersistentDomainCommand,
   claimQrisSessionForOrder,
   getCoworkingBookings,
   getPersistentOrders,
@@ -21,12 +28,24 @@ import {
 } from "@/lib/persistent-storage";
 import { resolveSelfOrderPaymentMethod } from "@/lib/self-order-policy";
 import { getRequestAuthUser, type ServerAuthResult } from "@/lib/server-auth";
-import { coworkingMasterDomainSpec } from "@/lib/sync-domains/spaces-spec";
+import { platformSettingsDomainSpec } from "@/lib/sync-domains/config-spec";
+import {
+  coworkingMasterDomainSpec,
+  INITIAL_SPACES,
+  reconcileCoworkingMasterDefaults,
+} from "@/lib/sync-domains/spaces-spec";
+import type { CoworkingMasterState } from "@/lib/domain-sync-types";
+import { isCoworkingOrderItem } from "@/lib/tax-breakdown";
 import type { RoleSlug } from "@/types/auth";
-import { INITIAL_SPACES } from "@/lib/sync-domains/spaces-spec";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 import { calculateEndTime, isSlotPast } from "@/features/pos/pos-coworking";
-import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
+import {
+  calculateCoworkingPricing,
+  checkPromoValidity,
+  validateVoucherCode,
+  type CoworkingTaxType,
+  type PromoConfig,
+} from "@/lib/promo";
 import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from "@/types/settings";
 
 const FILE_COWORKING_BOOKINGS = "coworking_bookings.json";
@@ -78,6 +97,324 @@ function isCallerOwnedBooking(
     return true;
   }
   return false;
+}
+
+type ResolvedBookingType = "HOURLY" | "DAILY" | "MONTHLY";
+
+function resolveBookingTypeOrError(
+  raw: unknown
+): { ok: true; bookingType: ResolvedBookingType } | { ok: false; response: NextResponse } {
+  if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) {
+    return { ok: true, bookingType: "HOURLY" };
+  }
+  if (typeof raw === "string") {
+    const normalized = raw.trim().toUpperCase();
+    if (normalized === "HOURLY" || normalized === "DAILY" || normalized === "MONTHLY") {
+      return { ok: true, bookingType: normalized };
+    }
+  }
+  return {
+    ok: false,
+    response: NextResponse.json(
+      { error: "INVALID_BOOKING_TYPE: Tipe booking coworking harus HOURLY, DAILY, atau MONTHLY." },
+      { status: 400 }
+    ),
+  };
+}
+
+function resolveDurationOrError(
+  raw: unknown,
+  bookingType: ResolvedBookingType
+): { ok: true; duration: number } | { ok: false; response: NextResponse } {
+  const defaultDuration = bookingType === "MONTHLY" ? 30 : 1;
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, duration: defaultDuration };
+  }
+  const parsed = Number(raw);
+  if (bookingType === "MONTHLY") {
+    if (
+      !Number.isFinite(parsed) ||
+      !Number.isInteger(parsed) ||
+      parsed < 30 ||
+      parsed > 360 ||
+      parsed % 30 !== 0
+    ) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            error:
+              "INVALID_DURATION: Durasi booking MONTHLY wajib berupa kelipatan 30 hari (30 hingga 360 hari).",
+          },
+          { status: 400 }
+        ),
+      };
+    }
+    return { ok: true, duration: parsed };
+  }
+
+  const maxDuration = bookingType === "HOURLY" ? 9 : 365;
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > maxDuration) {
+    const unitLabel = bookingType === "HOURLY" ? "jam" : "hari";
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: `INVALID_DURATION: Durasi booking ${bookingType} wajib berupa bilangan bulat antara 1 hingga ${maxDuration} ${unitLabel}.`,
+        },
+        { status: 400 }
+      ),
+    };
+  }
+  return { ok: true, duration: parsed };
+}
+
+function resolveAuthoritativeEndDate(
+  bookingDate: string,
+  bookingType: ResolvedBookingType,
+  duration: number
+): string {
+  const startYmd = normalizeDateToYMD(bookingDate) || bookingDate;
+  if (bookingType === "HOURLY") {
+    return startYmd;
+  }
+  return addDaysToYmd(startYmd, Math.max(1, duration) - 1);
+}
+
+function resolveBookingCustomerId(
+  booking: Record<string, unknown>,
+  fallbackUserId?: string
+): string | undefined {
+  const phone = typeof booking.guestPhone === "string" ? booking.guestPhone.trim() : "";
+  if (phone && phone !== "-") {
+    return phone;
+  }
+  const email =
+    typeof booking.guestEmail === "string" ? booking.guestEmail.trim().toLowerCase() : "";
+  if (email && email !== "-") {
+    return email;
+  }
+  return fallbackUserId;
+}
+
+async function redeemCoworkingPromoIfApplied(params: {
+  promoId?: string;
+  bookingId: string;
+  customerId?: string;
+  auth: ServerAuthResult;
+}): Promise<void> {
+  if (!params.promoId) return;
+  try {
+    await applyPersistentDomainCommand(
+      platformSettingsDomainSpec,
+      {
+        op: "REDEEM_PROMO",
+        opId: `cwk-booking-${params.bookingId}`,
+        promoIdOrCode: params.promoId,
+        customerId: params.customerId,
+      },
+      params.auth
+    );
+  } catch (err) {
+    console.error("[coworking/bookings] Non-fatal promo redemption failure:", err);
+  }
+}
+
+function resolveAuthoritativeBookingPricing(params: {
+  space: CoworkingSpaceItem;
+  bookingType: ResolvedBookingType;
+  duration: number;
+  booking: Record<string, unknown>;
+  platformSettings: PlatformSettings;
+  customerId?: string;
+  allowBundledPosDiscount?: boolean;
+  maxBundledPosDiscount?: number;
+}):
+  | {
+      ok: true;
+      price: number;
+      discount: number;
+      promoId?: string;
+      promoTitle?: string;
+      tax: number;
+      taxRatePercent: number;
+      taxType: CoworkingTaxType;
+      totalAmount: number;
+    }
+  | { ok: false; response: NextResponse } {
+  const {
+    space,
+    bookingType,
+    duration,
+    booking,
+    platformSettings,
+    customerId,
+    allowBundledPosDiscount = false,
+    maxBundledPosDiscount,
+  } = params;
+
+  const quote = calculateCoworkingPrice(space, { bookingType, duration });
+  const authoritativePrice = Math.max(0, Math.round(quote.basePrice));
+  const promos = (platformSettings.promos || []) as PromoConfig[];
+
+  const rawPromoId = typeof booking.promoId === "string" ? booking.promoId.trim() : "";
+  const rawPromoCode = typeof booking.promoCode === "string" ? booking.promoCode.trim() : "";
+  const rawPromoTitle = typeof booking.promoTitle === "string" ? booking.promoTitle.trim() : "";
+  const promoQuery = rawPromoCode || rawPromoId || rawPromoTitle;
+
+  let matchedPromo: PromoConfig | undefined;
+  if (promoQuery) {
+    const byId = rawPromoId ? promos.find((p) => p.id === rawPromoId) : undefined;
+    if (byId) {
+      const validity = checkPromoValidity(byId, authoritativePrice, {
+        scope: "COWORKING",
+        customerId,
+      });
+      if (!validity.isValid) {
+        return {
+          ok: false,
+          response: NextResponse.json(
+            { error: validity.reason || "Kode promo tidak valid.", code: "INVALID_PROMO" },
+            { status: 400 }
+          ),
+        };
+      }
+      matchedPromo = byId;
+    } else {
+      const validation = validateVoucherCode(promoQuery, promos, authoritativePrice, {
+        scope: "COWORKING",
+        customerId,
+      });
+      if (!validation.isValid || !validation.promo) {
+        if (!allowBundledPosDiscount || rawPromoCode || rawPromoId) {
+          return {
+            ok: false,
+            response: NextResponse.json(
+              { error: validation.reason || "Kode promo tidak valid.", code: "INVALID_PROMO" },
+              { status: 400 }
+            ),
+          };
+        }
+      } else {
+        matchedPromo = validation.promo;
+      }
+    }
+  }
+
+  const cwTax = platformSettings.categoryTax?.coworking;
+  const taxEnabled = Boolean(cwTax?.isEnabled && Number(cwTax.taxRatePercent) > 0);
+  const taxRatePercent = taxEnabled ? Number(cwTax!.taxRatePercent) : 0;
+  const taxRate = taxRatePercent / 100;
+  const taxType: CoworkingTaxType = taxEnabled ? cwTax!.taxType : "NON_TAX";
+
+  if (matchedPromo) {
+    const pricing = calculateCoworkingPricing(authoritativePrice, matchedPromo, taxRate, taxType);
+    return {
+      ok: true,
+      price: pricing.originalSubtotal,
+      discount: pricing.discountAmount,
+      promoId: matchedPromo.id,
+      promoTitle: matchedPromo.code || matchedPromo.name,
+      tax: pricing.tax,
+      taxRatePercent: pricing.taxRatePercent,
+      taxType: pricing.taxType,
+      totalAmount: pricing.total,
+    };
+  }
+
+  if (
+    allowBundledPosDiscount &&
+    typeof booking.discount === "number" &&
+    Number.isFinite(booking.discount) &&
+    booking.discount > 0
+  ) {
+    const maxAllowedDiscount =
+      maxBundledPosDiscount !== undefined
+        ? Math.min(authoritativePrice, Math.max(0, Math.round(maxBundledPosDiscount)))
+        : authoritativePrice;
+    const clampedDiscount = Math.min(maxAllowedDiscount, Math.round(booking.discount));
+    const subtotalAfterDiscount = Math.max(0, authoritativePrice - clampedDiscount);
+    const taxAmount = taxEnabled ? Math.round(subtotalAfterDiscount * taxRate) : 0;
+    return {
+      ok: true,
+      price: authoritativePrice,
+      discount: clampedDiscount,
+      ...(rawPromoTitle && clampedDiscount > 0 ? { promoTitle: rawPromoTitle } : {}),
+      tax: taxAmount,
+      taxRatePercent,
+      taxType,
+      totalAmount: subtotalAfterDiscount + taxAmount,
+    };
+  }
+
+  const pricing = calculateCoworkingPricing(authoritativePrice, undefined, taxRate, taxType);
+  return {
+    ok: true,
+    price: pricing.originalSubtotal,
+    discount: pricing.discountAmount,
+    tax: pricing.tax,
+    taxRatePercent: pricing.taxRatePercent,
+    taxType: pricing.taxType,
+    totalAmount: pricing.total,
+  };
+}
+
+async function syncSpaceAfterCancellation(params: {
+  spaceId: string;
+  cancelledBookingId: string;
+  cancelledBookingCode?: string;
+  allBookings: CoworkingBooking[];
+  auth: ServerAuthResult;
+}): Promise<void> {
+  const { spaceId, cancelledBookingId, cancelledBookingCode, allBookings, auth } = params;
+  const masterState = reconcileCoworkingMasterDefaults(
+    await readPersistentDomainState(coworkingMasterDomainSpec)
+  );
+  const targetSpace = masterState.spaces.find((s) => s.id === spaceId);
+  if (!targetSpace || targetSpace.status === "MAINTENANCE") return;
+
+  const maxCap = resolveSpaceCapacity(targetSpace);
+  const remainingCheckedIn = allBookings.filter(
+    (b) =>
+      b.spaceId === spaceId &&
+      b.id !== cancelledBookingId &&
+      b.bookingCode !== cancelledBookingCode &&
+      b.checkInStatus === "CHECKED_IN" &&
+      (b as { paymentStatus?: string }).paymentStatus !== "CANCELLED"
+  );
+
+  const shouldUpdate =
+    targetSpace.currentSession?.bookingCode === cancelledBookingCode ||
+    targetSpace.status === "RESERVED" ||
+    (targetSpace.status === "OCCUPIED" && remainingCheckedIn.length < maxCap);
+  if (!shouldUpdate) return;
+
+  const nextStatus =
+    remainingCheckedIn.length >= maxCap && remainingCheckedIn.length > 0
+      ? "OCCUPIED"
+      : "AVAILABLE";
+  const nextSession =
+    remainingCheckedIn.length > 0
+      ? {
+          guestName: remainingCheckedIn[0].guestName,
+          company: remainingCheckedIn[0].company || "Personal",
+          checkInTime: remainingCheckedIn[0].startTime || "Aktif",
+          endTime: remainingCheckedIn[0].endTime || "Selesai",
+          bookingCode: remainingCheckedIn[0].bookingCode,
+        }
+      : undefined;
+
+  await applyPersistentDomainCommand(
+    coworkingMasterDomainSpec,
+    {
+      op: "PATCH_SPACE_SESSION",
+      spaceId,
+      status: nextStatus,
+      currentSession: nextSession,
+      completedBookingCode: cancelledBookingCode,
+    },
+    auth
+  );
 }
 
 function validateBookingScheduleOrError(
@@ -344,12 +681,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const masterData = await readPersistentData<{ spaces?: CoworkingSpaceItem[] }>(
+    const rawMasterData = await readPersistentData<Partial<CoworkingMasterState>>(
       "coworking_master.json",
       { spaces: INITIAL_SPACES }
     );
-    const spaces = masterData?.spaces || INITIAL_SPACES;
-    const space = spaces.find((s) => s.id === booking.spaceId);
+    const reconciledMaster = reconcileCoworkingMasterDefaults({
+      spaces: Array.isArray(rawMasterData?.spaces) ? rawMasterData.spaces : INITIAL_SPACES,
+      members: Array.isArray(rawMasterData?.members) ? rawMasterData.members : [],
+      checkLogs: Array.isArray(rawMasterData?.checkLogs) ? rawMasterData.checkLogs : [],
+      plans: Array.isArray(rawMasterData?.plans) ? rawMasterData.plans : [],
+    });
+    const spaces = reconciledMaster.spaces;
+    let space = spaces.find((s) => s.id === booking.spaceId);
+    if (!space) {
+      space = INITIAL_SPACES.find((s) => s.id === booking.spaceId);
+    }
 
     if (!space) {
       return NextResponse.json(
@@ -365,20 +711,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const maxCapacity: number =
-      space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
+    const maxCapacity: number = resolveSpaceCapacity(space);
     booking.maxCapacity = maxCapacity;
-
-    if (
-      !booking.endTime &&
-      typeof booking.startTime === "string" &&
-      booking.startTime.trim()
-    ) {
-      booking.endTime = calculateEndTime(
-        booking.startTime,
-        typeof booking.duration === "number" ? booking.duration : 1
-      );
-    }
 
     const [existingBookings, platformSettings] = await Promise.all([
       getCoworkingBookings(),
@@ -387,10 +721,12 @@ export async function POST(req: NextRequest) {
         () => DEFAULT_PLATFORM_SETTINGS
       ),
     ]);
-    const matchedExisting = existingBookings.find(
-      (b: CoworkingBooking) =>
-        (booking.id && b.id === booking.id) ||
-        (booking.bookingCode && b.bookingCode === booking.bookingCode)
+    const normalizedBookingId =
+      typeof booking.id === "string" ? booking.id.trim() : "";
+    const matchedExisting = existingBookings.find((b: CoworkingBooking) =>
+      normalizedBookingId
+        ? b.id === normalizedBookingId
+        : Boolean(booking.bookingCode && b.bookingCode === booking.bookingCode)
     );
 
     if (auth.role === "CUSTOMER") {
@@ -455,9 +791,16 @@ export async function POST(req: NextRequest) {
         if (booking.checkInStatus === "CANCELLED") {
           const cancelledBooking = {
             ...matchedExisting,
-            checkInStatus: "CANCELLED",
+            checkInStatus: "CANCELLED" as const,
           };
           await saveCoworkingBooking(cancelledBooking);
+          await syncSpaceAfterCancellation({
+            spaceId: matchedExisting.spaceId,
+            cancelledBookingId: matchedExisting.id,
+            cancelledBookingCode: matchedExisting.bookingCode,
+            allBookings: existingBookings,
+            auth,
+          });
           return NextResponse.json({ success: true, booking: cancelledBooking });
         }
 
@@ -489,15 +832,48 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const bookingTypeRes = resolveBookingTypeOrError(booking.bookingType);
+      if (!bookingTypeRes.ok) return bookingTypeRes.response;
+      const resolvedBookingType = bookingTypeRes.bookingType;
+
+      const durationRes = resolveDurationOrError(booking.duration, resolvedBookingType);
+      if (!durationRes.ok) return durationRes.response;
+      const duration = durationRes.duration;
+      const authoritativeEndDate = resolveAuthoritativeEndDate(
+        bookingDate,
+        resolvedBookingType,
+        duration
+      );
+
+      const resolvedEndTime =
+        typeof booking.endTime === "string" && booking.endTime.trim()
+          ? booking.endTime.trim()
+          : resolvedBookingType === "HOURLY" &&
+              typeof booking.startTime === "string" &&
+              booking.startTime.trim()
+            ? calculateEndTime(booking.startTime, duration)
+            : undefined;
+
       const scheduleError = validateBookingScheduleOrError(
-        { ...booking, date: bookingDate },
+        {
+          ...booking,
+          bookingType: resolvedBookingType,
+          date: bookingDate,
+          endDate: authoritativeEndDate,
+          duration,
+          ...(resolvedEndTime ? { endTime: resolvedEndTime } : {}),
+        },
         platformSettings,
         !matchedExisting
       );
       if (scheduleError) return scheduleError;
 
-      const coworkingState = await readPersistentDomainState(coworkingMasterDomainSpec);
-      const matchedSpace = coworkingState.spaces.find((s) => s.id === booking.spaceId);
+      const coworkingState = reconcileCoworkingMasterDefaults(
+        await readPersistentDomainState(coworkingMasterDomainSpec)
+      );
+      const matchedSpace =
+        coworkingState.spaces.find((s) => s.id === booking.spaceId) ||
+        INITIAL_SPACES.find((s) => s.id === booking.spaceId);
       if (!matchedSpace) {
         return NextResponse.json(
           { error: "INVALID_SPACE: Ruang co-working tidak ditemukan di daftar resmi outlet." },
@@ -505,38 +881,16 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      let duration = 1;
-      if (booking.duration !== undefined && booking.duration !== null) {
-        const parsedDuration = Number(booking.duration);
-        if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-          return NextResponse.json(
-            { error: "INVALID_DURATION: Durasi booking coworking wajib berupa angka positif." },
-            { status: 400 }
-          );
-        }
-        duration = parsedDuration;
-      }
-
-      const bookingType =
-        typeof booking.bookingType === "string"
-          ? booking.bookingType.trim().toUpperCase()
-          : "HOURLY";
-      const rate =
-        bookingType === "DAILY"
-          ? Number(matchedSpace.dailyRate || 0)
-          : bookingType === "MONTHLY"
-          ? Number(matchedSpace.monthlyRate ?? (matchedSpace.dailyRate || 0) * 20)
-          : Number(matchedSpace.hourlyRate || 0);
-      const authoritativePrice = Math.max(0, Math.round(rate * duration));
-
-      const cwTax = platformSettings.categoryTax?.coworking;
-      const taxEnabled = Boolean(cwTax?.isEnabled && Number(cwTax.taxRatePercent) > 0);
-      const taxRatePercent = taxEnabled ? Number(cwTax!.taxRatePercent) : 0;
-      const taxType = taxEnabled ? cwTax!.taxType : "NON_TAX";
-      const taxAmount = taxEnabled
-        ? Math.round(authoritativePrice * (taxRatePercent / 100))
-        : 0;
-      const authoritativeTotal = authoritativePrice + taxAmount;
+      const customerId = resolveBookingCustomerId(booking, auth.userId);
+      const pricingRes = resolveAuthoritativeBookingPricing({
+        space: matchedSpace,
+        bookingType: resolvedBookingType,
+        duration,
+        booking,
+        platformSettings,
+        customerId,
+      });
+      if (!pricingRes.ok) return pricingRes.response;
 
       const identity = await resolveBookingIdentityDefaults({
         booking,
@@ -559,28 +913,24 @@ export async function POST(req: NextRequest) {
         spaceId: matchedSpace.id,
         spaceName: matchedSpace.name,
         spaceType: matchedSpace.type,
-        bookingType:
-          bookingType === "DAILY" || bookingType === "MONTHLY" ? bookingType : "HOURLY",
+        bookingType: resolvedBookingType,
         date: bookingDate,
-        ...(typeof booking.endDate === "string" && booking.endDate.trim()
-          ? { endDate: booking.endDate.trim() }
-          : {}),
+        endDate: authoritativeEndDate,
         startTime: typeof booking.startTime === "string" ? booking.startTime : "",
-        ...(typeof booking.endTime === "string" && booking.endTime.trim()
-          ? { endTime: booking.endTime.trim() }
-          : {}),
+        ...(resolvedEndTime ? { endTime: resolvedEndTime } : {}),
         duration,
-        price: authoritativePrice,
-        discount: 0,
-        tax: taxAmount,
-        taxRatePercent,
-        taxType,
+        price: pricingRes.price,
+        discount: pricingRes.discount,
+        ...(pricingRes.promoTitle ? { promoTitle: pricingRes.promoTitle } : {}),
+        tax: pricingRes.tax,
+        taxRatePercent: pricingRes.taxRatePercent,
+        taxType: pricingRes.taxType,
         ...(typeof booking.outletId === "string" && booking.outletId.trim()
           ? { outletId: booking.outletId.trim() }
           : {}),
-        totalAmount: authoritativeTotal,
+        totalAmount: pricingRes.totalAmount,
         paidAmount: 0,
-        remainingAmount: authoritativeTotal,
+        remainingAmount: pricingRes.totalAmount,
         paymentStatus: "PENDING",
         paymentMethod: methodResolution.paymentMethod,
         checkInStatus: "RESERVED",
@@ -613,13 +963,22 @@ export async function POST(req: NextRequest) {
         throw saveErr;
       }
 
-      if (customerBooking.paymentMethod === "QRIS" && authoritativeTotal > 0) {
+      if (pricingRes.promoId) {
+        await redeemCoworkingPromoIfApplied({
+          promoId: pricingRes.promoId,
+          bookingId: identity.id,
+          customerId,
+          auth,
+        });
+      }
+
+      if (customerBooking.paymentMethod === "QRIS" && pricingRes.totalAmount > 0) {
         const existingSession = await getPersistentQrisSession(identity.bookingCode);
         if (!existingSession || !isVerifiedQrisStatus(existingSession.status)) {
           await savePersistentQrisSession({
             orderId: identity.id,
             invoiceNumber: identity.bookingCode,
-            expectedAmount: authoritativeTotal,
+            expectedAmount: pricingRes.totalAmount,
             status: "PENDING",
             updatedAt: new Date().toISOString(),
           });
@@ -629,10 +988,102 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, booking: customerBooking });
     }
 
-    const staffBookingType =
-      typeof booking.bookingType === "string" && booking.bookingType.trim()
-        ? booking.bookingType.trim().toUpperCase()
-        : "HOURLY";
+    if (auth.role === "OWNER" && !isNonTenantOwner(auth)) {
+      return NextResponse.json(
+        {
+          error:
+            "FORBIDDEN: Pemilik tenant F&B tidak memiliki izin membuat atau mengubah booking co-working hub.",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (matchedExisting) {
+      if (
+        matchedExisting.checkInStatus === "CANCELLED" ||
+        matchedExisting.checkInStatus === "COMPLETED"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "FORBIDDEN: Booking yang sudah dibatalkan atau selesai tidak dapat diubah.",
+          },
+          { status: 403 }
+        );
+      }
+
+      if (
+        matchedExisting.paymentStatus === "PAID" &&
+        booking.paymentStatus !== undefined &&
+        booking.paymentStatus !== "PAID"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "FORBIDDEN: Status pembayaran booking yang sudah lunas tidak dapat diturunkan ke PENDING.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Lock immutable fields on existing booking updates
+      booking.id = matchedExisting.id;
+      booking.bookingCode = matchedExisting.bookingCode;
+      booking.spaceId = matchedExisting.spaceId;
+      booking.spaceName = matchedExisting.spaceName;
+      booking.spaceType = matchedExisting.spaceType;
+      booking.date = matchedExisting.date;
+      if (matchedExisting.endDate !== undefined) {
+        booking.endDate = matchedExisting.endDate;
+      } else {
+        delete booking.endDate;
+      }
+      booking.bookingType = matchedExisting.bookingType;
+      booking.duration = matchedExisting.duration;
+      booking.price = matchedExisting.price;
+      booking.discount = matchedExisting.discount;
+      if (matchedExisting.promoTitle !== undefined) {
+        booking.promoTitle = matchedExisting.promoTitle;
+      } else {
+        delete booking.promoTitle;
+      }
+      booking.tax = matchedExisting.tax;
+      booking.taxRatePercent = matchedExisting.taxRatePercent;
+      booking.taxType = matchedExisting.taxType;
+      booking.totalAmount = matchedExisting.totalAmount;
+      booking.userId = matchedExisting.userId ?? auth.userId;
+      booking.createdAt = matchedExisting.createdAt;
+      if (matchedExisting.paymentStatus === "PAID") {
+        booking.paymentStatus = "PAID";
+        booking.paidAmount = matchedExisting.paidAmount ?? matchedExisting.totalAmount;
+        booking.remainingAmount = 0;
+      } else if (booking.paymentStatus === "PAID") {
+        booking.paidAmount = matchedExisting.totalAmount;
+        booking.remainingAmount = 0;
+      }
+    }
+
+    const staffTypeRes = resolveBookingTypeOrError(
+      matchedExisting ? matchedExisting.bookingType : booking.bookingType
+    );
+    if (!staffTypeRes.ok) return staffTypeRes.response;
+    const staffBookingType = staffTypeRes.bookingType;
+
+    const staffDurationRes = resolveDurationOrError(
+      matchedExisting ? matchedExisting.duration : booking.duration,
+      staffBookingType
+    );
+    if (!staffDurationRes.ok) return staffDurationRes.response;
+    const staffDuration = staffDurationRes.duration;
+
+    if (
+      (!booking.endTime || typeof booking.endTime !== "string" || !booking.endTime.trim()) &&
+      staffBookingType === "HOURLY" &&
+      typeof booking.startTime === "string" &&
+      booking.startTime.trim()
+    ) {
+      booking.endTime = calculateEndTime(booking.startTime, staffDuration);
+    }
 
     if (!matchedExisting) {
       const staffDate = typeof booking.date === "string" ? booking.date.trim() : "";
@@ -650,6 +1101,11 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      booking.endDate = resolveAuthoritativeEndDate(
+        staffDate,
+        staffBookingType,
+        staffDuration
+      );
     }
 
     if (
@@ -657,8 +1113,111 @@ export async function POST(req: NextRequest) {
       booking.checkInStatus !== "CANCELLED" &&
       booking.checkInStatus !== "COMPLETED"
     ) {
-      const scheduleError = validateBookingScheduleOrError(booking, platformSettings, !matchedExisting);
+      const scheduleError = validateBookingScheduleOrError(
+        { ...booking, bookingType: staffBookingType, duration: staffDuration },
+        platformSettings,
+        !matchedExisting
+      );
       if (scheduleError) return scheduleError;
+    }
+
+    const isBundledPosOrder = booking.billedViaPosOrder === true;
+    let linkedPosOrderMaxDiscount: number | undefined;
+    let linkedPosOrderRecord:
+      | Awaited<ReturnType<typeof getPersistentOrders>>[number]
+      | undefined;
+
+    if (!matchedExisting && isBundledPosOrder) {
+      const linkedOrderId =
+        typeof booking.linkedOrderId === "string" ? booking.linkedOrderId.trim() : "";
+      if (!linkedOrderId) {
+        return NextResponse.json(
+          {
+            error:
+              "INVALID_LINKED_ORDER: Booking POS tertaut wajib menyertakan linkedOrderId yang valid.",
+            code: "INVALID_LINKED_ORDER",
+          },
+          { status: 400 }
+        );
+      }
+      const persistentOrders = await getPersistentOrders();
+      linkedPosOrderRecord = persistentOrders.find(
+        (o) =>
+          (o.id === linkedOrderId || o.orderNumber === linkedOrderId) &&
+          o.status !== "CANCELLED"
+      );
+      if (!linkedPosOrderRecord) {
+        return NextResponse.json(
+          {
+            error:
+              "INVALID_LINKED_ORDER: Order POS tertaut tidak ditemukan atau sudah dibatalkan.",
+            code: "INVALID_LINKED_ORDER",
+          },
+          { status: 409 }
+        );
+      }
+      const hasCoworkingOrCorporate =
+        Boolean(linkedPosOrderRecord.corporateInfo) ||
+        linkedPosOrderRecord.items.length === 0 ||
+        linkedPosOrderRecord.items.some((item) => isCoworkingOrderItem(item));
+      if (!hasCoworkingOrCorporate) {
+        return NextResponse.json(
+          {
+            error:
+              "INVALID_LINKED_ORDER: Order POS tertaut tidak memiliki item co-working atau pesanan korporat.",
+            code: "INVALID_LINKED_ORDER",
+          },
+          { status: 400 }
+        );
+      }
+      linkedPosOrderMaxDiscount = Math.max(
+        0,
+        Math.round(
+          Number(
+            linkedPosOrderRecord.coworkingDiscount ??
+              linkedPosOrderRecord.discount ??
+              0
+          ) || 0
+        )
+      );
+    }
+
+    let staffAppliedPromoId: string | undefined;
+    const staffCustomerId = resolveBookingCustomerId(booking);
+
+    if (!matchedExisting) {
+      const staffPricingRes = resolveAuthoritativeBookingPricing({
+        space,
+        bookingType: staffBookingType,
+        duration: staffDuration,
+        booking,
+        platformSettings,
+        customerId: staffCustomerId,
+        allowBundledPosDiscount: isBundledPosOrder,
+        maxBundledPosDiscount: linkedPosOrderMaxDiscount,
+      });
+      if (!staffPricingRes.ok) return staffPricingRes.response;
+
+      staffAppliedPromoId = staffPricingRes.promoId;
+      booking.spaceName = space.name;
+      booking.spaceType = space.type;
+      booking.bookingType = staffBookingType;
+      booking.duration = staffDuration;
+      booking.price = staffPricingRes.price;
+      booking.discount = staffPricingRes.discount;
+      if (staffPricingRes.promoTitle) {
+        booking.promoTitle = staffPricingRes.promoTitle;
+      } else {
+        delete booking.promoTitle;
+      }
+      booking.tax = staffPricingRes.tax;
+      booking.taxRatePercent = staffPricingRes.taxRatePercent;
+      booking.taxType = staffPricingRes.taxType;
+      booking.totalAmount = staffPricingRes.totalAmount;
+
+      const isPaid = booking.paymentStatus === "PAID";
+      booking.paidAmount = isPaid ? staffPricingRes.totalAmount : 0;
+      booking.remainingAmount = isPaid ? 0 : staffPricingRes.totalAmount;
     }
 
     if (!booking.userId) {
@@ -668,6 +1227,7 @@ export async function POST(req: NextRequest) {
     const staffIdentity = await resolveBookingIdentityDefaults({
       booking,
       existingBookings,
+      enforceUniqueCode: !matchedExisting,
     });
     booking.id = staffIdentity.id;
     booking.bookingCode = staffIdentity.bookingCode;
@@ -710,21 +1270,19 @@ export async function POST(req: NextRequest) {
       booking.paymentStatus === "PAID" &&
       (!matchedExisting || matchedExisting.paymentStatus !== "PAID")
     ) {
-      const isBundledPosPaidBooking =
-        booking.billedViaPosOrder === true &&
-        typeof booking.linkedOrderId === "string" &&
-        booking.linkedOrderId.trim().length > 0;
-
-      if (isBundledPosPaidBooking) {
-        const linkedOrderId = String(booking.linkedOrderId).trim();
-        const persistentOrders = await getPersistentOrders();
-        const linkedOrder = persistentOrders.find(
+      if (isBundledPosOrder) {
+        const linkedOrderId =
+          typeof booking.linkedOrderId === "string" ? booking.linkedOrderId.trim() : "";
+        const persistentOrders = linkedPosOrderRecord
+          ? [linkedPosOrderRecord]
+          : await getPersistentOrders();
+        const linkedPaidOrder = persistentOrders.find(
           (o) =>
             (o.id === linkedOrderId || o.orderNumber === linkedOrderId) &&
             o.paymentStatus === "PAID" &&
             o.status !== "CANCELLED"
         );
-        if (!linkedOrder) {
+        if (!linkedPaidOrder) {
           return NextResponse.json(
             {
               error:
@@ -779,6 +1337,15 @@ export async function POST(req: NextRequest) {
         );
       }
       throw saveErr;
+    }
+
+    if (!matchedExisting && staffAppliedPromoId && !isNonActiveStatus) {
+      await redeemCoworkingPromoIfApplied({
+        promoId: staffAppliedPromoId,
+        bookingId: staffIdentity.id,
+        customerId: staffCustomerId,
+        auth,
+      });
     }
 
     return NextResponse.json({ success: true, booking });

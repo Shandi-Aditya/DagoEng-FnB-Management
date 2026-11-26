@@ -1,7 +1,6 @@
 "use client";
 
-import { Building, MapPin, Users } from "lucide-react";
-import { useState } from "react";
+import { MapPin, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { spaceTypeLabel } from "@/features/pos/pos-coworking";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
+import { getSpaceImageUrl } from "@/features/coworking/coworking-domain";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import { formatCurrencyIDR } from "@/lib/utils";
 
@@ -29,8 +30,6 @@ export function CoworkingPhotoModal({
   space,
   onSelectSpace,
 }: CoworkingPhotoModalProps) {
-  const [imageFailed, setImageFailed] = useState(false);
-
   if (!space) return null;
 
   return (
@@ -56,20 +55,12 @@ export function CoworkingPhotoModal({
           </DialogDescription>
         </DialogHeader>
 
-        {space.imageUrl && !imageFailed ? (
-          <div className="relative h-48 w-full overflow-hidden rounded-lg bg-muted">
-            <img
-              src={space.imageUrl}
-              alt={space.name}
-              onError={() => setImageFailed(true)}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="flex h-36 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 text-muted-foreground">
-            <Building className="size-8 opacity-40" />
-          </div>
-        )}
+        <SpacePhotoThumbnail
+          src={getSpaceImageUrl(space)}
+          alt={space.name}
+          aspectRatio="aspect-video"
+          className="border"
+        />
 
         {space.description && (
           <p className="text-xs text-muted-foreground leading-relaxed">
@@ -95,7 +86,28 @@ export function CoworkingPhotoModal({
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-border pt-3">
+        {space.tieredRates && space.tieredRates.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="text-xs font-medium text-foreground">
+              Paket tarif durasi
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {space.tieredRates.map((tier) => (
+                <span
+                  key={tier.hours}
+                  className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs text-foreground"
+                >
+                  <span className="font-medium">{tier.hours} jam</span>
+                  <span className="font-mono tabular-nums text-muted-foreground">
+                    {formatCurrencyIDR(tier.price)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
           <div>
             <span className="font-mono text-sm font-medium tabular-nums text-foreground">
               {formatCurrencyIDR(space.hourlyRate)}

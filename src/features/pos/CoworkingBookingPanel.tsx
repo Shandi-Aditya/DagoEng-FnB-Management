@@ -15,7 +15,12 @@ import {
   spaceTypeLabel,
   type SlotAvailabilityResult,
 } from "@/features/pos/pos-coworking";
-import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import {
+  formatCoworkingTaxLabel,
+  calculateCoworkingPrice,
+  getSpaceImageUrl,
+} from "@/features/coworking/coworking-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
 import { useAuth } from "@/contexts/AuthContext";
 import { canUserViewFullCustomerContacts, maskCustomerPhone } from "@/features/customers/customers-domain";
 import type { CoworkingOrderItemMeta, POSCartItem, POSPaymentMethod } from "@/features/pos/types";
@@ -139,10 +144,11 @@ export function CoworkingBookingPanel({
 
   const handleAddToUnifiedCart = () => {
     if (!onAddToUnifiedCart) return;
-    const baseUnitPrice =
-      cwDuration >= 8 && selectedSpace.dailyRate
-        ? selectedSpace.dailyRate
-        : (selectedSpace.hourlyRate || 15000) * cwDuration;
+    const quote = calculateCoworkingPrice(selectedSpace, {
+      bookingType: "HOURLY",
+      duration: cwDuration,
+    });
+    const baseUnitPrice = quote.basePrice;
     const durationLabel = formatCoworkingDuration(cwDuration);
     const timeRangeLabel = `${cwStartTime}–${endTime} WITA`;
     const coworkingMeta: CoworkingOrderItemMeta = {
@@ -179,6 +185,16 @@ export function CoworkingBookingPanel({
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 text-xs text-card-foreground shadow-xs">
+      {/* Space Photo & Info */}
+      <div className="relative overflow-hidden rounded-lg">
+        <SpacePhotoThumbnail
+          src={getSpaceImageUrl(selectedSpace)}
+          alt={selectedSpace.name}
+          aspectRatio="aspect-video"
+          className="rounded-lg shadow-xs"
+        />
+      </div>
+
       {/* Panel header */}
       <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
         <div className="space-y-0.5 min-w-0">
@@ -223,12 +239,22 @@ export function CoworkingBookingPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {QUICK_DURATIONS.map((item) => {
+          {(Array.isArray(selectedSpace.tieredRates) && selectedSpace.tieredRates.length > 0
+            ? selectedSpace.tieredRates.map((t) => ({
+                hours: t.hours,
+                label: t.hours === 8 ? "Seharian (8 jam)" : `${t.hours} jam`,
+                price: t.price,
+              }))
+            : QUICK_DURATIONS.map((item) => ({
+                hours: item.hours,
+                label: item.label,
+                price:
+                  item.hours === 8 && selectedSpace.dailyRate
+                    ? selectedSpace.dailyRate
+                    : selectedSpace.hourlyRate * item.hours,
+              }))
+          ).map((item) => {
             const isSelected = cwDuration === item.hours;
-            const price =
-              item.hours === 8 && selectedSpace.dailyRate
-                ? selectedSpace.dailyRate
-                : selectedSpace.hourlyRate * item.hours;
 
             return (
               <button
@@ -244,7 +270,7 @@ export function CoworkingBookingPanel({
               >
                 <span className="text-xs font-medium">{item.label}</span>
                 <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {formatCurrencyIDR(price)}
+                  {formatCurrencyIDR(item.price)}
                 </span>
               </button>
             );
@@ -372,7 +398,7 @@ export function CoworkingBookingPanel({
 
       {/* Usage type */}
       <div className="space-y-2 border-t border-border pt-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <FieldLabel>Tipe penggunaan</FieldLabel>
           <Tabs
             value={cwUsageType}
@@ -557,7 +583,7 @@ export function CoworkingBookingPanel({
                 variant={isSelected ? "default" : "outline"}
                 size="lg"
                 onClick={() => onPaymentMethodChange(pm.id)}
-                className="w-full flex-col gap-0.5"
+                className="h-auto w-full flex-col gap-0.5 py-1.5"
               >
                 <span className="font-medium leading-tight">{pm.label}</span>
                 <span className={cn("text-xs font-normal", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>

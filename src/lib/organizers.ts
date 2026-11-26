@@ -101,7 +101,7 @@ export function loadOrganizersFromDisk(): CommunityOrganizerProfile[] {
 
   let parsed: any;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw.replace(/^\uFEFF/, ""));
   } catch (parseErr) {
     console.error("ORGANIZER_DATA_CORRUPT: Failed to parse organizers.json as valid JSON:", parseErr);
     throw new Error("ORGANIZER_DATA_CORRUPT: Berkas profil penyelenggara rusak atau tidak valid.");

@@ -38,7 +38,15 @@ export interface WifiFnBRule {
 
 export interface WifiCoworkingRule {
   id: string;
-  spaceType: "HOT_DESK" | "DEDICATED_DESK" | "MEETING_ROOM" | "ALL";
+  spaceType:
+    | "OPEN_SPACE"
+    | "SPACE_MONITOR"
+    | "SMALL_MEETING_ROOM"
+    | "LARGE_MEETING_ROOM"
+    | "HOT_DESK"
+    | "DEDICATED_DESK"
+    | "MEETING_ROOM"
+    | "ALL";
   bookingType: "HOURLY" | "DAILY" | "MONTHLY" | "ALL";
   durationMode: "FOLLOW_BOOKING" | "FIXED_HOURS" | "FULL_DAY_UNTIL_CLOSING";
   fixedDurationMinutes?: number;
@@ -414,9 +422,27 @@ export function getOrCreateSimulatedCoworkingVoucher(
     return found;
   }
 
-  const isMeeting = spaceType === "MEETING_ROOM" || bookingType === "MEETING_ROOM";
+  const normalizedBookingType = (bookingType || "HOURLY").trim().toUpperCase();
+  const isMeeting =
+    spaceType === "MEETING_ROOM" ||
+    spaceType === "SMALL_MEETING_ROOM" ||
+    spaceType === "LARGE_MEETING_ROOM" ||
+    normalizedBookingType === "MEETING_ROOM";
   const graceMinutes = isMeeting ? 20 : 15;
-  const totalMinutes = durationHours * 60 + graceMinutes;
+  const safeDuration = Math.max(1, Number(durationHours) || 1);
+  const baseMinutes =
+    normalizedBookingType === "DAILY"
+      ? safeDuration * 9 * 60
+      : normalizedBookingType === "MONTHLY"
+        ? (safeDuration >= 28 ? safeDuration : safeDuration * 30) * 24 * 60
+        : safeDuration * 60;
+  const totalMinutes = baseMinutes + graceMinutes;
+  const durationFormatted =
+    normalizedBookingType === "DAILY"
+      ? `${safeDuration} Hari (+${graceMinutes} mnt)`
+      : normalizedBookingType === "MONTHLY"
+        ? `${safeDuration >= 28 ? `${safeDuration} Hari` : `${safeDuration} Bulan`} (+${graceMinutes} mnt)`
+        : `${safeDuration} Jam (+${graceMinutes} mnt)`;
   const maxDevices = isMeeting ? 10 : 1;
 
   const suffix = deriveDeterministicVoucherSuffix(bookingCode);
@@ -434,7 +460,7 @@ export function getOrCreateSimulatedCoworkingVoucher(
     outletId: "out-sgr",
     outletName,
     durationMinutes: totalMinutes,
-    durationFormatted: `${durationHours} Jam (+${graceMinutes} mnt)`,
+    durationFormatted,
     issuedAt: now.toISOString(),
     activatedAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),

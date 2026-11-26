@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Award, Check, Laptop, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
-import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +11,8 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { CoworkingMembershipPlan, CoworkingSpaceItem } from "@/types/coworking";
 
 import { spaceTypeLabel } from "./customer-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
+import { getSpaceImageUrl, resolveSpaceCapacity } from "@/features/coworking/coworking-domain";
 
 export interface CustomerCoworkingTabProps {
   spaces: CoworkingSpaceItem[];
@@ -57,29 +58,38 @@ export function CustomerCoworkingTab({
           <Button
             type="button"
             size="sm"
-            variant={filterType === "HOT_DESK" ? "secondary" : "outline"}
-            onClick={() => setFilterType("HOT_DESK")}
-            className={filterType === "HOT_DESK" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+            variant={filterType === "OPEN_SPACE" ? "secondary" : "outline"}
+            onClick={() => setFilterType("OPEN_SPACE")}
+            className={filterType === "OPEN_SPACE" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
           >
-            Hot desk
+            Open space
           </Button>
           <Button
             type="button"
             size="sm"
-            variant={filterType === "DEDICATED_DESK" ? "secondary" : "outline"}
-            onClick={() => setFilterType("DEDICATED_DESK")}
-            className={filterType === "DEDICATED_DESK" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+            variant={filterType === "SPACE_MONITOR" ? "secondary" : "outline"}
+            onClick={() => setFilterType("SPACE_MONITOR")}
+            className={filterType === "SPACE_MONITOR" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
           >
-            Dedicated desk
+            Space monitor
           </Button>
           <Button
             type="button"
             size="sm"
-            variant={filterType === "MEETING_ROOM" ? "secondary" : "outline"}
-            onClick={() => setFilterType("MEETING_ROOM")}
-            className={filterType === "MEETING_ROOM" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+            variant={filterType === "SMALL_MEETING_ROOM" ? "secondary" : "outline"}
+            onClick={() => setFilterType("SMALL_MEETING_ROOM")}
+            className={filterType === "SMALL_MEETING_ROOM" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
           >
-            Ruang rapat
+            Small meeting
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={filterType === "LARGE_MEETING_ROOM" ? "secondary" : "outline"}
+            onClick={() => setFilterType("LARGE_MEETING_ROOM")}
+            className={filterType === "LARGE_MEETING_ROOM" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+          >
+            Large meeting
           </Button>
         </div>
       </div>
@@ -95,26 +105,21 @@ export function CustomerCoworkingTab({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           {filteredSpaces.map((space) => {
-            const isAvailable = space.status === "AVAILABLE";
+            const isShared = resolveSpaceCapacity(space) > 1;
+            const isAvailable =
+              space.status === "AVAILABLE" || (isShared && space.status === "RESERVED");
 
             return (
               <Card key={space.id} className="flex flex-col justify-between overflow-hidden shadow-xs hover:border-foreground/25 transition-colors">
                 <div className="flex flex-col">
                   {/* Foto Ruang */}
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted border-b">
-                    {space.imageUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={space.imageUrl}
-                        alt={space.name}
-                        className="size-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex size-full items-center justify-center bg-muted/40 text-muted-foreground">
-                        <Laptop className="size-8 opacity-30" />
-                      </div>
-                    )}
+                  <div className="relative w-full border-b">
+                    <SpacePhotoThumbnail
+                      src={getSpaceImageUrl(space)}
+                      alt={space.name}
+                      aspectRatio="aspect-video"
+                      className="rounded-none"
+                    />
                     <div className="absolute top-2.5 right-2.5">
                       <Badge variant="secondary" className="backdrop-blur-md bg-background/80 shadow-xs font-normal">
                         {spaceTypeLabel(space.type)}
@@ -150,15 +155,31 @@ export function CustomerCoworkingTab({
 
                 <div className="flex items-center justify-between border-t p-4 pt-3 bg-muted/10">
                   <div className="flex flex-col">
-                    <span className="font-mono text-base font-medium text-foreground tabular-nums">
-                      {formatCurrencyIDR(space.hourlyRate)}
-                      <span className="text-xs font-normal text-muted-foreground">/jam</span>
-                    </span>
-                    {space.dailyRate ? (
-                      <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                        {formatCurrencyIDR(space.dailyRate)}/hari
-                      </span>
-                    ) : null}
+                    {space.tieredRates && space.tieredRates.length > 0 ? (
+                      <>
+                        <span className="font-mono text-base font-medium text-foreground tabular-nums">
+                          {formatCurrencyIDR(space.tieredRates[0].price)}
+                          <span className="text-xs font-normal text-muted-foreground">
+                            /{space.tieredRates[0].hours} jam
+                          </span>
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                          Mulai {space.tieredRates.map((t) => `${t.hours}j`).join(" · ")}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-mono text-base font-medium text-foreground tabular-nums">
+                          {formatCurrencyIDR(space.hourlyRate)}
+                          <span className="text-xs font-normal text-muted-foreground">/jam</span>
+                        </span>
+                        {space.dailyRate ? (
+                          <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                            {formatCurrencyIDR(space.dailyRate)}/hari
+                          </span>
+                        ) : null}
+                      </>
+                    )}
                   </div>
 
                   <Button
@@ -167,7 +188,13 @@ export function CustomerCoworkingTab({
                     disabled={!isAvailable}
                     onClick={() => onOpenBookingModal(space)}
                   >
-                    <span>{isAvailable ? "Pesan ruang" : "Penuh"}</span>
+                    <span>
+                      {isAvailable
+                        ? "Pesan ruang"
+                        : space.status === "MAINTENANCE"
+                        ? "Pemeliharaan"
+                        : "Penuh"}
+                    </span>
                   </Button>
                 </div>
               </Card>
@@ -191,27 +218,48 @@ export function CustomerCoworkingTab({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {membershipPlans.map((plan) => (
-              <Card key={plan.id} className="flex flex-col justify-between">
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium">{plan.name}</CardTitle>
-                    <Badge variant="secondary">{plan.billingCycle}</Badge>
+              <Card key={plan.id} className="flex flex-col justify-between overflow-hidden">
+                <div className="flex flex-col">
+                  <SpacePhotoThumbnail
+                    src={getSpaceImageUrl(plan)}
+                    alt={plan.name}
+                    aspectRatio="aspect-video"
+                    className="border-b rounded-none"
+                  />
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">{plan.name}</CardTitle>
+                      <Badge variant="secondary">{plan.billingCycle}</Badge>
+                    </div>
+                    <span className="font-mono text-base font-medium text-foreground tabular-nums mt-1 block">
+                      {plan.priceFormatted}
+                    </span>
+                    <p className="text-xs text-muted-foreground mt-1">{plan.deskAccess}</p>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-2">
+                    <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      {plan.amenities?.map((item, i) => (
+                        <li key={i} className="flex items-center gap-1.5">
+                          <Check className="size-3 text-success shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </div>
+                {onOpenMembershipModal ? (
+                  <div className="border-t p-4 pt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => onOpenMembershipModal(plan)}
+                    >
+                      Pilih paket
+                    </Button>
                   </div>
-                  <span className="font-mono text-base font-medium text-foreground tabular-nums mt-1 block">
-                    {plan.priceFormatted}
-                  </span>
-                  <p className="text-xs text-muted-foreground mt-1">{plan.deskAccess}</p>
-                </CardHeader>
-                <CardContent className="p-4 pt-2">
-                  <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-                    {plan.amenities?.map((item, i) => (
-                      <li key={i} className="flex items-center gap-1.5">
-                        <Check className="size-3 text-success shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
+                ) : null}
               </Card>
             ))}
           </div>

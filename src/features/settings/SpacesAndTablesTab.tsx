@@ -503,6 +503,10 @@ export function SpacesAndTablesTab(props: SpacesAndTablesTabProps) {
                 <div className="flex flex-col gap-1.5">
                   <Label>Tipe</Label>
                   <NativeSelect value={formSpaceType} onChange={(e) => onFormSpaceTypeChange(e.target.value)}>
+                    <NativeSelectOption value="OPEN_SPACE">Open space</NativeSelectOption>
+                    <NativeSelectOption value="SPACE_MONITOR">Space monitor</NativeSelectOption>
+                    <NativeSelectOption value="SMALL_MEETING_ROOM">Small meeting room</NativeSelectOption>
+                    <NativeSelectOption value="LARGE_MEETING_ROOM">Large meeting room</NativeSelectOption>
                     <NativeSelectOption value="HOT_DESK">Hot desk</NativeSelectOption>
                     <NativeSelectOption value="DEDICATED_DESK">Dedicated desk</NativeSelectOption>
                     <NativeSelectOption value="MEETING_ROOM">Ruang rapat</NativeSelectOption>
