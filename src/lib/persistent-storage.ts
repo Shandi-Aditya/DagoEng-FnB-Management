@@ -396,10 +396,12 @@ export async function saveCoworkingBooking(
       }
     }
 
-    const index = existing.findIndex(
-      (b) =>
-        b.id === booking.id ||
-        (booking.bookingCode && b.bookingCode === booking.bookingCode)
+    const normalizedBookingId =
+      typeof booking.id === "string" ? booking.id.trim() : "";
+    const index = existing.findIndex((b) =>
+      normalizedBookingId
+        ? b.id === normalizedBookingId
+        : Boolean(booking.bookingCode && b.bookingCode === booking.bookingCode)
     );
     if (index >= 0) {
       const updated = [...existing];

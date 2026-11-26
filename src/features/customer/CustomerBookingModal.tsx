@@ -118,6 +118,24 @@ export function CustomerBookingModal({
     }
   }, [qrisOnly, paymentMethod, onPaymentMethodChange]);
 
+  useEffect(() => {
+    if (!space || bookingDurationMode !== "HOURLY") return;
+    if (isWithinCoworkingHours(bookingStartTime, bookingDurationHours)) return;
+    const maxAvailableHours = Math.max(
+      1,
+      Math.floor((COWORKING_CLOSE_MINUTES - parseTimeToMinutes(bookingStartTime)) / 60)
+    );
+    if (bookingDurationHours !== maxAvailableHours) {
+      onBookingDurationHoursChange(maxAvailableHours);
+    }
+  }, [
+    space,
+    bookingDurationMode,
+    bookingStartTime,
+    bookingDurationHours,
+    onBookingDurationHoursChange,
+  ]);
+
   if (!space) return null;
 
   const cwTaxConfig = settings?.categoryTax?.coworking;
@@ -244,18 +262,49 @@ export function CustomerBookingModal({
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {(space.tieredRates && space.tieredRates.length > 0
-                  ? space.tieredRates.map((t) => ({
+                {(() => {
+                  const maxAvailableHours = Math.max(
+                    1,
+                    Math.floor((COWORKING_CLOSE_MINUTES - parseTimeToMinutes(bookingStartTime)) / 60)
+                  );
+                  if (space.tieredRates && space.tieredRates.length > 0) {
+                    const hasOneHourTier = space.tieredRates.some((t) => Number(t.hours) === 1);
+                    const baseOptions = space.tieredRates.map((t) => ({
                       hours: t.hours,
                       price: t.price,
-                    }))
-                  : [
-                      { hours: 1, price: space.hourlyRate },
-                      { hours: 2, price: space.hourlyRate * 2 },
-                      { hours: 4, price: space.hourlyRate * 4 },
-                      { hours: 8, price: space.dailyRate || space.hourlyRate * 8 },
-                    ]
-                ).map((t) => {
+                    }));
+                    const canFitOneHour = isWithinCoworkingHours(bookingStartTime, 1);
+                    const noTierFits = !space.tieredRates.some((t) =>
+                      isWithinCoworkingHours(bookingStartTime, t.hours)
+                    );
+                    if (
+                      !hasOneHourTier &&
+                      canFitOneHour &&
+                      (bookingStartTime === "17:00" ||
+                        maxAvailableHours === 1 ||
+                        bookingDurationHours === 1 ||
+                        noTierFits)
+                    ) {
+                      return [
+                        {
+                          hours: 1,
+                          price: calculateCoworkingPrice(space, {
+                            bookingType: "HOURLY",
+                            duration: 1,
+                          }).basePrice,
+                        },
+                        ...baseOptions,
+                      ];
+                    }
+                    return baseOptions;
+                  }
+                  return [
+                    { hours: 1, price: space.hourlyRate },
+                    { hours: 2, price: space.hourlyRate * 2 },
+                    { hours: 4, price: space.hourlyRate * 4 },
+                    { hours: 8, price: space.dailyRate || space.hourlyRate * 8 },
+                  ];
+                })().map((t) => {
                   const exceedsClosing = !isWithinCoworkingHours(bookingStartTime, t.hours);
                   return (
                     <Button

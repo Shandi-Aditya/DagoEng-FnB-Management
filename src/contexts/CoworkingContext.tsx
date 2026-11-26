@@ -54,6 +54,9 @@ export interface CoworkingMemberProfile {
   contact: string;
   email: string;
   packageName: string;
+  planId?: string;
+  creditHours?: number;
+  remainingHours?: number;
   startDate: string;
   expiryDate: string;
   status: "ACTIVE" | "EXPIRED";
@@ -106,6 +109,13 @@ export type NewBookingInput = Omit<
   checkInStatus?: "RESERVED" | "CHECKED_IN" | "COMPLETED" | "CANCELLED";
 };
 
+export interface CoworkingSyncResult {
+  synced: boolean;
+  rejected?: boolean;
+  error?: string;
+  booking?: CoworkingBookingRecord;
+}
+
 interface CoworkingContextType {
   spaces: CoworkingSpaceItem[];
   bookings: typeof INITIAL_BOOKINGS;
@@ -125,6 +135,16 @@ interface CoworkingContextType {
       onSyncRejected?: (error: string) => void;
     }
   ) => (typeof INITIAL_BOOKINGS)[0];
+  bookSpaceWithSync: (
+    booking: NewBookingInput,
+    options?: {
+      waitBeforeSync?: Promise<boolean>;
+      onSyncRejected?: (error: string) => void;
+    }
+  ) => {
+    booking: (typeof INITIAL_BOOKINGS)[0];
+    serverSync: Promise<CoworkingSyncResult>;
+  };
   confirmBookingPayment: (
     bookingId: string,
     paymentMethod?: string,
@@ -150,23 +170,32 @@ const BOOKINGS_ENDPOINT = "/api/coworking/bookings";
 function syncBookingToServer(
   booking: CoworkingBookingRecord,
   isCreate: boolean,
-  onPermanentReject?: (error?: string) => void
-): void {
-  if (typeof window === "undefined") return;
-  void syncWithOutbox({
+  onPermanentReject?: (error?: string) => void,
+  onSynced?: (serverBooking: CoworkingBookingRecord) => void
+): Promise<CoworkingSyncResult> {
+  if (typeof window === "undefined") {
+    return Promise.resolve({ synced: false });
+  }
+  return syncWithOutbox<{ booking?: CoworkingBookingRecord }>({
     id: booking.id,
     endpoint: BOOKINGS_ENDPOINT,
     method: "POST",
     isCreate,
     payload: { booking },
   })
-    .then((res) => {
+    .then((res): CoworkingSyncResult => {
       if (res.rejected) {
         onPermanentReject?.(res.error);
         notify.error(res.error || "Gagal menyimpan booking ruang kerja");
+        return { synced: false, rejected: true, error: res.error };
       }
+      if (res.synced && res.data?.booking) {
+        onSynced?.(res.data.booking);
+        return { synced: true, booking: res.data.booking };
+      }
+      return { synced: res.synced, error: res.error };
     })
-    .catch(() => {});
+    .catch((): CoworkingSyncResult => ({ synced: false }));
 }
 
 function computeHourlyEndTime(
@@ -251,6 +280,14 @@ function deriveEffectiveSpaces(
       }
     }
 
+    if (maxCap > 1 && space.status === "RESERVED") {
+      return {
+        ...space,
+        status: "AVAILABLE",
+        currentSession: undefined,
+      };
+    }
+
     return space;
   });
 }
@@ -285,6 +322,92 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       return next;
     },
     []
+  );
+
+  const reconcileSyncedBooking = useCallback(
+    (
+      localId: string,
+      localBookingCode: string,
+      serverBooking: CoworkingBookingRecord
+    ) => {
+      commitBookings((prev) =>
+        prev.map((b) =>
+          b.id === localId || b.id === serverBooking.id
+            ? {
+                ...b,
+                ...serverBooking,
+                bookingCode: serverBooking.bookingCode ?? b.bookingCode,
+                price: serverBooking.price ?? b.price,
+                discount: serverBooking.discount ?? b.discount,
+                promoTitle: serverBooking.promoTitle ?? b.promoTitle,
+                tax: serverBooking.tax ?? b.tax,
+                taxType: serverBooking.taxType ?? b.taxType,
+                taxRatePercent: serverBooking.taxRatePercent ?? b.taxRatePercent,
+                totalAmount: serverBooking.totalAmount ?? b.totalAmount,
+                paidAmount: serverBooking.paidAmount ?? b.paidAmount,
+                remainingAmount: serverBooking.remainingAmount ?? b.remainingAmount,
+                endDate: serverBooking.endDate ?? b.endDate,
+              }
+            : b
+        )
+      );
+
+      const nextCode = serverBooking.bookingCode;
+      if (nextCode && nextCode !== localBookingCode) {
+        const snapshot = coworkingMasterSyncClient.getSnapshot();
+        const currentSpace = snapshot.spaces.find(
+          (s) => s.id === serverBooking.spaceId
+        );
+        const hasSessionMatch =
+          currentSpace?.currentSession?.bookingCode === localBookingCode;
+        const matchingLogs = snapshot.checkLogs.filter(
+          (log) => log.bookingCode === localBookingCode
+        );
+
+        if (hasSessionMatch || matchingLogs.length > 0) {
+          const targetSpaceId = currentSpace?.id ?? serverBooking.spaceId;
+          const targetStatus = currentSpace?.status ?? "AVAILABLE";
+          const targetSession =
+            hasSessionMatch && currentSpace?.currentSession
+              ? {
+                  ...currentSpace.currentSession,
+                  bookingCode: nextCode,
+                }
+              : currentSpace?.currentSession;
+          const logsToReconcile: Array<CheckInOutLog | undefined> =
+            matchingLogs.length > 0 ? matchingLogs : [undefined];
+
+          logsToReconcile.forEach((matchingLog, index) => {
+            const patchCmd: CoworkingMasterCommand = {
+              op: "PATCH_SPACE_SESSION",
+              spaceId: targetSpaceId,
+              status: targetStatus,
+              currentSession: targetSession,
+              ...(matchingLog
+                ? {
+                    checkLog: {
+                      ...matchingLog,
+                      bookingCode: nextCode,
+                    },
+                  }
+                : {}),
+            };
+            mutateCoworkingMaster(
+              (prev) => applyCoworkingMasterCommand(prev, patchCmd),
+              {
+                id:
+                  index === 0
+                    ? `cwk-session-reconcile-${serverBooking.id}`
+                    : `cwk-session-reconcile-${serverBooking.id}-${matchingLog?.id ?? index}`,
+                isCreate: false,
+                command: patchCmd,
+              }
+            );
+          });
+        }
+      }
+    },
+    [commitBookings, mutateCoworkingMaster]
   );
 
   const hydrateFromServer = useCallback(async () => {
@@ -602,13 +725,16 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const bookSpace = (
+  const bookSpaceWithSync = (
     bookingData: NewBookingInput,
     options?: {
       waitBeforeSync?: Promise<boolean>;
       onSyncRejected?: (error: string) => void;
     }
-  ): (typeof INITIAL_BOOKINGS)[0] => {
+  ): {
+    booking: (typeof INITIAL_BOOKINGS)[0];
+    serverSync: Promise<CoworkingSyncResult>;
+  } => {
     const scheduleCheck = validateCoworkingBookingSchedule(
       bookingData,
       settings?.coworkingHolidays
@@ -618,12 +744,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     }
 
     const targetSpace = spaces.find((s) => s.id === bookingData.spaceId);
-    const maxCapacity =
-      targetSpace?.type === "OPEN_SPACE" ||
-      targetSpace?.type === "SPACE_MONITOR" ||
-      targetSpace?.type === "HOT_DESK"
-        ? Math.max(1, targetSpace.capacity || 1)
-        : 1;
+    const maxCapacity = resolveSpaceCapacity(targetSpace);
     const resolvedEndTime =
       bookingData.endTime ||
       (bookingData.bookingType === "HOURLY"
@@ -695,12 +816,21 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       : undefined;
 
     const maxCap = prevSpaceSnapshot ? resolveSpaceCapacity(prevSpaceSnapshot) : 1;
-    const currentCheckedInCount = bookingsRef.current.filter(
+    const existingCheckedInCount = bookingsRef.current.filter(
       (b) => b.spaceId === bookingData.spaceId && b.checkInStatus === "CHECKED_IN"
-    ).length + (isCheckedInNow ? 1 : 0);
+    ).length;
+    const currentCheckedInCount = existingCheckedInCount + (isCheckedInNow ? 1 : 0);
     const nextStatus = isCheckedInNow
-      ? (currentCheckedInCount >= maxCap ? "OCCUPIED" : "AVAILABLE")
-      : "RESERVED";
+      ? currentCheckedInCount >= maxCap
+        ? "OCCUPIED"
+        : "AVAILABLE"
+      : maxCap > 1
+        ? existingCheckedInCount >= maxCap
+          ? "OCCUPIED"
+          : "AVAILABLE"
+        : prevSpaceSnapshot?.status === "OCCUPIED"
+          ? "OCCUPIED"
+          : "RESERVED";
 
     const sessionCmd: CoworkingMasterCommand = {
       op: "PATCH_SPACE_SESSION",
@@ -711,10 +841,10 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
             guestName: bookingData.guestName,
             company: bookingData.company || "Personal",
             checkInTime: nowFormatted,
-            endTime: bookingData.endTime || "Selesai",
+            endTime: resolvedEndTime || "Selesai",
             bookingCode,
           }
-        : undefined,
+        : prevSpaceSnapshot?.currentSession,
       checkLog: newLog,
     };
 
@@ -728,53 +858,80 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     );
 
     commitBookings((prev) => [newBooking, ...prev]);
+    const rollbackLogId = newLog?.id;
     const rollbackBooking = (errMsg?: string) => {
       commitBookings((prev) => prev.filter((b) => b.id !== newBooking.id));
-      if (prevSpaceSnapshot) {
-        const currentSpace = coworkingMasterSyncClient
-          .getSnapshot()
-          .spaces.find((s) => s.id === prevSpaceSnapshot.id);
-        const wasModifiedByThisBooking =
-          currentSpace?.currentSession?.bookingCode === newBooking.bookingCode ||
-          (prevSpaceSnapshot.status === "AVAILABLE" &&
-            currentSpace?.status === "RESERVED");
-        if (wasModifiedByThisBooking) {
-          const revertCmd: CoworkingMasterCommand = {
-            op: "PATCH_SPACE_SESSION",
-            spaceId: prevSpaceSnapshot.id,
-            status: prevSpaceSnapshot.status,
-            currentSession: prevSpaceSnapshot.currentSession,
-          };
-          mutateCoworkingMaster(
-            (prev) => applyCoworkingMasterCommand(prev, revertCmd),
-            {
-              id: `cwk-session-rollback-${newBooking.id}`,
-              isCreate: false,
-              command: revertCmd,
-            }
-          );
-        }
+      const masterSnapshot = coworkingMasterSyncClient.getSnapshot();
+      const currentSpace = prevSpaceSnapshot
+        ? masterSnapshot.spaces.find((s) => s.id === prevSpaceSnapshot.id)
+        : undefined;
+      const wasModifiedByThisBooking = Boolean(
+        prevSpaceSnapshot &&
+          (currentSpace?.currentSession?.bookingCode === newBooking.bookingCode ||
+            (prevSpaceSnapshot.status === "AVAILABLE" &&
+              currentSpace?.status === "RESERVED"))
+      );
+      const hasRollbackLog = Boolean(
+        rollbackLogId &&
+          masterSnapshot.checkLogs.some((log) => log.id === rollbackLogId)
+      );
+
+      if (wasModifiedByThisBooking || hasRollbackLog) {
+        const revertCmd: CoworkingMasterCommand = {
+          op: "PATCH_SPACE_SESSION",
+          spaceId: prevSpaceSnapshot?.id ?? newBooking.spaceId,
+          status:
+            wasModifiedByThisBooking && prevSpaceSnapshot
+              ? prevSpaceSnapshot.status
+              : currentSpace?.status ?? "AVAILABLE",
+          currentSession: wasModifiedByThisBooking
+            ? prevSpaceSnapshot?.currentSession
+            : currentSpace?.currentSession,
+          ...(hasRollbackLog ? { completedBookingCode: newBooking.bookingCode } : {}),
+        };
+        mutateCoworkingMaster(
+          (prev) => {
+            const reverted = applyCoworkingMasterCommand(prev, revertCmd);
+            if (!rollbackLogId) return reverted;
+            return {
+              ...reverted,
+              checkLogs: prev.checkLogs.filter((log) => log.id !== rollbackLogId),
+            };
+          },
+          {
+            id: `cwk-session-rollback-${newBooking.id}`,
+            isCreate: false,
+            command: revertCmd,
+          }
+        );
       }
       if (errMsg) {
         options?.onSyncRejected?.(errMsg);
       }
     };
 
-    if (options?.waitBeforeSync) {
-      void options.waitBeforeSync.then((shouldSync) => {
-        if (shouldSync) {
-          syncBookingToServer(newBooking, true, (err) =>
-            rollbackBooking(err || "Gagal menyimpan booking ruang kerja")
-          );
-        } else {
+    const handleSyncedBooking = (serverBooking: CoworkingBookingRecord) =>
+      reconcileSyncedBooking(newBooking.id, newBooking.bookingCode, serverBooking);
+
+    const serverSync: Promise<CoworkingSyncResult> = options?.waitBeforeSync
+      ? options.waitBeforeSync.then((shouldSync): Promise<CoworkingSyncResult> => {
+          if (shouldSync) {
+            return syncBookingToServer(
+              newBooking,
+              true,
+              (err) => rollbackBooking(err || "Gagal menyimpan booking ruang kerja"),
+              handleSyncedBooking
+            );
+          }
           rollbackBooking();
-        }
-      });
-    } else {
-      syncBookingToServer(newBooking, true, (err) =>
-        rollbackBooking(err || "Gagal menyimpan booking ruang kerja")
-      );
-    }
+          return Promise.resolve({ synced: false });
+        })
+      : syncBookingToServer(
+          newBooking,
+          true,
+          (err) => rollbackBooking(err || "Gagal menyimpan booking ruang kerja"),
+          handleSyncedBooking
+        );
 
     addNotification({
       type: "PAYMENT_RECEIVED",
@@ -800,8 +957,16 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       status: "SUCCESS",
     });
 
-    return newBooking;
+    return { booking: newBooking, serverSync };
   };
+
+  const bookSpace = (
+    bookingData: NewBookingInput,
+    options?: {
+      waitBeforeSync?: Promise<boolean>;
+      onSyncRejected?: (error: string) => void;
+    }
+  ): (typeof INITIAL_BOOKINGS)[0] => bookSpaceWithSync(bookingData, options).booking;
 
   const revertBookingUpdate = useCallback(
     (previousBooking: CoworkingBookingRecord) => () => {
@@ -872,12 +1037,14 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       prev.map((b) => (b.id === booking.id ? updatedBooking : b))
     );
 
-    const hasOtherCheckedIn = bookingsRef.current.some(
+    const targetSpace = rawSpaces.find((s) => s.id === booking.spaceId);
+    const maxCap = resolveSpaceCapacity(targetSpace);
+    const otherCheckedInCount = bookingsRef.current.filter(
       (b) =>
         b.id !== booking.id &&
         b.spaceId === booking.spaceId &&
         b.checkInStatus === "CHECKED_IN"
-    );
+    ).length;
 
     if (shouldCheckInNow) {
       const newLog: CheckInOutLog = {
@@ -892,10 +1059,13 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
         status: "ACTIVE_IN",
       };
 
+      const nextCount = otherCheckedInCount + 1;
+      const nextStatus = nextCount >= maxCap ? "OCCUPIED" : "AVAILABLE";
+
       const sessionCmd: CoworkingMasterCommand = {
         op: "PATCH_SPACE_SESSION",
         spaceId: booking.spaceId,
-        status: "OCCUPIED",
+        status: nextStatus,
         currentSession: {
           guestName: booking.guestName,
           company: booking.company || "Personal",
@@ -914,7 +1084,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
           command: sessionCmd,
         }
       );
-    } else if (!isTerminalStatus && !hasOtherCheckedIn) {
+    } else if (!isTerminalStatus && otherCheckedInCount === 0 && maxCap === 1) {
       const sessionCmd: CoworkingMasterCommand = {
         op: "PATCH_SPACE_SESSION",
         spaceId: booking.spaceId,
@@ -932,7 +1102,13 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    syncBookingToServer(updatedBooking, false, revertBookingUpdate(booking));
+    syncBookingToServer(
+      updatedBooking,
+      false,
+      revertBookingUpdate(booking),
+      (serverBooking) =>
+        reconcileSyncedBooking(updatedBooking.id, updatedBooking.bookingCode, serverBooking)
+    );
 
     addNotification({
       type: "PAYMENT_RECEIVED",
@@ -989,7 +1165,8 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     );
 
     const targetSpace = spaces.find((s) => s.id === booking.spaceId);
-    const otherActiveCheckedIn = bookingsRef.current.some(
+    const maxCap = resolveSpaceCapacity(targetSpace);
+    const remainingCheckedIn = bookingsRef.current.filter(
       (b) =>
         b.id !== booking.id &&
         b.spaceId === booking.spaceId &&
@@ -997,16 +1174,30 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     );
 
     if (
-      !otherActiveCheckedIn &&
       targetSpace &&
       (targetSpace.currentSession?.bookingCode === booking.bookingCode ||
-        targetSpace.status === "RESERVED")
+        targetSpace.status === "RESERVED" ||
+        (remainingCheckedIn.length < maxCap && targetSpace.status === "OCCUPIED"))
     ) {
+      const nextStatus =
+        remainingCheckedIn.length >= maxCap && remainingCheckedIn.length > 0
+          ? "OCCUPIED"
+          : "AVAILABLE";
+      const nextSession =
+        remainingCheckedIn.length > 0
+          ? {
+              guestName: remainingCheckedIn[0].guestName,
+              company: remainingCheckedIn[0].company || "Personal",
+              checkInTime: remainingCheckedIn[0].startTime || "Aktif",
+              endTime: remainingCheckedIn[0].endTime || "Selesai",
+              bookingCode: remainingCheckedIn[0].bookingCode,
+            }
+          : undefined;
       const sessionCmd: CoworkingMasterCommand = {
         op: "PATCH_SPACE_SESSION",
         spaceId: booking.spaceId,
-        status: "AVAILABLE",
-        currentSession: undefined,
+        status: nextStatus,
+        currentSession: nextSession,
         completedBookingCode: booking.bookingCode,
         checkoutDate: dateFormatted,
         checkoutTime: nowFormatted,
@@ -1022,7 +1213,13 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    syncBookingToServer(cancelledBooking, false, revertBookingUpdate(booking));
+    syncBookingToServer(
+      cancelledBooking,
+      false,
+      revertBookingUpdate(booking),
+      (serverBooking) =>
+        reconcileSyncedBooking(cancelledBooking.id, cancelledBooking.bookingCode, serverBooking)
+    );
 
     logActivity({
       module: "COWORKING",
@@ -1075,10 +1272,17 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
           }
         : undefined;
 
+    const targetSpace = rawSpaces.find((s) => s.id === booking.spaceId);
+    const maxCap = resolveSpaceCapacity(targetSpace);
+    const checkedInCount = bookingsRef.current.filter(
+      (b) => b.spaceId === booking.spaceId && b.checkInStatus === "CHECKED_IN"
+    ).length;
+    const nextStatus = checkedInCount >= maxCap ? "OCCUPIED" : "AVAILABLE";
+
     const sessionCmd: CoworkingMasterCommand = {
       op: "PATCH_SPACE_SESSION",
       spaceId: booking.spaceId,
-      status: "OCCUPIED",
+      status: nextStatus,
       currentSession: {
         guestName: booking.guestName,
         company: booking.company || "Personal",
@@ -1098,7 +1302,13 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    syncBookingToServer(checkedInBooking, false, revertBookingUpdate(booking));
+    syncBookingToServer(
+      checkedInBooking,
+      false,
+      revertBookingUpdate(booking),
+      (serverBooking) =>
+        reconcileSyncedBooking(checkedInBooking.id, checkedInBooking.bookingCode, serverBooking)
+    );
 
     logActivity({
       module: "COWORKING",
@@ -1134,11 +1344,35 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const resolvedBookingCode = booking?.bookingCode || candidateBookingCode;
 
     if (resolvedSpaceId) {
+      const targetSpace = rawSpaces.find((s) => s.id === resolvedSpaceId);
+      const maxCap = resolveSpaceCapacity(targetSpace);
+      const remainingCheckedIn = bookingsRef.current.filter(
+        (b) =>
+          b.spaceId === resolvedSpaceId &&
+          b.checkInStatus === "CHECKED_IN" &&
+          b.id !== booking?.id &&
+          b.bookingCode !== resolvedBookingCode
+      );
+      const nextStatus =
+        remainingCheckedIn.length >= maxCap && remainingCheckedIn.length > 0
+          ? "OCCUPIED"
+          : "AVAILABLE";
+      const nextSession =
+        remainingCheckedIn.length > 0
+          ? {
+              guestName: remainingCheckedIn[0].guestName,
+              company: remainingCheckedIn[0].company || "Personal",
+              checkInTime: remainingCheckedIn[0].startTime || "Aktif",
+              endTime: remainingCheckedIn[0].endTime || "Selesai",
+              bookingCode: remainingCheckedIn[0].bookingCode,
+            }
+          : undefined;
+
       const sessionCmd: CoworkingMasterCommand = {
         op: "PATCH_SPACE_SESSION",
         spaceId: resolvedSpaceId,
-        status: "AVAILABLE",
-        currentSession: undefined,
+        status: nextStatus,
+        currentSession: nextSession,
         completedBookingCode: resolvedBookingCode,
         checkoutDate: dateFormatted,
         checkoutTime: nowFormatted,
@@ -1164,7 +1398,13 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       commitBookings((prev) =>
         prev.map((b) => (b.id === booking.id ? completedBooking : b))
       );
-      syncBookingToServer(completedBooking, false, revertBookingUpdate(booking));
+      syncBookingToServer(
+        completedBooking,
+        false,
+        revertBookingUpdate(booking),
+        (serverBooking) =>
+          reconcileSyncedBooking(completedBooking.id, completedBooking.bookingCode, serverBooking)
+      );
     }
 
     logActivity({
@@ -1278,6 +1518,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
         updatePlan,
         deletePlan,
         bookSpace,
+        bookSpaceWithSync,
         confirmBookingPayment,
         cancelBooking,
         checkInBooking,

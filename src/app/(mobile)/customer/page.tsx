@@ -76,7 +76,7 @@ function CustomerApp() {
   const { members } = useLoyalty();
   const { orders, createOrder, advanceOrderStatus } = useOrders();
   const { filteredAreas, releaseTableToAvailable } = useTables();
-  const { spaces, bookings, bookSpace, cancelBooking } = useCoworking();
+  const { spaces, bookings, plans, bookSpace, cancelBooking } = useCoworking();
   const { settings } = useSettings();
   const qrisOnly = isQrSelfOrderQrisOnly(settings);
 
@@ -462,6 +462,7 @@ function CustomerApp() {
           <SpaceView
             spaces={spaces}
             bookings={bookings}
+            plans={plans}
             isDateOpen={(date) => isCoworkingDateOpen(date, settings.coworkingHolidays)}
             defaultName={identity.name ?? ""}
             defaultPhone={identity.phone ?? ""}

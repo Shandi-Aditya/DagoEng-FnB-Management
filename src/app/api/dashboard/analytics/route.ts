@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { db } from "@/lib/db";
 import { getPersistentOrders } from "@/lib/persistent-storage";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { normalizeTenantId } from "@/features/orders/orders-domain";
-import { toWitaDateKey } from "@/lib/date-utils";
+import { getTodayWitaDateString, normalizeDateRange, toWitaDateKey } from "@/lib/date-utils";
 import {
   averageOrderValue,
   bucketDayOfWeekTraffic,
@@ -14,112 +13,116 @@ import {
   calculateSalesForecast,
   extractOrderCustomerCount,
   findPeakAndQuietHours,
+  projectDashboardOrdersForTenant,
   resolveComparisonRange,
+  scopeDashboardOrders,
   type ComparisonMode,
   type ForecastMethod,
-  type MetricOrder,
   type TrafficMetric,
 } from "@/features/dashboard/dashboard-metrics";
+
+const ANALYTICS_ALLOWED_ROLES: ReadonlySet<string> = new Set([
+  "SUPER_ADMIN",
+  "OWNER",
+  "MANAGER",
+  "TENANT_OWNER",
+]);
+
+function parseComparisonMode(raw: string | null): ComparisonMode {
+  if (
+    raw === "PREVIOUS_PERIOD" ||
+    raw === "LAST_WEEK" ||
+    raw === "LAST_MONTH" ||
+    raw === "CUSTOM"
+  ) {
+    return raw;
+  }
+  return "PREVIOUS_PERIOD";
+}
+
+function parseTrafficMetric(raw: string | null): TrafficMetric {
+  return raw === "customers" ? "customers" : "orders";
+}
+
+function parseForecastMethod(raw: string | null): ForecastMethod {
+  return raw === "LINEAR_REGRESSION" ? "LINEAR_REGRESSION" : "WEIGHTED_MOVING_AVERAGE";
+}
 
 export async function GET(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
-    // Allow dashboard access for authenticated managerial and staff roles, or fallback for internal dev
-    if (auth.isAuthenticated && auth.role && ["WAITER", "CUSTOMER"].includes(auth.role)) {
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { success: false, error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    if (!ANALYTICS_ALLOWED_ROLES.has(auth.role)) {
       return NextResponse.json(
         { success: false, error: "FORBIDDEN: Peran ini tidak memiliki akses ke metrik analitik dashboard." },
         { status: 403 }
       );
     }
 
-    const { searchParams } = new URL(req.url);
-    const today = new Date().toISOString().slice(0, 10);
-    const startDate = searchParams.get("startDate") || `${today.slice(0, 8)}01`;
-    const endDate = searchParams.get("endDate") || today;
-    const outletId = searchParams.get("outletId");
-    const compareMode = (searchParams.get("compareMode") as ComparisonMode) || "PREVIOUS_PERIOD";
-    const compareStartDate = searchParams.get("compareStartDate") || undefined;
-    const compareEndDate = searchParams.get("compareEndDate") || undefined;
-    const metric = (searchParams.get("metric") as TrafficMetric) || "orders";
-    const forecastMethod =
-      (searchParams.get("forecastMethod") as ForecastMethod) || "WEIGHTED_MOVING_AVERAGE";
+    const isTenantScoped = auth.scopeLevel === "TENANT" || String(auth.role) === "TENANT_OWNER";
+    const normalizedAuthTenant = auth.tenantId ? normalizeTenantId(auth.tenantId) : undefined;
+    if (isTenantScoped && !normalizedAuthTenant) {
+      return NextResponse.json(
+        { success: false, error: "FORBIDDEN: Akun tenant tidak memiliki identitas tenant yang valid." },
+        { status: 403 }
+      );
+    }
 
-    const scopedTenantId =
-      (auth.scopeLevel === "TENANT" || auth.role === "KITCHEN_STAFF") && auth.tenantId
-        ? normalizeTenantId(auth.tenantId)
-        : searchParams.get("tenantId") || undefined;
+    const { searchParams } = new URL(req.url);
+    const today = getTodayWitaDateString();
+    const rawStartDate = searchParams.get("startDate") || `${today.slice(0, 8)}01`;
+    const rawEndDate = searchParams.get("endDate") || today;
+    const { startDate, endDate } = normalizeDateRange(rawStartDate, rawEndDate, today);
+
+    const outletId = searchParams.get("outletId");
+    const compareMode = parseComparisonMode(searchParams.get("compareMode"));
+    const rawCompareStartDate = searchParams.get("compareStartDate") || undefined;
+    const rawCompareEndDate = searchParams.get("compareEndDate") || undefined;
+    const customCompareRange =
+      rawCompareStartDate && rawCompareEndDate
+        ? normalizeDateRange(rawCompareStartDate, rawCompareEndDate, today)
+        : undefined;
+    const effectiveCompareMode: ComparisonMode =
+      compareMode === "CUSTOM" && !customCompareRange ? "PREVIOUS_PERIOD" : compareMode;
+    const metric = parseTrafficMetric(searchParams.get("metric"));
+    const forecastMethod = parseForecastMethod(searchParams.get("forecastMethod"));
+
+    const requestedTenantId = isTenantScoped ? null : searchParams.get("tenantId");
+    const scopedTenantId = isTenantScoped
+      ? normalizedAuthTenant
+      : normalizedAuthTenant || (requestedTenantId ? normalizeTenantId(requestedTenantId) : undefined);
 
     const compareRange = resolveComparisonRange(
       startDate,
       endDate,
-      compareMode,
-      compareStartDate && compareEndDate
-        ? { startDate: compareStartDate, endDate: compareEndDate }
-        : undefined
+      effectiveCompareMode,
+      customCompareRange
     );
 
-    // 1. Efficient Prisma database query
-    let allOrders: MetricOrder[] = [];
-    try {
-      const minDate = compareRange.startDate < startDate ? compareRange.startDate : startDate;
-      const prismaOrders = await db.order.findMany({
-        where: {
-          paymentStatus: "PAID",
-          createdAt: {
-            gte: new Date(`${minDate}T00:00:00.000Z`),
-            lte: new Date(`${endDate}T23:59:59.999Z`),
-          },
-          ...(outletId && outletId !== "ALL" ? { outletId } : {}),
-        },
-        select: {
-          id: true,
-          orderNumber: true,
-          totalAmount: true,
-          discountAmount: true,
-          createdAt: true,
-          customerName: true,
-          outletId: true,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
+    // Single authoritative source aligned with GET /api/orders
+    const storedOrders = await getPersistentOrders();
+    const outletScopedOrders =
+      outletId && outletId !== "ALL"
+        ? storedOrders.filter((o) => o.outletId === outletId)
+        : storedOrders;
 
-      if (prismaOrders.length > 0) {
-        allOrders = prismaOrders.map((o) => ({
-          total: o.totalAmount,
-          createdAt: o.createdAt.toISOString(),
-          discount: o.discountAmount,
-          customerCount: 1,
-          customerName: o.customerName,
-        }));
-      }
-    } catch {
-      // Prisma table may be unmigrated or empty, proceed to persistent fallback
-    }
+    const paidScopedOrders = scopeDashboardOrders(outletScopedOrders, {
+      tenantId: scopedTenantId,
+      isTenantOwner: Boolean(scopedTenantId),
+      requirePaid: true,
+    });
 
-    // 2. Persistent storage fallback (Single Source of Truth for local POS sync)
-    if (allOrders.length === 0) {
-      const stored = await getPersistentOrders();
-      allOrders = stored
-        .filter((o) => {
-          if (o.status === "CANCELLED" || o.paymentStatus !== "PAID") return false;
-          if (outletId && outletId !== "ALL" && o.outletId && o.outletId !== outletId) return false;
-          if (scopedTenantId && o.tenantId && o.tenantId !== scopedTenantId) return false;
-          return true;
-        })
-        .map((o) => ({
-          total: o.total || 0,
-          createdAt: o.createdAt,
-          discount: o.discount || 0,
-          promoId: o.promoId,
-          customerCount: extractOrderCustomerCount(o),
-          customerName: o.customerName,
-          corporateInfo: o.corporateInfo,
-        }));
-    }
+    const allOrders = scopedTenantId
+      ? projectDashboardOrdersForTenant(paidScopedOrders, scopedTenantId)
+      : paidScopedOrders;
 
-    // 3. Filter orders into current and comparison periods
+    // Filter orders into current and comparison periods using WITA calendar day keys
     const currentOrders = allOrders.filter((o) => {
       if (!o.createdAt) return false;
       const dKey = toWitaDateKey(o.createdAt);
@@ -132,7 +135,7 @@ export async function GET(req: NextRequest) {
       return Boolean(dKey) && dKey >= compareRange.startDate && dKey <= compareRange.endDate;
     });
 
-    // 4. Compute domain analytics
+    // Compute domain analytics
     const hourly = bucketHourly(currentOrders);
     const peakAndQuiet = findPeakAndQuietHours(hourly, metric);
     const dayOfWeek = bucketDayOfWeekTraffic(currentOrders);
@@ -145,8 +148,8 @@ export async function GET(req: NextRequest) {
     );
     const forecast = calculateSalesForecast(daily, 7, forecastMethod);
 
-    const totalRevenue = daily.reduce((sum, d) => sum + d.revenue, 0);
-    const totalOrders = daily.reduce((sum, d) => sum + d.orders, 0);
+    const totalRevenue = currentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const totalOrders = currentOrders.length;
     const totalCustomers = currentOrders.reduce((sum, o) => sum + extractOrderCustomerCount(o), 0);
 
     return NextResponse.json({
@@ -155,7 +158,7 @@ export async function GET(req: NextRequest) {
         period: {
           startDate,
           endDate,
-          compareMode,
+          compareMode: effectiveCompareMode,
           compareStartDate: compareRange.startDate,
           compareEndDate: compareRange.endDate,
           compareLabel: compareRange.label,
@@ -179,7 +182,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Terjadi kesalahan internal pada server analitik.";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[/api/dashboard/analytics]", error);
+    return NextResponse.json(
+      { success: false, error: "Terjadi kesalahan internal pada server analitik." },
+      { status: 500 }
+    );
   }
 }

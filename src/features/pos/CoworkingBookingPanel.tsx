@@ -398,7 +398,7 @@ export function CoworkingBookingPanel({
 
       {/* Usage type */}
       <div className="space-y-2 border-t border-border pt-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <FieldLabel>Tipe penggunaan</FieldLabel>
           <Tabs
             value={cwUsageType}
@@ -583,7 +583,7 @@ export function CoworkingBookingPanel({
                 variant={isSelected ? "default" : "outline"}
                 size="lg"
                 onClick={() => onPaymentMethodChange(pm.id)}
-                className="w-full flex-col gap-0.5"
+                className="h-auto w-full flex-col gap-0.5 py-1.5"
               >
                 <span className="font-medium leading-tight">{pm.label}</span>
                 <span className={cn("text-xs font-normal", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>

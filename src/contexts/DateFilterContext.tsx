@@ -94,25 +94,27 @@ export function DateFilterProvider({ children }: { children: React.ReactNode }) 
     setEndDate(normalized.endDate);
   }, []);
 
-  const formattedRangeLabel = useMemo(() => {
-    if (startDate === endDate) {
-      return formatWitaDateTime(startDate, "dd MMM yyyy");
+  const formatRange = useCallback((start: string, end: string): string => {
+    if (start === end) {
+      return formatWitaDateTime(start, "dd MMM yyyy");
     }
-    if (startDate.slice(0, 4) !== endDate.slice(0, 4)) {
-      return `${formatWitaDateTime(startDate, "dd MMM yyyy")} - ${formatWitaDateTime(endDate, "dd MMM yyyy")}`;
+    if (start.slice(0, 4) !== end.slice(0, 4)) {
+      return `${formatWitaDateTime(start, "dd MMM yyyy")} - ${formatWitaDateTime(end, "dd MMM yyyy")}`;
     }
-    return `${formatWitaDateTime(startDate, "dd MMM")} - ${formatWitaDateTime(endDate, "dd MMM yyyy")}`;
-  }, [startDate, endDate]);
+    return `${formatWitaDateTime(start, "dd MMM")} - ${formatWitaDateTime(end, "dd MMM yyyy")}`;
+  }, []);
+
+  const formattedRangeLabel = useMemo(
+    () => formatRange(startDate, endDate),
+    [startDate, endDate, formatRange]
+  );
 
   const previousPeriodLabel = useMemo(() => {
     const diffDays = diffDaysInclusive(startDate, endDate);
     const prevEnd = addDaysToDateKey(startDate, -1);
     const prevStart = addDaysToDateKey(prevEnd, -(diffDays - 1));
-    if (prevStart === prevEnd) {
-      return formatWitaDateTime(prevStart, "dd MMM yyyy");
-    }
-    return `${formatWitaDateTime(prevStart, "dd MMM")} - ${formatWitaDateTime(prevEnd, "dd MMM yyyy")}`;
-  }, [startDate, endDate]);
+    return formatRange(prevStart, prevEnd);
+  }, [startDate, endDate, formatRange]);
 
   const isDateInRange = useCallback(
     (dateStr: string): boolean => {

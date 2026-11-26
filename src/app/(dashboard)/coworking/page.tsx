@@ -49,7 +49,8 @@ export default function CoworkingPage() {
     bookings,
     members,
     checkLogs,
-    bookSpace,
+    plans,
+    bookSpaceWithSync,
     checkInBooking,
     checkoutSpace,
     addMember,
@@ -71,31 +72,6 @@ export default function CoworkingPage() {
   const [selectedSpaceIdForBooking, setSelectedSpaceIdForBooking] = useState<string | undefined>();
   const [selectedQrisBooking, setSelectedQrisBooking] = useState<CoworkingBooking | null>(null);
   const [isQrisModalOpen, setIsQrisModalOpen] = useState(false);
-
-  // Cashier redirection
-  if (user?.role?.slug === "CASHIER") {
-    return (
-      <div className="mx-auto my-12 max-w-lg space-y-4 rounded-2xl border border-border bg-card p-8 text-center shadow-xs">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
-          <Laptop className="size-6" />
-        </div>
-        <div className="space-y-1">
-          <h2 className="text-base font-medium text-foreground">Operasional terintegrasi di POS kasir</h2>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Untuk staf kasir, seluruh transaksi dan pemesanan co-working dilayani langsung melalui modul <strong className="text-foreground">POS Kasir</strong>.
-          </p>
-        </div>
-        <div className="pt-2">
-          <Button
-            render={<Link href="/pos" />}
-            nativeButton={false}
-          >
-            Buka modul POS kasir
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   const outletBookings = useMemo(
     () =>
@@ -120,6 +96,31 @@ export default function CoworkingPage() {
     () => filterCoworkingMembers(members, memberStatusFilter, searchMemberQuery),
     [members, memberStatusFilter, searchMemberQuery]
   );
+
+  // Cashier redirection (placed after all hooks to obey Rules of Hooks)
+  if (user?.role?.slug === "CASHIER") {
+    return (
+      <div className="mx-auto my-12 max-w-lg space-y-4 rounded-2xl border border-border bg-card p-8 text-center shadow-xs">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+          <Laptop className="size-6" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-medium text-foreground">Operasional terintegrasi di POS kasir</h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Untuk staf kasir, seluruh transaksi dan pemesanan co-working dilayani langsung melalui modul <strong className="text-foreground">POS Kasir</strong>.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Button
+            render={<Link href="/pos" />}
+            nativeButton={false}
+          >
+            Buka modul POS kasir
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const kpis = calculateCoworkingKPIs(spaces, members);
   const canManageSettings =
@@ -185,7 +186,7 @@ export default function CoworkingPage() {
     }
   };
 
-  const handleCreateBooking = (bookingData: {
+  const handleCreateBooking = async (bookingData: {
     guestName: string;
     guestPhone: string;
     guestEmail: string;
@@ -212,9 +213,10 @@ export default function CoworkingPage() {
     const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
     const finalTotal = basePrice + taxAmount;
 
-    let createdBooking: ReturnType<typeof bookSpace>;
+    let createdBooking: ReturnType<typeof bookSpaceWithSync>["booking"];
+    let serverSync: ReturnType<typeof bookSpaceWithSync>["serverSync"];
     try {
-      createdBooking = bookSpace({
+      const result = bookSpaceWithSync({
         guestName: bookingData.guestName,
         guestPhone: bookingData.guestPhone,
         guestEmail: bookingData.guestEmail || "-",
@@ -244,6 +246,8 @@ export default function CoworkingPage() {
         paymentTimestamp: isQris ? undefined : nowIso,
         checkInStatus: !isQris && bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
       });
+      createdBooking = result.booking;
+      serverSync = result.serverSync;
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Booking gagal disimpan.";
@@ -261,10 +265,27 @@ export default function CoworkingPage() {
         "Menunggu konfirmasi QRIS",
         `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta otorisasi supervisor.`
       );
-    } else {
-      creditCoworkingPayment(createdBooking);
-      notify.success("Booking dibuat", bookingData.guestName);
+      void serverSync.then((res) => {
+        if (res.rejected) {
+          setIsQrisModalOpen(false);
+          setSelectedQrisBooking(null);
+        } else if (res.booking) {
+          setSelectedQrisBooking((prev) =>
+            prev?.id === createdBooking.id ? res.booking! : prev
+          );
+        }
+      });
+      return;
     }
+
+    const syncRes = await serverSync;
+    if (syncRes.rejected) {
+      notify.error("Booking ditolak", syncRes.error || "Reservasi ditolak oleh server.");
+      return;
+    }
+
+    creditCoworkingPayment(syncRes.booking ?? createdBooking);
+    notify.success("Booking dibuat", bookingData.guestName);
   };
 
   const handleCreateMember = (params: {
@@ -272,12 +293,28 @@ export default function CoworkingPage() {
     contact: string;
     email: string;
     packageName: string;
+    planId?: string;
+    validityDays?: number;
+    creditHours?: number;
     totalSpent: number;
     paymentMethod: string;
   }) => {
+    const matchedPlan = plans.find(
+      (p) => (params.planId && p.id === params.planId) || p.name === params.packageName
+    );
+    const validityDays =
+      params.validityDays ??
+      matchedPlan?.validityDays ??
+      (matchedPlan?.billingCycle === "1 Minggu"
+        ? 7
+        : matchedPlan?.billingCycle === "2 Minggu"
+          ? 14
+          : 30);
+    const creditHours = params.creditHours ?? matchedPlan?.creditHours;
+
     const today = new Date();
-    const expiry = new Date();
-    expiry.setDate(today.getDate() + 30);
+    const expiry = new Date(today);
+    expiry.setDate(today.getDate() + validityDays);
 
     const startStr = today.toLocaleDateString("id-ID", {
       timeZone: "Asia/Makassar",
@@ -298,6 +335,9 @@ export default function CoworkingPage() {
         contact: params.contact,
         email: params.email,
         packageName: params.packageName,
+        planId: params.planId ?? matchedPlan?.id,
+        creditHours,
+        remainingHours: creditHours,
         startDate: startStr,
         expiryDate: expStr,
         status: "ACTIVE",
@@ -391,29 +431,29 @@ export default function CoworkingPage() {
         onValueChange={(val) => setActiveTab(val as "SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS")}
         className="space-y-4"
       >
-        <TabsList aria-label="Navigasi modul co-working">
-          <TabsTrigger value="SPACES">
+        <TabsList aria-label="Navigasi modul co-working" className="group-data-horizontal/tabs:h-auto w-full flex-wrap justify-start gap-1 p-1 sm:w-fit">
+          <TabsTrigger value="SPACES" className="flex-none h-7 px-2.5">
             <Laptop />
             <span>Ruang dan meja</span>
             <Badge variant="secondary" className="ml-1 tabular-nums">
               {spaces.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="BOOKINGS">
+          <TabsTrigger value="BOOKINGS" className="flex-none h-7 px-2.5">
             <Calendar />
             <span>Booking</span>
             <Badge variant="secondary" className="ml-1 tabular-nums">
               {bookings.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="MEMBERS">
+          <TabsTrigger value="MEMBERS" className="flex-none h-7 px-2.5">
             <Users />
             <span>Member</span>
             <Badge variant="secondary" className="ml-1 tabular-nums">
               {members.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="LOGS">
+          <TabsTrigger value="LOGS" className="flex-none h-7 px-2.5">
             <History />
             <span>Log check-in</span>
             <Badge variant="secondary" className="ml-1 tabular-nums">
@@ -481,6 +521,7 @@ export default function CoworkingPage() {
       <NewMemberModal
         isOpen={isNewMemberModalOpen}
         onClose={() => setIsNewMemberModalOpen(false)}
+        plans={plans}
         onSubmit={handleCreateMember}
       />
 

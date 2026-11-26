@@ -145,6 +145,45 @@ export function bucketLastSevenDays(orders: readonly MetricOrder[], now: Date = 
   return days;
 }
 
+function parseValidYmd(dateStr: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(dt.getTime()) ||
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month - 1 ||
+    dt.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+function normalizeValidDateRange(
+  startDate: string,
+  endDate: string,
+  fallback: string = getTodayWitaDateString()
+): { startDate: string; endDate: string } {
+  const norm = normalizeDateRange(startDate, endDate, fallback);
+  const s = parseValidYmd(norm.startDate) ? norm.startDate : fallback;
+  const e = parseValidYmd(norm.endDate) ? norm.endDate : fallback;
+  return s <= e ? { startDate: s, endDate: e } : { startDate: e, endDate: s };
+}
+
+function shiftMonthClamped(year: number, month: number, day: number, deltaMonths: number = -1): string {
+  const totalMonths = year * 12 + (month - 1) + deltaMonths;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth0 = ((totalMonths % 12) + 12) % 12;
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth0 + 1, 0)).getUTCDate();
+  const clampedDay = Math.min(day, daysInTargetMonth);
+  return new Date(Date.UTC(targetYear, targetMonth0, clampedDay)).toISOString().slice(0, 10);
+}
+
 export function bucketOrdersByDateRange(
   orders: readonly MetricOrder[],
   startDate: string,
@@ -152,7 +191,7 @@ export function bucketOrdersByDateRange(
   now: Date = new Date()
 ): DayBucket[] {
   const todayKey = getTodayWitaDateString(now);
-  const normalized = normalizeDateRange(startDate, endDate, todayKey);
+  const normalized = normalizeValidDateRange(startDate, endDate, todayKey);
   const [sy, sm, sd] = normalized.startDate.split("-").map(Number);
   const [ey, em, ed] = normalized.endDate.split("-").map(Number);
   const startUtc = Date.UTC(sy, sm - 1, sd);
@@ -328,29 +367,21 @@ export function getPreviousPeriodRange(
   startDate: string,
   endDate: string
 ): { startDate: string; endDate: string } {
-  if (
-    !startDate ||
-    !endDate ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
-  ) {
-    const today = new Date().toISOString().slice(0, 10);
+  const parsedStart = parseValidYmd(startDate);
+  const parsedEnd = parseValidYmd(endDate);
+  if (!parsedStart || !parsedEnd) {
+    const today = getTodayWitaDateString();
     return { startDate: today, endDate: today };
   }
 
-  const [sy, sm, sd] = startDate.split("-").map(Number);
-  const [ey, em, ed] = endDate.split("-").map(Number);
-  const startUtc = Date.UTC(sy, sm - 1, sd);
-  const endUtc = Date.UTC(ey, em - 1, ed);
+  const startUtc = Date.UTC(parsedStart.year, parsedStart.month - 1, parsedStart.day);
+  const endUtc = Date.UTC(parsedEnd.year, parsedEnd.month - 1, parsedEnd.day);
+  const orderedStartUtc = Math.min(startUtc, endUtc);
+  const orderedEndUtc = Math.max(startUtc, endUtc);
 
-  if (Number.isNaN(startUtc) || Number.isNaN(endUtc)) {
-    const today = new Date().toISOString().slice(0, 10);
-    return { startDate: today, endDate: today };
-  }
+  const spanDays = Math.max(1, Math.round((orderedEndUtc - orderedStartUtc) / 86_400_000) + 1);
 
-  const spanDays = Math.max(1, Math.round((endUtc - startUtc) / 86_400_000) + 1);
-
-  const prevEndUtc = startUtc - 86_400_000;
+  const prevEndUtc = orderedStartUtc - 86_400_000;
   const prevStartUtc = prevEndUtc - (spanDays - 1) * 86_400_000;
 
   return {
@@ -368,16 +399,24 @@ export function resolveComparisonRange(
   mode: ComparisonMode = "PREVIOUS_PERIOD",
   customRange?: { startDate: string; endDate: string }
 ): { startDate: string; endDate: string; label: string } {
+  const today = getTodayWitaDateString();
+  const normalized = normalizeValidDateRange(startDate, endDate, today);
+
   if (mode === "CUSTOM" && customRange?.startDate && customRange?.endDate) {
+    const normalizedCustom = normalizeValidDateRange(
+      customRange.startDate,
+      customRange.endDate,
+      normalized.startDate
+    );
     return {
-      startDate: customRange.startDate,
-      endDate: customRange.endDate,
+      startDate: normalizedCustom.startDate,
+      endDate: normalizedCustom.endDate,
       label: "Periode kustom",
     };
   }
 
-  const [sy, sm, sd] = startDate.split("-").map(Number);
-  const [ey, em, ed] = endDate.split("-").map(Number);
+  const [sy, sm, sd] = normalized.startDate.split("-").map(Number);
+  const [ey, em, ed] = normalized.endDate.split("-").map(Number);
   const startUtc = Date.UTC(sy, sm - 1, sd);
   const endUtc = Date.UTC(ey, em - 1, ed);
 
@@ -392,16 +431,14 @@ export function resolveComparisonRange(
   }
 
   if (mode === "LAST_MONTH") {
-    const prevStart = new Date(Date.UTC(sy, sm - 2, sd));
-    const prevEnd = new Date(Date.UTC(ey, em - 2, ed));
     return {
-      startDate: prevStart.toISOString().slice(0, 10),
-      endDate: prevEnd.toISOString().slice(0, 10),
+      startDate: shiftMonthClamped(sy, sm, sd, -1),
+      endDate: shiftMonthClamped(ey, em, ed, -1),
       label: "Bulan lalu",
     };
   }
 
-  const prev = getPreviousPeriodRange(startDate, endDate);
+  const prev = getPreviousPeriodRange(normalized.startDate, normalized.endDate);
   return {
     ...prev,
     label: "Periode sebelumnya",
@@ -425,11 +462,14 @@ export interface PeriodTrafficComparison {
   };
   deltas: {
     revenueAmount: number;
-    revenuePercent: number;
+    revenuePercent: number | null;
+    hasRevenueBaseline: boolean;
     ordersCount: number;
-    ordersPercent: number;
+    ordersPercent: number | null;
+    hasOrdersBaseline: boolean;
     customersCount: number;
-    customersPercent: number;
+    customersPercent: number | null;
+    hasCustomersBaseline: boolean;
   };
 }
 
@@ -454,8 +494,8 @@ export function calculatePeriodComparison(
   const curr = sumMetrics(currentOrders);
   const prev = sumMetrics(previousOrders);
 
-  const calcPercent = (c: number, p: number): number => {
-    if (p === 0) return c > 0 ? 100 : 0;
+  const calcPercent = (c: number, p: number): number | null => {
+    if (p === 0) return c > 0 ? null : 0;
     return Number((((c - p) / p) * 100).toFixed(1));
   };
 
@@ -473,10 +513,13 @@ export function calculatePeriodComparison(
     deltas: {
       revenueAmount: curr.revenue - prev.revenue,
       revenuePercent: calcPercent(curr.revenue, prev.revenue),
+      hasRevenueBaseline: prev.revenue > 0,
       ordersCount: curr.orders - prev.orders,
       ordersPercent: calcPercent(curr.orders, prev.orders),
+      hasOrdersBaseline: prev.orders > 0,
       customersCount: curr.customers - prev.customers,
       customersPercent: calcPercent(curr.customers, prev.customers),
+      hasCustomersBaseline: prev.customers > 0,
     },
   };
 }
@@ -504,6 +547,67 @@ export interface SalesForecastResult {
   methodology: string;
 }
 
+function fitLinearTrend(values: readonly number[]): {
+  at: (x: number) => number;
+} {
+  const n = values.length;
+  if (n === 0) return { at: () => 0 };
+  const mean = values.reduce((sum, v) => sum + v, 0) / n;
+  if (n < 2) return { at: () => Math.max(0, mean) };
+
+  const xMean = (n - 1) / 2;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i += 1) {
+    const xDiff = i - xMean;
+    num += xDiff * (values[i] - mean);
+    den += xDiff * xDiff;
+  }
+  const slope = den > 0 ? num / den : 0;
+  const intercept = mean - slope * xMean;
+  return {
+    at: (x: number) => Math.max(0, slope * x + intercept),
+  };
+}
+
+function computeNormalizedDowMultipliers(
+  historicalDaily: readonly DayBucket[],
+  expectedRevAt: (index: number) => number
+): Map<number, number> {
+  const multipliers = new Map<number, number>();
+  if (historicalDaily.length < 7) return multipliers;
+
+  const dowRatios = new Map<number, { sum: number; count: number }>();
+  for (let i = 0; i < historicalDaily.length; i += 1) {
+    const d = historicalDaily[i];
+    const parsed = parseValidYmd(d.date);
+    if (!parsed) continue;
+    const expected = expectedRevAt(i);
+    if (expected <= 0) continue;
+
+    const dow = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day)).getUTCDay();
+    const rawRatio = Math.max(0.5, Math.min(2.0, d.revenue / expected));
+    const prev = dowRatios.get(dow) ?? { sum: 0, count: 0 };
+    dowRatios.set(dow, { sum: prev.sum + rawRatio, count: prev.count + 1 });
+  }
+
+  if (dowRatios.size === 0) return multipliers;
+
+  const rawByDow = new Map<number, number>();
+  let rawSum = 0;
+  for (const [dow, entry] of dowRatios.entries()) {
+    const avg = Math.max(0.5, Math.min(2.0, entry.sum / entry.count));
+    rawByDow.set(dow, avg);
+    rawSum += avg;
+  }
+
+  const meanRaw = rawSum / rawByDow.size;
+  for (const [dow, raw] of rawByDow.entries()) {
+    multipliers.set(dow, meanRaw > 0 ? raw / meanRaw : 1.0);
+  }
+  return multipliers;
+}
+
 /** Projects sales and traffic for the upcoming period using weighted average or linear regression with day-of-week seasonality. */
 export function calculateSalesForecast(
   historicalDaily: readonly DayBucket[],
@@ -522,51 +626,50 @@ export function calculateSalesForecast(
     };
   }
 
+  const dayCount = historicalDaily.length;
   const totalRev = historicalDaily.reduce((sum, d) => sum + d.revenue, 0);
   const totalOrd = historicalDaily.reduce((sum, d) => sum + d.orders, 0);
   const totalCust = historicalDaily.reduce((sum, d) => sum + d.customers, 0);
-  const dayCount = historicalDaily.length;
 
-  const baseDailyRev = dayCount > 0 ? totalRev / dayCount : 0;
-  const baseDailyOrd = dayCount > 0 ? totalOrd / dayCount : 0;
-  const baseDailyCust = dayCount > 0 ? totalCust / dayCount : 0;
+  const overallMeanRev = totalRev / dayCount;
+  const overallMeanOrd = totalOrd / dayCount;
+  const overallMeanCust = totalCust / dayCount;
+  const hasSufficientData = dayCount >= 3 && totalRev > 0;
 
-  const dowSums = new Map<number, { rev: number; count: number }>();
-  for (const d of historicalDaily) {
-    const [y, m, day] = d.date.split("-").map(Number);
-    const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay();
-    const existing = dowSums.get(dow) || { rev: 0, count: 0 };
-    dowSums.set(dow, { rev: existing.rev + d.revenue, count: existing.count + 1 });
+  // Weighted Moving Average over trailing window W = min(7, dayCount) with weights 1..W
+  const windowSize = Math.min(7, dayCount);
+  const recentWindow = historicalDaily.slice(dayCount - windowSize);
+  const weightSum = (windowSize * (windowSize + 1)) / 2;
+  let wmaRev = 0;
+  let wmaOrd = 0;
+  let wmaCust = 0;
+  for (let i = 0; i < windowSize; i += 1) {
+    const weight = i + 1;
+    wmaRev += recentWindow[i].revenue * weight;
+    wmaOrd += recentWindow[i].orders * weight;
+    wmaCust += recentWindow[i].customers * weight;
   }
+  wmaRev /= weightSum;
+  wmaOrd /= weightSum;
+  wmaCust /= weightSum;
 
-  const dowMultiplier = (dow: number): number => {
-    const entry = dowSums.get(dow);
-    if (!entry || entry.count === 0 || baseDailyRev <= 0) return 1.0;
-    const dowAvg = entry.rev / entry.count;
-    const factor = dowAvg / baseDailyRev;
-    return Math.max(0.5, Math.min(2.0, factor));
-  };
+  const useRegression = dayCount >= 3 && method === "LINEAR_REGRESSION";
+  const revTrend = fitLinearTrend(historicalDaily.map((d) => d.revenue));
+  const ordTrend = fitLinearTrend(historicalDaily.map((d) => d.orders));
+  const custTrend = fitLinearTrend(historicalDaily.map((d) => d.customers));
 
-  let slope = 0;
-  let intercept = baseDailyRev;
-  if (method === "LINEAR_REGRESSION" && dayCount >= 2) {
-    const xMean = (dayCount - 1) / 2;
-    const yMean = baseDailyRev;
-    let num = 0;
-    let den = 0;
-    for (let i = 0; i < dayCount; i += 1) {
-      const xDiff = i - xMean;
-      num += xDiff * (historicalDaily[i].revenue - yMean);
-      den += xDiff * xDiff;
-    }
-    if (den > 0) {
-      slope = num / den;
-      intercept = yMean - slope * xMean;
-    }
-  }
+  const dowMultipliers =
+    dayCount >= 7
+      ? computeNormalizedDowMultipliers(historicalDaily, (i) =>
+          useRegression ? revTrend.at(i) : overallMeanRev
+        )
+      : new Map<number, number>();
 
-  const lastDateKey = historicalDaily[historicalDaily.length - 1].date;
-  const [ly, lm, ld] = lastDateKey.split("-").map(Number);
+  const lastDateKey = historicalDaily[dayCount - 1].date;
+  const parsedLast = parseValidYmd(lastDateKey);
+  const [ly, lm, ld] = parsedLast
+    ? [parsedLast.year, parsedLast.month, parsedLast.day]
+    : getTodayWitaDateString().split("-").map(Number);
 
   const forecastDays: ForecastDayItem[] = [];
   let totalProjectedRevenue = 0;
@@ -577,18 +680,29 @@ export function calculateSalesForecast(
     const nextDate = new Date(Date.UTC(ly, lm - 1, ld + offset));
     const nextDateKey = nextDate.toISOString().slice(0, 10);
     const dow = nextDate.getUTCDay();
-    const multiplier = dowMultiplier(dow);
+    const multiplier = dayCount >= 7 ? (dowMultipliers.get(dow) ?? 1.0) : 1.0;
 
-    let projectedRevenue: number;
-    if (method === "LINEAR_REGRESSION" && dayCount >= 2) {
-      const trendValue = Math.max(0, slope * (dayCount - 1 + offset) + intercept);
-      projectedRevenue = Math.round(trendValue * multiplier);
+    let baseRev: number;
+    let baseOrd: number;
+    let baseCust: number;
+    if (dayCount < 3) {
+      baseRev = overallMeanRev;
+      baseOrd = overallMeanOrd;
+      baseCust = overallMeanCust;
+    } else if (useRegression) {
+      const targetIndex = dayCount - 1 + offset;
+      baseRev = revTrend.at(targetIndex);
+      baseOrd = ordTrend.at(targetIndex);
+      baseCust = custTrend.at(targetIndex);
     } else {
-      projectedRevenue = Math.round(baseDailyRev * multiplier);
+      baseRev = wmaRev;
+      baseOrd = wmaOrd;
+      baseCust = wmaCust;
     }
 
-    const projectedOrders = Math.max(0, Math.round(baseDailyOrd * multiplier));
-    const projectedCustomers = Math.max(0, Math.round(baseDailyCust * multiplier));
+    const projectedRevenue = Math.max(0, Math.round(baseRev * multiplier));
+    const projectedOrders = Math.max(0, Math.round(baseOrd * multiplier));
+    const projectedCustomers = Math.max(0, Math.round(baseCust * multiplier));
 
     const lowerBoundRevenue = Math.max(0, Math.round(projectedRevenue * 0.88));
     const upperBoundRevenue = Math.round(projectedRevenue * 1.12);
@@ -609,17 +723,31 @@ export function calculateSalesForecast(
     });
   }
 
+  let methodology: string;
+  if (totalRev <= 0) {
+    methodology = "Belum ada transaksi penjualan pada periode historis";
+  } else if (dayCount < 3) {
+    methodology = "Data historis kurang dari 3 hari (rata-rata sederhana sebagai estimasi awal)";
+  } else if (method === "LINEAR_REGRESSION") {
+    methodology =
+      dayCount >= 7
+        ? "Linear regression dengan pembobotan faktor musiman hari"
+        : "Linear regression (tanpa faktor musiman karena data kurang dari 7 hari)";
+  } else {
+    methodology =
+      dayCount >= 7
+        ? "Weighted moving average dengan pembobotan faktor musiman hari"
+        : "Weighted moving average (tanpa faktor musiman karena data kurang dari 7 hari)";
+  }
+
   return {
     forecastDays,
     totalProjectedRevenue,
     totalProjectedOrders,
     totalProjectedCustomers,
     dailyAverageProjectedRevenue: horizonDays > 0 ? Math.round(totalProjectedRevenue / horizonDays) : 0,
-    hasSufficientData: totalRev > 0,
-    methodology:
-      method === "LINEAR_REGRESSION"
-        ? "Linear regression dengan pembobotan faktor musiman hari"
-        : "Weighted moving average dengan pembobotan faktor musiman hari",
+    hasSufficientData,
+    methodology,
   };
 }
 

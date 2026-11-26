@@ -69,12 +69,14 @@ import {
   resolvePublisherCode,
 } from "@/lib/receipt-publisher";
 import {
+  COWORKING_CLOSE_MINUTES,
   getNextOpenCoworkingDate,
   isCoworkingDateOpen,
   checkCoworkingBookingConflict,
   isTenantAcceptingOrders,
   isServiceWithinHours,
   isWithinCoworkingHours,
+  parseTimeToMinutes,
 } from "@/lib/operating-hours";
 import {
   Calculator,
@@ -127,7 +129,11 @@ import { CoworkingRoomCard } from "@/features/pos/CoworkingRoomCard";
 import { CoworkingBookingPanel } from "@/features/pos/CoworkingBookingPanel";
 import { CoworkingPhotoModal } from "@/features/pos/CoworkingPhotoModal";
 import { CoworkingQrisModal } from "@/features/coworking/CoworkingQrisModal";
-import { getTodayWitaDateString, calculateCoworkingPrice } from "@/features/coworking/coworking-domain";
+import {
+  getTodayWitaDateString,
+  calculateCoworkingPrice,
+  resolveSpaceCapacity,
+} from "@/features/coworking/coworking-domain";
 import { CoworkingBooking } from "@/types/coworking";
 import { PosVoucherModal } from "@/features/pos/PosVoucherModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
@@ -186,7 +192,13 @@ export default function POSPage() {
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
   const { settings, redeemPromo } = useSettings();
-  const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace, cancelBooking: cwCancelBooking } = useCoworking();
+  const {
+    spaces: cwSpaces,
+    bookings: cwBookings,
+    bookSpace: cwBookSpace,
+    bookSpaceWithSync: cwBookSpaceWithSync,
+    cancelBooking: cwCancelBooking,
+  } = useCoworking();
   const { shifts, activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
   const isTenantScoped =
@@ -249,6 +261,16 @@ export default function POSPage() {
       setCwStartTime(getValidOperationalTime(cwDate));
     }
   }, []);
+
+  useEffect(() => {
+    if (!cwStartTime) return;
+    setCwDuration((prev) => {
+      if (isWithinCoworkingHours(cwStartTime, prev)) return prev;
+      const startMins = parseTimeToMinutes(cwStartTime);
+      if (startMins === null || startMins >= COWORKING_CLOSE_MINUTES) return 1;
+      return Math.max(1, Math.floor((COWORKING_CLOSE_MINUTES - startMins) / 60));
+    });
+  }, [cwStartTime]);
 
   const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
 
@@ -359,9 +381,7 @@ export default function POSPage() {
     const duration = Math.max(1, newDraft.meetingDurationHours || 1);
     const bookingDate = newDraft.meetingBookingDate || getTodayWitaDateString();
     const startTime = newDraft.meetingStartTime || getValidOperationalTime(bookingDate);
-    const startHour = parseHour(startTime);
-    const endHour = startHour + duration;
-    const endTime = startTime ? `${String(endHour).padStart(2, "0")}:00` : "";
+    const endTime = startTime ? calculateEndTime(startTime, duration) : "";
 
     const { basePrice: totalRoomPrice } = calculateCoworkingPrice(room, {
       bookingType: "HOURLY",
@@ -372,10 +392,10 @@ export default function POSPage() {
       cartItemId: `bundle-meeting-${room.id}`,
       productId: `space-${room.id}`,
       productName: `Sewa Ruang Meeting: ${room.name}`,
-      quantity: duration,
-      basePrice: room.hourlyRate,
+      quantity: 1,
+      basePrice: totalRoomPrice,
       selectedModifiers: [],
-      unitFinalPrice: Math.round(totalRoomPrice / duration),
+      unitFinalPrice: totalRoomPrice,
       itemTotal: totalRoomPrice,
       tenantId: "DAGO_HUB",
       itemType: "COWORKING",
@@ -394,13 +414,6 @@ export default function POSPage() {
     setCartItems((prev) => {
       const withoutRoom = prev.filter((it) => !it.cartItemId.startsWith("bundle-meeting-"));
       return [...withoutRoom, roomCartItem];
-    });
-  };
-
-  const handleCorporateMeetingRoomChange = (roomId: string) => {
-    handleCorporateDraftChange({
-      ...corporateDraft,
-      meetingRoomId: roomId || undefined,
     });
   };
 
@@ -835,23 +848,30 @@ export default function POSPage() {
         return;
       }
     }
+    const isCwItem = meta.isCw || item.itemType === "COWORKING";
     const resolvedItem: POSCartItem = {
       ...item,
+      quantity: isCwItem ? 1 : item.quantity,
+      itemTotal: isCwItem ? item.unitFinalPrice : item.itemTotal,
       tenantId: meta.resolvedTenantId,
       tenantName: meta.resolvedTenantName,
-      itemType: meta.isCw ? "COWORKING" : item.itemType ?? "FNB",
+      itemType: isCwItem ? "COWORKING" : item.itemType ?? "FNB",
       category: meta.resolvedCategory,
     };
     setCartItems((prev) => {
-      const existingIdx = prev.findIndex(
-        (i) =>
-          i.productId === resolvedItem.productId &&
-          i.selectedVariant?.name === resolvedItem.selectedVariant?.name &&
-          i.notes === resolvedItem.notes &&
-          JSON.stringify(i.coworkingMeta ?? null) === JSON.stringify(resolvedItem.coworkingMeta ?? null) &&
-          JSON.stringify(i.selectedModifiers.map((m) => m.name).sort()) ===
-          JSON.stringify(resolvedItem.selectedModifiers.map((m) => m.name).sort())
-      );
+      const existingIdx =
+        resolvedItem.itemType === "COWORKING"
+          ? -1
+          : prev.findIndex(
+              (i) =>
+                i.itemType !== "COWORKING" &&
+                i.productId === resolvedItem.productId &&
+                i.selectedVariant?.name === resolvedItem.selectedVariant?.name &&
+                i.notes === resolvedItem.notes &&
+                JSON.stringify(i.coworkingMeta ?? null) === JSON.stringify(resolvedItem.coworkingMeta ?? null) &&
+                JSON.stringify(i.selectedModifiers.map((m) => m.name).sort()) ===
+                JSON.stringify(resolvedItem.selectedModifiers.map((m) => m.name).sort())
+            );
 
       if (existingIdx > -1) {
         const updated = [...prev];
@@ -875,6 +895,16 @@ export default function POSPage() {
       prev
         .map((item) => {
           if (item.cartItemId !== cartItemId) return item;
+          if (item.itemType === "COWORKING" || isCoworkingOrderItem(item)) {
+            if (delta > 0) return item;
+            const newQty = Math.min(1, item.quantity + delta);
+            if (newQty <= 0) return null;
+            return {
+              ...item,
+              quantity: newQty,
+              itemTotal: item.unitFinalPrice * newQty,
+            };
+          }
           const newQty = item.quantity + delta;
           if (newQty <= 0) return null;
           return {
@@ -984,6 +1014,20 @@ export default function POSPage() {
   }) => {
     if (isSubmittingOrderRef.current) return;
     isSubmittingOrderRef.current = true;
+    let resolveOrderSynced: ((ok: boolean) => void) | undefined;
+    let resolveUnifiedOrderSynced: ((ok: boolean) => void) | undefined;
+    let orderSyncSettled = false;
+    let unifiedOrderSyncSettled = false;
+    const settleOrderSync = (ok: boolean) => {
+      if (orderSyncSettled || !resolveOrderSynced) return;
+      orderSyncSettled = true;
+      resolveOrderSynced(ok);
+    };
+    const settleUnifiedOrderSync = (ok: boolean) => {
+      if (unifiedOrderSyncSettled || !resolveUnifiedOrderSynced) return;
+      unifiedOrderSyncSettled = true;
+      resolveUnifiedOrderSynced(ok);
+    };
     try {
       setIsPaymentModalOpen(false);
 
@@ -1024,21 +1068,63 @@ export default function POSPage() {
 
       let linkedBookingCode: string | undefined = undefined;
       let linkedBookingId: string | undefined = undefined;
-      let resolveOrderSynced: ((ok: boolean) => void) | undefined;
+      const createdUnifiedBookingIds: string[] = [];
       const linkedRoom = corporateDraft.meetingRoomId
         ? cwSpaces.find((s) => s.id === corporateDraft.meetingRoomId)
         : undefined;
+      const unifiedCoworkingEntries = resolvedCartMeta.filter(
+        (entry) =>
+          entry.isCw &&
+          entry.item.coworkingMeta &&
+          !entry.item.cartItemId.startsWith("bundle-meeting-")
+      );
+
+      let latestBookingsForCheck: CoworkingBooking[] = cwBookings;
+      if ((isCorporate && linkedRoom) || unifiedCoworkingEntries.length > 0) {
+        try {
+          if (typeof window !== "undefined" && typeof fetch === "function") {
+            const liveRes = await fetch("/api/coworking/bookings", { cache: "no-store" });
+            if (liveRes.ok) {
+              const liveJson = await liveRes.json().catch(() => null);
+              if (liveJson && Array.isArray(liveJson.bookings)) {
+                latestBookingsForCheck = liveJson.bookings as CoworkingBooking[];
+              }
+            }
+          }
+        } catch {
+          // Offline or mocked environment: fall back to local bookings check
+        }
+      }
+
+      const simulatedBookings: CoworkingBooking[] = [...latestBookingsForCheck];
+
+      let corporateMeetingPayload:
+        | {
+            meetingDate: string;
+            meetingTime: string;
+            meetingDuration: number;
+            calculatedEndTime: string;
+            totalRoomPrice: number;
+          }
+        | undefined;
 
       if (isCorporate && linkedRoom) {
         const meetingDate = corporateDraft.meetingBookingDate || getTodayWitaDateString();
         const meetingTime = corporateDraft.meetingStartTime || getValidOperationalTime(meetingDate);
         const meetingDuration = Math.max(1, corporateDraft.meetingDurationHours || 1);
+        const dateOpenCheck = isCoworkingDateOpen(meetingDate, settings?.coworkingHolidays);
+        if (!dateOpenCheck.isOpen) {
+          notify.error(
+            "Co-working tutup",
+            dateOpenCheck.reason || "Tanggal ruang pertemuan bukan hari operasional co-working."
+          );
+          return;
+        }
         if (!meetingTime || isSlotPast(meetingDate, meetingTime)) {
           notify.error(
             "Jadwal ruang pertemuan sudah lewat",
             "Pilih tanggal atau jam mulai ruang pertemuan yang masih tersedia."
           );
-          isSubmittingOrderRef.current = false;
           return;
         }
         if (!isWithinCoworkingHours(meetingTime, meetingDuration)) {
@@ -1046,56 +1132,217 @@ export default function POSPage() {
             "Jadwal ruang pertemuan di luar jam operasional",
             "Jam operasional ruang pertemuan adalah 09.00 sampai 18.00 WITA."
           );
-          isSubmittingOrderRef.current = false;
           return;
         }
-        const hourlyRate = linkedRoom.hourlyRate;
-        const totalRoomPrice = hourlyRate * meetingDuration;
-        const maxCapacity =
-          linkedRoom.type === "OPEN_SPACE" ||
-          linkedRoom.type === "SPACE_MONITOR" ||
-          linkedRoom.type === "HOT_DESK"
-            ? Math.max(1, linkedRoom.capacity || 1)
-            : 1;
+        const { basePrice: totalRoomPrice } = calculateCoworkingPrice(linkedRoom, {
+          bookingType: "HOURLY",
+          duration: meetingDuration,
+        });
+        const maxCapacity = resolveSpaceCapacity(linkedRoom);
         const calculatedEndTime = calculateEndTime(meetingTime, meetingDuration).replace(
           /\s*WITA$/i,
           ""
         );
 
-        try {
-          if (typeof window !== "undefined" && typeof fetch === "function") {
-            const liveRes = await fetch("/api/coworking/bookings", { cache: "no-store" });
-            if (liveRes.ok) {
-              const liveJson = await liveRes.json().catch(() => null);
-              if (liveJson && Array.isArray(liveJson.bookings)) {
-                const liveConflict = checkCoworkingBookingConflict(liveJson.bookings, {
-                  spaceId: linkedRoom.id,
-                  spaceName: linkedRoom.name,
-                  bookingType: "HOURLY",
-                  date: meetingDate,
-                  startTime: meetingTime,
-                  endTime: calculatedEndTime,
-                  maxCapacity,
-                });
-                if (liveConflict.hasConflict) {
-                  notify.error(
-                    "Ruang pertemuan sudah terisi",
-                    liveConflict.message ||
-                      "Slot ruang pertemuan sudah dipesan pihak lain. Pilih jam atau ruangan lain."
-                  );
-                  isSubmittingOrderRef.current = false;
-                  return;
-                }
-              }
-            }
-          }
-        } catch {
-          // Offline or mocked environment: fall back to local bookingsRef check in cwBookSpace
+        const liveConflict = checkCoworkingBookingConflict(simulatedBookings, {
+          spaceId: linkedRoom.id,
+          spaceName: linkedRoom.name,
+          bookingType: "HOURLY",
+          date: meetingDate,
+          startTime: meetingTime,
+          endTime: calculatedEndTime,
+          maxCapacity,
+        });
+        if (liveConflict.hasConflict) {
+          notify.error(
+            "Ruang pertemuan sudah terisi",
+            liveConflict.message ||
+              "Slot ruang pertemuan sudah dipesan pihak lain. Pilih jam atau ruangan lain."
+          );
+          return;
         }
 
+        simulatedBookings.push({
+          id: `sim-corp-${linkedRoom.id}`,
+          bookingCode: "SIM-CORP",
+          guestName: corporateDraft.picName.trim() || "PIC Corporate",
+          guestPhone: corporateDraft.picPhone.trim() || "-",
+          guestEmail: "",
+          spaceId: linkedRoom.id,
+          spaceName: linkedRoom.name,
+          spaceType: linkedRoom.type,
+          bookingType: "HOURLY",
+          date: meetingDate,
+          startTime: meetingTime,
+          endTime: calculatedEndTime,
+          duration: meetingDuration,
+          totalAmount: totalRoomPrice,
+          paymentStatus: "PENDING",
+          checkInStatus: "RESERVED",
+        });
+
+        corporateMeetingPayload = {
+          meetingDate,
+          meetingTime,
+          meetingDuration,
+          calculatedEndTime,
+          totalRoomPrice,
+        };
+      }
+
+      const validatedUnifiedEntries: Array<{
+        entry: (typeof unifiedCoworkingEntries)[number];
+        targetSpace: CoworkingSpaceItem;
+        bookingDate: string;
+        startTime: string;
+        endTime: string;
+        durationHours: number;
+      }> = [];
+
+      for (const entry of unifiedCoworkingEntries) {
+        const cwMeta = entry.item.coworkingMeta!;
+        const targetSpace = cwSpaces.find((s) => s.id === cwMeta.spaceId);
+        if (!targetSpace) {
+          notify.error(
+            "Ruang kerja tidak ditemukan",
+            `Ruang ${cwMeta.spaceName} tidak ditemukan atau sudah dihapus.`
+          );
+          return;
+        }
+        if (targetSpace.status === "MAINTENANCE") {
+          notify.error(
+            "Ruang sedang pemeliharaan",
+            `Ruang ${targetSpace.name} sedang dalam perbaikan dan tidak dapat dipesan.`
+          );
+          return;
+        }
+        const cwBookingDate = cwMeta.bookingDate || getTodayWitaDateString();
+        const cwBookingStart = (
+          cwMeta.startTime ||
+          getValidOperationalTime(cwBookingDate) ||
+          "09:00"
+        ).replace(/\s*WITA$/i, "");
+        const cwBookingDuration = Math.max(1, cwMeta.durationHours || 1);
+        const cwBookingEnd = (
+          cwMeta.endTime || calculateEndTime(cwBookingStart, cwBookingDuration)
+        ).replace(/\s*WITA$/i, "");
+
+        const dateOpenCheck = isCoworkingDateOpen(cwBookingDate, settings?.coworkingHolidays);
+        if (!dateOpenCheck.isOpen) {
+          notify.error(
+            "Co-working tutup",
+            dateOpenCheck.reason || "Tanggal yang dipilih bukan hari operasional co-working."
+          );
+          return;
+        }
+        if (!cwBookingStart || isSlotPast(cwBookingDate, cwBookingStart)) {
+          notify.error(
+            "Jadwal ruang kerja sudah lewat",
+            `Slot ${targetSpace.name} (${cwBookingStart}) sudah lewat.`
+          );
+          return;
+        }
+        if (!isWithinCoworkingHours(cwBookingStart, cwBookingDuration)) {
+          notify.error(
+            "Jadwal ruang kerja di luar jam operasional",
+            "Jam operasional Dago Creative Hub dan co-working adalah 09.00 sampai 18.00 WITA."
+          );
+          return;
+        }
+
+        const slotConflict = checkCoworkingBookingConflict(simulatedBookings, {
+          spaceId: targetSpace.id,
+          spaceName: targetSpace.name,
+          bookingType: "HOURLY",
+          date: cwBookingDate,
+          startTime: cwBookingStart,
+          endTime: cwBookingEnd,
+          maxCapacity: resolveSpaceCapacity(targetSpace),
+        });
+        if (slotConflict.hasConflict) {
+          notify.error(
+            "Ruang kerja sudah terisi",
+            slotConflict.message ||
+              `Slot ${targetSpace.name} (${cwBookingStart}–${cwBookingEnd}) sudah dipesan pihak lain.`
+          );
+          return;
+        }
+
+        simulatedBookings.push({
+          id: `sim-unified-${entry.item.cartItemId}`,
+          bookingCode: "SIM-UNIFIED",
+          guestName: customerName.trim() || "Tamu POS",
+          guestPhone: selectedMember?.phone || "-",
+          guestEmail: selectedMember?.email || "-",
+          spaceId: targetSpace.id,
+          spaceName: targetSpace.name,
+          spaceType: targetSpace.type,
+          bookingType: "HOURLY",
+          date: cwBookingDate,
+          startTime: cwBookingStart,
+          endTime: cwBookingEnd,
+          duration: cwBookingDuration,
+          totalAmount: Math.max(0, Math.round(entry.item.unitFinalPrice * entry.item.quantity)),
+          paymentStatus: "PENDING",
+          checkInStatus: "RESERVED",
+        });
+
+        validatedUnifiedEntries.push({
+          entry,
+          targetSpace,
+          bookingDate: cwBookingDate,
+          startTime: cwBookingStart,
+          endTime: cwBookingEnd,
+          durationHours: cwBookingDuration,
+        });
+      }
+
+      const cwAllocationByCartItemId = new Map<
+        string,
+        { discount: number; tax: number }
+      >();
+      if (coworkingCartItems.length > 0) {
+        const cwLineTotals = coworkingCartItems.map((c) =>
+          Math.max(0, Math.round((c.unitFinalPrice || 0) * (c.quantity || 0)))
+        );
+        const cwDiscountsByIdx = allocateIntegerProRata(
+          cartTaxBreakdown.coworkingDiscount,
+          cwLineTotals
+        );
+        const cwNetDppsByIdx = cwLineTotals.map((total, idx) =>
+          Math.max(0, total - (cwDiscountsByIdx[idx] ?? 0))
+        );
+        const cwTaxesByIdx = allocateIntegerProRata(
+          cartTaxBreakdown.coworkingTax,
+          cwNetDppsByIdx
+        );
+        coworkingCartItems.forEach((c, idx) => {
+          cwAllocationByCartItemId.set(c.cartItemId, {
+            discount: cwDiscountsByIdx[idx] ?? 0,
+            tax: cwTaxesByIdx[idx] ?? 0,
+          });
+        });
+      }
+
+      const resolvedCwTaxRatePercent =
+        effectiveCwTaxEnabled && effectiveCwTaxRatePercent > 0
+          ? effectiveCwTaxRatePercent
+          : 0;
+      const resolvedCwTaxType =
+        effectiveCwTaxEnabled && resolvedCwTaxRatePercent > 0
+          ? cwTaxCfg?.taxType || "PPN"
+          : "NON_TAX";
+
+      if (isCorporate && linkedRoom && corporateMeetingPayload) {
         const orderSyncedPromise = new Promise<boolean>((resolve) => {
           resolveOrderSynced = resolve;
         });
+
+        const corpAlloc = cwAllocationByCartItemId.get(`bundle-meeting-${linkedRoom.id}`);
+        const corpDiscount = corpAlloc?.discount ?? 0;
+        const corpTax = corpAlloc?.tax ?? 0;
+        const corpBasePrice = corporateMeetingPayload.totalRoomPrice;
+        const corpTotalAmount = Math.max(0, corpBasePrice - corpDiscount) + corpTax;
 
         try {
           const booked = cwBookSpace(
@@ -1108,15 +1355,18 @@ export default function POSPage() {
               spaceName: linkedRoom.name,
               spaceType: linkedRoom.type,
               bookingType: "HOURLY",
-              date: meetingDate,
-              startTime: meetingTime,
-              endTime: calculatedEndTime,
-              duration: meetingDuration,
-              price: hourlyRate,
-              discount: 0,
-              totalAmount: totalRoomPrice,
-              paidAmount: isInvoicePayment ? 0 : totalRoomPrice,
-              remainingAmount: isInvoicePayment ? totalRoomPrice : 0,
+              date: corporateMeetingPayload.meetingDate,
+              startTime: corporateMeetingPayload.meetingTime,
+              endTime: corporateMeetingPayload.calculatedEndTime,
+              duration: corporateMeetingPayload.meetingDuration,
+              price: corpBasePrice,
+              discount: corpDiscount,
+              tax: corpTax,
+              taxType: resolvedCwTaxType,
+              taxRatePercent: resolvedCwTaxRatePercent,
+              totalAmount: corpTotalAmount,
+              paidAmount: isInvoicePayment ? 0 : corpTotalAmount,
+              remainingAmount: isInvoicePayment ? corpTotalAmount : 0,
               outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
               paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
               paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
@@ -1135,11 +1385,13 @@ export default function POSPage() {
           );
           linkedBookingCode = booked?.bookingCode;
           linkedBookingId = booked?.id;
-        } catch (e: any) {
-          resolveOrderSynced?.(false);
-          const errMsg = e?.message || "Ruang pertemuan tidak tersedia pada jadwal yang dipilih.";
+        } catch (e: unknown) {
+          settleOrderSync(false);
+          const errMsg =
+            e instanceof Error
+              ? e.message
+              : "Ruang pertemuan tidak tersedia pada jadwal yang dipilih.";
           notify.error("Gagal memesan ruangan", errMsg);
-          isSubmittingOrderRef.current = false;
           return;
         }
       }
@@ -1168,19 +1420,26 @@ export default function POSPage() {
         : customerName.trim() ||
           (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
 
-      // Sinkronisasi pemesanan Co-Working dari keranjang gabungan POS (Unified Cart)
-      for (const entry of resolvedCartMeta) {
-        if (entry.isCw && entry.item.coworkingMeta) {
-          // Lewati paket corporate meeting karena sudah dibooking secara terdedikasi di atas
-          if (entry.item.cartItemId.startsWith("bundle-meeting-")) {
-            continue;
-          }
-          const cwMeta = entry.item.coworkingMeta;
-          const targetSpace = cwSpaces.find((s) => s.id === cwMeta.spaceId);
-          if (targetSpace) {
-            try {
-              const itemTotal = entry.item.unitFinalPrice * entry.item.quantity;
-              cwBookSpace({
+      if (validatedUnifiedEntries.length > 0) {
+        const unifiedOrderSyncedPromise = new Promise<boolean>((resolve) => {
+          resolveUnifiedOrderSynced = resolve;
+        });
+
+        try {
+          for (const validated of validatedUnifiedEntries) {
+            const { entry, targetSpace, bookingDate, startTime, endTime, durationHours } =
+              validated;
+            const lineTotal = Math.max(
+              0,
+              Math.round(entry.item.unitFinalPrice * entry.item.quantity)
+            );
+            const alloc = cwAllocationByCartItemId.get(entry.item.cartItemId);
+            const itemDiscount = alloc?.discount ?? 0;
+            const itemTax = alloc?.tax ?? 0;
+            const itemTotalAmount = Math.max(0, lineTotal - itemDiscount) + itemTax;
+
+            const bookedUnified = cwBookSpace(
+              {
                 guestName: effectiveCustomerName,
                 guestPhone: selectedMember?.phone || "-",
                 guestEmail: selectedMember?.email || "-",
@@ -1188,24 +1447,45 @@ export default function POSPage() {
                 spaceName: targetSpace.name,
                 spaceType: targetSpace.type,
                 bookingType: "HOURLY",
-                date: cwMeta.bookingDate || getTodayWitaDateString(),
-                startTime: cwMeta.startTime || "09:00",
-                endTime: cwMeta.endTime || calculateEndTime(cwMeta.startTime || "09:00", cwMeta.durationHours || 1),
-                duration: cwMeta.durationHours || 1,
-                price: entry.item.basePrice,
-                discount: 0,
-                totalAmount: itemTotal,
-                paidAmount: isInvoicePayment ? 0 : itemTotal,
-                remainingAmount: isInvoicePayment ? itemTotal : 0,
+                date: bookingDate,
+                startTime,
+                endTime,
+                duration: durationHours,
+                price: lineTotal,
+                discount: itemDiscount,
+                tax: itemTax,
+                taxType: resolvedCwTaxType,
+                taxRatePercent: resolvedCwTaxRatePercent,
+                totalAmount: itemTotalAmount,
+                paidAmount: isInvoicePayment ? 0 : itemTotalAmount,
+                remainingAmount: isInvoicePayment ? itemTotalAmount : 0,
+                outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
                 paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
                 paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
                 billedViaPosOrder: true,
                 linkedOrderId: receiptNo,
-              });
-            } catch (err: unknown) {
-              console.warn("[POS Unified Cart] Gagal sinkronisasi reservasi coworking:", err);
+              },
+              {
+                waitBeforeSync: unifiedOrderSyncedPromise,
+                onSyncRejected: (err) => {
+                  notify.error(
+                    "Sinkronisasi ruang kerja ditolak server",
+                    `${err} Periksa atau batalkan pesanan ${receiptNo} bila jadwal perlu disesuaikan.`
+                  );
+                },
+              }
+            );
+            if (bookedUnified?.id) {
+              createdUnifiedBookingIds.push(bookedUnified.id);
             }
           }
+        } catch (err: unknown) {
+          settleOrderSync(false);
+          settleUnifiedOrderSync(false);
+          const errMsg =
+            err instanceof Error ? err.message : "Jadwal ruang kerja tidak tersedia.";
+          notify.error("Gagal memesan ruang kerja", errMsg);
+          return;
         }
       }
 
@@ -1276,9 +1556,16 @@ export default function POSPage() {
       const syncResult = await serverSync;
       if (syncResult.rejected) {
         if (resolveOrderSynced) {
-          resolveOrderSynced(false);
+          settleOrderSync(false);
         } else if (linkedBookingId || linkedBookingCode) {
           cwCancelBooking(linkedBookingId || linkedBookingCode!);
+        }
+        if (resolveUnifiedOrderSynced) {
+          settleUnifiedOrderSync(false);
+        } else {
+          for (const bookingId of createdUnifiedBookingIds) {
+            cwCancelBooking(bookingId);
+          }
         }
         notify.error(
           "Transaksi ditolak server",
@@ -1286,7 +1573,8 @@ export default function POSPage() {
         );
         return;
       }
-      resolveOrderSynced?.(true);
+      settleOrderSync(true);
+      settleUnifiedOrderSync(true);
 
       const createdOrder = syncResult.order ?? optimisticOrder;
 
@@ -1477,6 +1765,8 @@ export default function POSPage() {
       setLastReceiptData(receipt);
       setIsReceiptModalOpen(true);
     } finally {
+      settleOrderSync(false);
+      settleUnifiedOrderSync(false);
       isSubmittingOrderRef.current = false;
     }
   };
@@ -1617,7 +1907,7 @@ export default function POSPage() {
     }
   };
 
-  const handleCompleteCoworkingPayment = () => {
+  const handleCompleteCoworkingPayment = async () => {
     if (!selectedSpace) {
       notify.warning("Pilih ruang kerja dulu");
       return;
@@ -1677,7 +1967,7 @@ export default function POSPage() {
       bookingType: "HOURLY",
       date: cwDate,
       startTime: cwStartTime,
-      endTime: `${startH + cwDuration}:00 WITA`,
+      endTime: calculateEndTime(cwStartTime, cwDuration),
       maxCapacity:
         selectedSpace.type === "OPEN_SPACE" ||
         selectedSpace.type === "SPACE_MONITOR" ||
@@ -1708,10 +1998,15 @@ export default function POSPage() {
           ? `[${cwAppliedPromo.code}] ${cwAppliedPromo.name}`
           : cwAppliedPromo.name
         : undefined;
+      const cwPromoFields: { promoId?: string; promoCode?: string } = {
+        promoId: cwAppliedPromo?.id,
+        promoCode: cwAppliedPromo?.code,
+      };
 
-      let createdBooking: CoworkingBooking;
+      let initialBooking: CoworkingBooking;
+      let serverSync: ReturnType<typeof cwBookSpaceWithSync>["serverSync"];
       try {
-        createdBooking = cwBookSpace({
+        const result = cwBookSpaceWithSync({
           guestName: effectiveGuestName,
           guestPhone: effectiveGuestPhone,
           guestEmail: effectiveGuestEmail,
@@ -1725,6 +2020,7 @@ export default function POSPage() {
           duration: cwDuration,
           price: cwPricing.originalSubtotal,
           discount: cwPricing.discountAmount,
+          ...cwPromoFields,
           promoTitle: resolvedPromoTitle,
           tax: cwPricing.tax,
           taxType: cwPricing.taxType,
@@ -1739,6 +2035,8 @@ export default function POSPage() {
           fnbVoucherApplied: cwAppliedPromo?.code,
           notes: cwNotes || undefined,
         });
+        initialBooking = result.booking;
+        serverSync = result.serverSync;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Booking gagal disimpan.";
         notify.error("Booking gagal", message);
@@ -1746,35 +2044,48 @@ export default function POSPage() {
       }
 
       if (isQris) {
-        setPendingCwQrisBooking(createdBooking);
+        setPendingCwQrisBooking(initialBooking);
         setIsCwQrisModalOpen(true);
         notify.warning(
           "Menunggu konfirmasi QRIS",
-          `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta persetujuan supervisor.`
+          `Booking ${initialBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta persetujuan supervisor.`
         );
+        void serverSync.then((res) => {
+          if (res.rejected) {
+            setIsCwQrisModalOpen(false);
+            setPendingCwQrisBooking(null);
+          } else if (res.booking) {
+            setPendingCwQrisBooking((prev) =>
+              prev?.id === initialBooking.id ? res.booking! : prev
+            );
+          }
+        });
         return;
       }
 
-      if (cwAppliedPromo?.id) {
-        redeemPromo(cwAppliedPromo.id, cwSelectedMember?.id || effectiveGuestPhone || "cw-guest");
+      const syncRes = await serverSync;
+      if (syncRes.rejected) {
+        notify.error("Booking gagal", syncRes.error || "Reservasi ditolak oleh server.");
+        return;
       }
+      const createdBooking = syncRes.booking ?? initialBooking;
 
       if (cwCustomerType === "MEMBER" && cwSelectedMember) {
-        const earnedPoints = Math.floor(cwPricing.total / 1000);
+        const earnedPoints = Math.floor(createdBooking.totalAmount / 1000);
         if (earnedPoints > 0) {
           addPoints(
             cwSelectedMember.id,
             earnedPoints,
             `Booking Coworking #${createdBooking.bookingCode}`,
             createdBooking.id,
-            cwPricing.total
+            createdBooking.totalAmount
           );
         }
       }
 
       recordShiftTransaction(
-        cwPaymentMethod === "CASH" ? cwPricing.total : 0,
-        cwPaymentMethod !== "CASH" ? cwPricing.total : 0,
+        cwPaymentMethod === "CASH" ? createdBooking.totalAmount : 0,
+        cwPaymentMethod !== "CASH" ? createdBooking.totalAmount : 0,
         activeOutletId,
         createdBooking?.id ? `cw-${createdBooking.id}` : undefined
       );
@@ -1783,7 +2094,7 @@ export default function POSPage() {
         module: "COWORKING",
         action: "PAYMENT_SUCCESS",
         recordId: createdBooking.bookingCode,
-        newValue: `Booking: ${selectedSpace.name} - ${effectiveGuestName} (${formatCurrencyIDR(cwPricing.total)} via ${cwPaymentMethod})`,
+        newValue: `Booking: ${selectedSpace.name} - ${effectiveGuestName} (${formatCurrencyIDR(createdBooking.totalAmount)} via ${cwPaymentMethod})`,
         description: `Transaksi booking co-working ${createdBooking.bookingCode} diproses di kasir`,
         reason: `Pembayaran kasir selesai via ${cwPaymentMethod}`,
         status: "SUCCESS",
@@ -1816,14 +2127,17 @@ export default function POSPage() {
         endTime: endTimeFormatted.replace(/\s*WITA$/i, ""),
         duration: cwDuration,
         bookingType: "HOURLY",
-        basePrice: cwPricing.originalSubtotal,
-        discount: cwPricing.discountAmount > 0 ? cwPricing.discountAmount : undefined,
-        promoTitle: resolvedPromoTitle,
-        tax: cwPricing.tax > 0 ? cwPricing.tax : 0,
-        taxType: cwPricing.taxType,
-        taxRatePercent: cwPricing.taxRatePercent,
+        basePrice: createdBooking.price ?? cwPricing.originalSubtotal,
+        discount:
+          createdBooking.discount && createdBooking.discount > 0
+            ? createdBooking.discount
+            : undefined,
+        promoTitle: createdBooking.promoTitle ?? resolvedPromoTitle,
+        tax: createdBooking.tax ?? cwPricing.tax,
+        taxType: createdBooking.taxType ?? cwPricing.taxType,
+        taxRatePercent: createdBooking.taxRatePercent ?? cwPricing.taxRatePercent,
         serviceCharge: 0,
-        totalAmount: cwPricing.total,
+        totalAmount: createdBooking.totalAmount,
         paymentMethod: cwPaymentMethod,
         paymentStatus: "PAID",
         notes: cwNotes || undefined,
@@ -1840,13 +2154,6 @@ export default function POSPage() {
   };
 
   const handleCwQrisSuccess = (verifiedBooking: CoworkingBooking) => {
-    if (cwAppliedPromo?.id) {
-      redeemPromo(
-        cwAppliedPromo.id,
-        cwSelectedMember?.id || verifiedBooking.guestPhone || "cw-guest"
-      );
-    }
-
     if (cwCustomerType === "MEMBER" && cwSelectedMember) {
       const earnedPoints = Math.floor(verifiedBooking.totalAmount / 1000);
       if (earnedPoints > 0) {
@@ -2172,7 +2479,6 @@ export default function POSPage() {
                 corporateDraft={corporateDraft}
                 onCorporateDraftChange={handleCorporateDraftChange}
                 meetingRooms={meetingRoomsList}
-                onSelectedMeetingRoomChange={handleCorporateMeetingRoomChange}
                 coworkingBookings={cwBookings}
                 coworkingSpaces={cwSpaces}
               />
@@ -2251,7 +2557,7 @@ export default function POSPage() {
                                 size="icon-sm"
                                 onClick={() => handleUpdateQuantity(item.cartItemId, 1)}
                                 aria-label="Tambah jumlah"
-                                disabled={item.cartItemId.startsWith("bundle-meeting-")}
+                                disabled={item.cartItemId.startsWith("bundle-meeting-") || item.itemType === "COWORKING"}
                               >
                                 <Plus />
                               </Button>
@@ -2546,6 +2852,49 @@ export default function POSPage() {
                         "Jam operasional Dago Creative Hub dan co-working adalah 09.00 sampai 18.00 WITA."
                       );
                       return;
+                    }
+                    const cwMeta = cwItem.coworkingMeta;
+                    if (cwMeta && selectedSpace) {
+                      const cartSimulatedBookings: CoworkingBooking[] = [
+                        ...cwBookings,
+                        ...cartItems
+                          .filter((c) => isCoworkingOrderItem(c) && c.coworkingMeta)
+                          .map((c) => ({
+                            id: `cart-sim-${c.cartItemId}`,
+                            bookingCode: "CART-SIM",
+                            guestName: "Tamu POS",
+                            guestPhone: "-",
+                            guestEmail: "-",
+                            spaceId: c.coworkingMeta!.spaceId,
+                            spaceName: c.coworkingMeta!.spaceName,
+                            spaceType: (c.coworkingMeta!.spaceType || selectedSpace.type) as SpaceType,
+                            bookingType: "HOURLY" as const,
+                            date: c.coworkingMeta!.bookingDate || cwDate,
+                            startTime: c.coworkingMeta!.startTime || cwStartTime,
+                            endTime: c.coworkingMeta!.endTime,
+                            duration: c.coworkingMeta!.durationHours,
+                            totalAmount: c.itemTotal,
+                            paymentStatus: "PENDING" as const,
+                            checkInStatus: "RESERVED" as const,
+                          })),
+                      ];
+                      const cartConflict = checkCoworkingBookingConflict(cartSimulatedBookings, {
+                        spaceId: selectedSpace.id,
+                        spaceName: selectedSpace.name,
+                        bookingType: "HOURLY",
+                        date: cwMeta.bookingDate || cwDate,
+                        startTime: cwMeta.startTime || cwStartTime,
+                        endTime: cwMeta.endTime || calculateEndTime(cwStartTime, cwDuration),
+                        maxCapacity: resolveSpaceCapacity(selectedSpace),
+                      });
+                      if (cartConflict.hasConflict) {
+                        notify.warning(
+                          "Slot sudah ada di keranjang",
+                          cartConflict.message ||
+                            `Slot ${selectedSpace.name} sudah ada di keranjang atau kapasitas penuh.`
+                        );
+                        return;
+                      }
                     }
                     handleAddToCart(cwItem);
                     if (!customerName.trim()) {

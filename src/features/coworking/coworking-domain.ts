@@ -134,7 +134,7 @@ export function calculateCoworkingPrice(
 
   if (bookingType === "MONTHLY") {
     const monthlyRate = Number(space.monthlyRate ?? (space.dailyRate || 0) * 20);
-    const months = duration >= 28 ? Math.max(1, Math.round(duration / 30)) : duration;
+    const months = Math.max(1, Math.round(duration / 30));
     return {
       basePrice: Math.round(monthlyRate * months),
       rateDescription: `${monthlyRate}/bulan`,
@@ -143,8 +143,12 @@ export function calculateCoworkingPrice(
   }
 
   // HOURLY booking: check tiered rates first
-  if (Array.isArray(space.tieredRates) && space.tieredRates.length > 0) {
-    const matchedTier = space.tieredRates.find((t) => Number(t.hours) === duration);
+  const hourlyRate = Number(space.hourlyRate || 0);
+  const rawHourlyTotal = Math.round(hourlyRate * duration);
+  const hasTieredRates = Array.isArray(space.tieredRates) && space.tieredRates.length > 0;
+
+  if (hasTieredRates) {
+    const matchedTier = space.tieredRates!.find((t) => Number(t.hours) === duration);
     if (matchedTier && Number(matchedTier.price) > 0) {
       return {
         basePrice: Number(matchedTier.price),
@@ -152,10 +156,26 @@ export function calculateCoworkingPrice(
         isTieredMatch: true,
       };
     }
+
+    const higherTierPrices = space.tieredRates!
+      .filter((t) => Number(t.hours) >= duration && Number(t.price) > 0)
+      .map((t) => Number(t.price));
+    const dailyCap = Number(space.dailyRate) > 0 ? Number(space.dailyRate) : Infinity;
+    const tierCap = higherTierPrices.length > 0 ? Math.min(...higherTierPrices) : Infinity;
+    const cappedPrice = Math.min(rawHourlyTotal, tierCap, dailyCap);
+
+    return {
+      basePrice: Math.round(cappedPrice),
+      rateDescription:
+        cappedPrice === dailyCap && duration >= 8
+          ? "Seharian penuh"
+          : `${hourlyRate}/jam`,
+      isTieredMatch: false,
+    };
   }
 
   // Fallback: Durasi >= 8 jam otomatis pakai tarif harian jika lebih hemat
-  if (duration >= 8 && space.dailyRate && space.dailyRate < (space.hourlyRate * duration)) {
+  if (duration >= 8 && space.dailyRate && space.dailyRate < rawHourlyTotal) {
     return {
       basePrice: Number(space.dailyRate),
       rateDescription: "Seharian penuh",
@@ -163,9 +183,8 @@ export function calculateCoworkingPrice(
     };
   }
 
-  const hourlyRate = Number(space.hourlyRate || 0);
   return {
-    basePrice: Math.round(hourlyRate * duration),
+    basePrice: rawHourlyTotal,
     rateDescription: `${hourlyRate}/jam`,
     isTieredMatch: false,
   };
@@ -403,7 +422,7 @@ export function buildCoworkingExportData(
       : b.bookingType === "DAILY"
       ? `${b.duration} Hari`
       : b.duration >= 28
-      ? "1 Bulan"
+      ? `${Math.max(1, Math.round(b.duration / 30))} Bulan`
       : `${b.duration} Bulan`,
     `Rp ${(b.totalAmount || 0).toLocaleString("id-ID")}`,
     b.paymentMethod || b.paymentStatus || "PAID",
@@ -509,9 +528,22 @@ export function emptyCoworkingMessage(
 
 /**
  * Validates whether a coworking space/desk is currently available for new walk-in or booking.
- * Returns true only if status is AVAILABLE and no active session is attached.
+ * Supports shared multi-seat spaces via resolveSpaceCapacity and optional activeCheckedInCount.
  */
-export function isSpaceAvailableNow(space: CoworkingSpaceItem): boolean {
+export function isSpaceAvailableNow(
+  space: CoworkingSpaceItem,
+  activeCheckedInCount?: number
+): boolean {
+  if (space.status === "MAINTENANCE") {
+    return false;
+  }
+  const maxCap = resolveSpaceCapacity(space);
+  if (activeCheckedInCount !== undefined) {
+    return activeCheckedInCount < maxCap;
+  }
+  if (maxCap > 1) {
+    return space.status !== "OCCUPIED";
+  }
   return space.status === "AVAILABLE" && !space.currentSession;
 }
 

@@ -86,7 +86,28 @@ export function CoworkingPhotoModal({
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-border pt-3">
+        {space.tieredRates && space.tieredRates.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="text-xs font-medium text-foreground">
+              Paket tarif durasi
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {space.tieredRates.map((tier) => (
+                <span
+                  key={tier.hours}
+                  className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs text-foreground"
+                >
+                  <span className="font-medium">{tier.hours} jam</span>
+                  <span className="font-mono tabular-nums text-muted-foreground">
+                    {formatCurrencyIDR(tier.price)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
           <div>
             <span className="font-mono text-sm font-medium tabular-nums text-foreground">
               {formatCurrencyIDR(space.hourlyRate)}

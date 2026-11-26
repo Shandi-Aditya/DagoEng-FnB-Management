@@ -75,16 +75,37 @@ export interface WitaDateTimeParts {
   second: number;
 }
 
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  return (
+    !Number.isNaN(dt.getTime()) &&
+    dt.getUTCFullYear() === year &&
+    dt.getUTCMonth() === month - 1 &&
+    dt.getUTCDate() === day
+  );
+}
+
+const UNZONED_WITA_RE = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/;
+
 export function parseUnzonedWitaTimestamp(raw: string): WitaDateTimeParts | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/.exec(raw);
+  const match = UNZONED_WITA_RE.exec(raw);
   if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? 0);
+  if (!isValidCalendarDate(year, month, day)) return null;
+  if (hour > 23 || minute > 59 || second > 59) return null;
   return {
     year: match[1],
     month: match[2],
     day: match[3],
-    hour: Number(match[4]),
-    minute: Number(match[5]),
-    second: Number(match[6] ?? 0),
+    hour,
+    minute,
+    second,
   };
 }
 
@@ -111,6 +132,10 @@ export function extractWitaParts(isoOrDate: string | Date): WitaDateTimeParts | 
 
   const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
   if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]);
+    const day = Number(dateOnlyMatch[3]);
+    if (!isValidCalendarDate(year, month, day)) return null;
     return {
       year: dateOnlyMatch[1],
       month: dateOnlyMatch[2],
@@ -121,8 +146,9 @@ export function extractWitaParts(isoOrDate: string | Date): WitaDateTimeParts | 
     };
   }
 
-  const unzonedWita = parseUnzonedWitaTimestamp(raw);
-  if (unzonedWita) return unzonedWita;
+  if (UNZONED_WITA_RE.test(raw)) {
+    return parseUnzonedWitaTimestamp(raw);
+  }
 
   const dmyMatch =
     /^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})(?:[,\s]+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?(?:\s*(?:WITA|WIB|WIT))?)?$/i.exec(
@@ -131,13 +157,27 @@ export function extractWitaParts(isoOrDate: string | Date): WitaDateTimeParts | 
   if (dmyMatch) {
     const month = MONTH_INDEX_BY_NAME[dmyMatch[2].toLowerCase()];
     if (month) {
+      const yearNum = Number(dmyMatch[3]);
+      const monthNum = Number(month);
+      const dayNum = Number(dmyMatch[1]);
+      const hour = Number(dmyMatch[4] ?? 0);
+      const minute = Number(dmyMatch[5] ?? 0);
+      const second = Number(dmyMatch[6] ?? 0);
+      if (
+        !isValidCalendarDate(yearNum, monthNum, dayNum) ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59
+      ) {
+        return null;
+      }
       return {
         year: dmyMatch[3],
         month,
-        day: dmyMatch[1].padStart(2, "0"),
-        hour: Number(dmyMatch[4] ?? 0),
-        minute: Number(dmyMatch[5] ?? 0),
-        second: Number(dmyMatch[6] ?? 0),
+        day: String(dayNum).padStart(2, "0"),
+        hour,
+        minute,
+        second,
       };
     }
   }
@@ -149,16 +189,34 @@ export function extractWitaParts(isoOrDate: string | Date): WitaDateTimeParts | 
   if (slashDmyMatch) {
     const dayNum = Number(slashDmyMatch[1]);
     const monthNum = Number(slashDmyMatch[2]);
-    if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12) {
-      return {
-        year: slashDmyMatch[3],
-        month: String(monthNum).padStart(2, "0"),
-        day: String(dayNum).padStart(2, "0"),
-        hour: Number(slashDmyMatch[4] ?? 0),
-        minute: Number(slashDmyMatch[5] ?? 0),
-        second: Number(slashDmyMatch[6] ?? 0),
-      };
+    const yearNum = Number(slashDmyMatch[3]);
+    const hour = Number(slashDmyMatch[4] ?? 0);
+    const minute = Number(slashDmyMatch[5] ?? 0);
+    const second = Number(slashDmyMatch[6] ?? 0);
+    if (
+      !isValidCalendarDate(yearNum, monthNum, dayNum) ||
+      hour > 23 ||
+      minute > 59 ||
+      second > 59
+    ) {
+      return null;
     }
+    return {
+      year: slashDmyMatch[3],
+      month: String(monthNum).padStart(2, "0"),
+      day: String(dayNum).padStart(2, "0"),
+      hour,
+      minute,
+      second,
+    };
+  }
+
+  const isoDatePrefix = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/.exec(raw);
+  if (isoDatePrefix) {
+    const yearNum = Number(isoDatePrefix[1]);
+    const monthNum = Number(isoDatePrefix[2]);
+    const dayNum = Number(isoDatePrefix[3]);
+    if (!isValidCalendarDate(yearNum, monthNum, dayNum)) return null;
   }
 
   const parsed = new Date(raw);

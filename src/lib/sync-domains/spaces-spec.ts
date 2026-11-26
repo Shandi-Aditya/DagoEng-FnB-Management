@@ -690,6 +690,104 @@ export const tablesSyncClient: SyncedDomainClient<"tables"> =
     applyCommandLocally: applyTablesCommand,
   });
 
+const LEGACY_PLAN_IDS = new Set(["plan-nomad", "plan-flexi", "plan-resident"]);
+
+/**
+ * Reconciles legacy `coworking_master` state with official Dago spaces and membership plans
+ * without discarding existing members, checkLogs, custom spaces/plans, or admin edits.
+ */
+export function reconcileCoworkingMasterDefaults(
+  state: CoworkingMasterState
+): CoworkingMasterState {
+  const existingSpaces = Array.isArray(state.spaces) ? state.spaces : [];
+  const dagoById = new Map(DAGO_SPACES.map((s) => [s.id, s]));
+  const existingSpaceIds = new Set<string>();
+  let spacesChanged = false;
+
+  const reconciledExistingSpaces = existingSpaces.map((sp) => {
+    existingSpaceIds.add(sp.id);
+    const dagoDefault = dagoById.get(sp.id);
+    if (!dagoDefault) return sp;
+    const needsTieredRates =
+      sp.tieredRates === undefined && dagoDefault.tieredRates !== undefined;
+    const needsImageUrl =
+      sp.imageUrl === undefined && dagoDefault.imageUrl !== undefined;
+    if (!needsTieredRates && !needsImageUrl) return sp;
+    spacesChanged = true;
+    return {
+      ...sp,
+      ...(needsTieredRates
+        ? { tieredRates: dagoDefault.tieredRates!.map((r) => ({ ...r })) }
+        : {}),
+      ...(needsImageUrl ? { imageUrl: dagoDefault.imageUrl } : {}),
+    };
+  });
+
+  const missingDagoSpaces = DAGO_SPACES.filter(
+    (d) => !existingSpaceIds.has(d.id)
+  ).map((d) => ({
+    ...d,
+    amenities: [...d.amenities],
+    ...(d.tieredRates
+      ? { tieredRates: d.tieredRates.map((r) => ({ ...r })) }
+      : {}),
+  }));
+
+  if (missingDagoSpaces.length > 0) {
+    spacesChanged = true;
+  }
+
+  const nextSpaces = spacesChanged
+    ? [...missingDagoSpaces, ...reconciledExistingSpaces]
+    : existingSpaces;
+
+  const existingPlans = Array.isArray(state.plans) ? state.plans : [];
+  const officialPlanIds = new Set(MEMBERSHIP_PLANS.map((p) => p.id));
+  const hasAnyOfficialPlan = existingPlans.some((p) =>
+    officialPlanIds.has(p.id)
+  );
+  const hasAllOfficialPlans = MEMBERSHIP_PLANS.every((op) =>
+    existingPlans.some((ep) => ep.id === op.id)
+  );
+
+  let nextPlans = existingPlans;
+  let plansChanged = false;
+
+  if (!hasAnyOfficialPlan) {
+    const customPlans = existingPlans.filter((p) => !LEGACY_PLAN_IDS.has(p.id));
+    const officialClones = MEMBERSHIP_PLANS.map((p) => ({
+      ...p,
+      amenities: [...p.amenities],
+      ...(p.benefits ? { benefits: [...p.benefits] } : {}),
+    }));
+    nextPlans = [...officialClones, ...customPlans];
+    plansChanged = true;
+  } else if (!hasAllOfficialPlans) {
+    const existingPlanIds = new Set(existingPlans.map((p) => p.id));
+    const missingOfficial = MEMBERSHIP_PLANS.filter(
+      (p) => !existingPlanIds.has(p.id)
+    ).map((p) => ({
+      ...p,
+      amenities: [...p.amenities],
+      ...(p.benefits ? { benefits: [...p.benefits] } : {}),
+    }));
+    if (missingOfficial.length > 0) {
+      nextPlans = [...existingPlans, ...missingOfficial];
+      plansChanged = true;
+    }
+  }
+
+  if (!spacesChanged && !plansChanged) {
+    return state;
+  }
+
+  return {
+    ...state,
+    spaces: nextSpaces,
+    plans: nextPlans,
+  };
+}
+
 export function defaultCoworkingMasterState(): CoworkingMasterState {
   return {
     spaces: INITIAL_SPACES.map((space) => ({
@@ -743,7 +841,9 @@ export function applyCoworkingMasterCommand(
           ...space,
           status: command.status,
           currentSession:
-            command.status === "AVAILABLE" ? undefined : command.currentSession,
+            command.status === "AVAILABLE" && !command.currentSession
+              ? undefined
+              : command.currentSession,
         };
       });
 
@@ -851,20 +951,26 @@ export const coworkingMasterDomainSpec: ServerDomainSpec<"coworking-master"> = {
       auth.role &&
       COWORKING_STAFF_READ_ROLES.includes(auth.role)
     ) {
-      return { allowed: true };
+      return {
+        allowed: true,
+        transform: (state) => reconcileCoworkingMasterDefaults(state),
+      };
     }
     return {
       allowed: true,
-      transform: (state) => ({
-        ...state,
-        spaces: state.spaces.map((space) => {
-          const sanitized = { ...space };
-          delete sanitized.currentSession;
-          return sanitized;
-        }),
-        members: [],
-        checkLogs: [],
-      }),
+      transform: (state) => {
+        const reconciled = reconcileCoworkingMasterDefaults(state);
+        return {
+          ...reconciled,
+          spaces: reconciled.spaces.map((space) => {
+            const sanitized = { ...space };
+            delete sanitized.currentSession;
+            return sanitized;
+          }),
+          members: [],
+          checkLogs: [],
+        };
+      },
     };
   },
   authorizeWrite(auth, command) {
@@ -908,7 +1014,10 @@ export const coworkingMasterDomainSpec: ServerDomainSpec<"coworking-master"> = {
     };
   },
   applyCommand(current, command) {
-    return applyCoworkingMasterCommand(current, command);
+    return applyCoworkingMasterCommand(
+      reconcileCoworkingMasterDefaults(current),
+      command
+    );
   },
 };
 
@@ -933,7 +1042,7 @@ function createCoworkingMasterStorageMirror(): LocalStorageMirrorAdapter<Coworki
         return cachedState;
       }
       cachedSig = sig;
-      cachedState = {
+      const parsedState: CoworkingMasterState = {
         spaces: parseRawArrayVerbatim<CoworkingSpaceItem>(
           rawSpaces,
           fallback.spaces
@@ -951,6 +1060,7 @@ function createCoworkingMasterStorageMirror(): LocalStorageMirrorAdapter<Coworki
           fallback.plans
         ),
       };
+      cachedState = reconcileCoworkingMasterDefaults(parsedState);
       return cachedState;
     },
     writeToStorage(state) {

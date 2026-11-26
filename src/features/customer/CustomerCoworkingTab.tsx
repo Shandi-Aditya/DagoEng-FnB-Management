@@ -12,7 +12,7 @@ import type { CoworkingMembershipPlan, CoworkingSpaceItem } from "@/types/cowork
 
 import { spaceTypeLabel } from "./customer-domain";
 import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
-import { getSpaceImageUrl } from "@/features/coworking/coworking-domain";
+import { getSpaceImageUrl, resolveSpaceCapacity } from "@/features/coworking/coworking-domain";
 
 export interface CustomerCoworkingTabProps {
   spaces: CoworkingSpaceItem[];
@@ -105,7 +105,9 @@ export function CustomerCoworkingTab({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           {filteredSpaces.map((space) => {
-            const isAvailable = space.status === "AVAILABLE";
+            const isShared = resolveSpaceCapacity(space) > 1;
+            const isAvailable =
+              space.status === "AVAILABLE" || (isShared && space.status === "RESERVED");
 
             return (
               <Card key={space.id} className="flex flex-col justify-between overflow-hidden shadow-xs hover:border-foreground/25 transition-colors">
@@ -186,7 +188,13 @@ export function CustomerCoworkingTab({
                     disabled={!isAvailable}
                     onClick={() => onOpenBookingModal(space)}
                   >
-                    <span>{isAvailable ? "Pesan ruang" : "Penuh"}</span>
+                    <span>
+                      {isAvailable
+                        ? "Pesan ruang"
+                        : space.status === "MAINTENANCE"
+                        ? "Pemeliharaan"
+                        : "Penuh"}
+                    </span>
                   </Button>
                 </div>
               </Card>
@@ -239,6 +247,19 @@ export function CustomerCoworkingTab({
                     </ul>
                   </CardContent>
                 </div>
+                {onOpenMembershipModal ? (
+                  <div className="border-t p-4 pt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => onOpenMembershipModal(plan)}
+                    >
+                      Pilih paket
+                    </Button>
+                  </div>
+                ) : null}
               </Card>
             ))}
           </div>

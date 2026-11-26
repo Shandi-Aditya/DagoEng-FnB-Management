@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { UserPlus } from "lucide-react";
+import type { CoworkingMembershipPlan } from "@/types/coworking";
+import { MEMBERSHIP_PLANS } from "./coworking-data";
 import {
   Dialog,
   DialogContent,
@@ -18,11 +20,15 @@ import { NativeSelect } from "@/components/ui/native-select";
 export interface NewMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
+  plans?: CoworkingMembershipPlan[];
   onSubmit: (params: {
     name: string;
     contact: string;
     email: string;
     packageName: string;
+    planId?: string;
+    validityDays?: number;
+    creditHours?: number;
     totalSpent: number;
     paymentMethod: string;
   }) => void;
@@ -31,21 +37,42 @@ export interface NewMemberModalProps {
 export function NewMemberModal({
   isOpen,
   onClose,
+  plans,
   onSubmit,
 }: NewMemberModalProps) {
+  const availablePlans = useMemo(
+    () => (plans && plans.length > 0 ? plans : MEMBERSHIP_PLANS),
+    [plans]
+  );
+
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [packageName, setPackageName] = useState("Dedicated Nomad Monthly");
-  const [amount, setAmount] = useState(1850000);
+  const [selectedPlanId, setSelectedPlanId] = useState(
+    availablePlans[0]?.id || ""
+  );
   const [paymentMethod, setPaymentMethod] = useState("QRIS");
+
+  useEffect(() => {
+    if (
+      availablePlans.length > 0 &&
+      !availablePlans.some((p) => p.id === selectedPlanId)
+    ) {
+      setSelectedPlanId(availablePlans[0].id);
+    }
+  }, [availablePlans, selectedPlanId]);
+
+  const selectedPlan = useMemo(
+    () =>
+      availablePlans.find((p) => p.id === selectedPlanId) || availablePlans[0],
+    [availablePlans, selectedPlanId]
+  );
 
   const resetForm = () => {
     setName("");
     setPhone("");
     setEmail("");
-    setPackageName("Dedicated Nomad Monthly");
-    setAmount(1850000);
+    setSelectedPlanId(availablePlans[0]?.id || "");
     setPaymentMethod("QRIS");
   };
 
@@ -54,27 +81,19 @@ export function NewMemberModal({
     onClose();
   };
 
-  const handlePackageChange = (pkg: string) => {
-    setPackageName(pkg);
-    if (pkg === "Dedicated Nomad Monthly") {
-      setAmount(1850000);
-    } else if (pkg === "Flex 10 Days Pass") {
-      setAmount(550000);
-    } else {
-      setAmount(3500000);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim()) return;
+    if (!name.trim() || !phone.trim() || !selectedPlan) return;
 
     onSubmit({
       name: name.trim(),
       contact: phone.trim(),
       email: email.trim() || "-",
-      packageName,
-      totalSpent: amount,
+      packageName: selectedPlan.name,
+      planId: selectedPlan.id,
+      validityDays: selectedPlan.validityDays,
+      creditHours: selectedPlan.creditHours,
+      totalSpent: selectedPlan.priceNumber,
       paymentMethod,
     });
 
@@ -145,20 +164,22 @@ export function NewMemberModal({
             </Label>
             <NativeSelect
               id="member-package"
-              value={packageName}
-              onChange={(e) => handlePackageChange(e.target.value)}
+              value={selectedPlan?.id || ""}
+              onChange={(e) => setSelectedPlanId(e.target.value)}
               className="w-full text-xs"
             >
-              <option value="Dedicated Nomad Monthly">
-                Dedicated Nomad Monthly (Rp 1.850.000 / bln)
-              </option>
-              <option value="Flex 10 Days Pass">
-                Flex 10 Days Pass (Rp 550.000)
-              </option>
-              <option value="Executive Team Pass">
-                Executive Team Pass (Rp 3.500.000 / bln)
-              </option>
+              {availablePlans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} ({plan.priceFormatted} · {plan.billingCycle})
+                </option>
+              ))}
             </NativeSelect>
+            {selectedPlan ? (
+              <p className="text-xs text-muted-foreground">
+                {selectedPlan.creditHours ? `Kuota ${selectedPlan.creditHours} jam · ` : ""}
+                Masa aktif {selectedPlan.validityDays ?? 30} hari · {selectedPlan.fnbPerk}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -187,7 +208,7 @@ export function NewMemberModal({
             >
               Batal
             </Button>
-            <Button type="submit" size="lg">
+            <Button type="submit" size="lg" disabled={!selectedPlan}>
               Simpan member
             </Button>
           </DialogFooter>

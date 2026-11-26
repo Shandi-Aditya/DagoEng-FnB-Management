@@ -17,7 +17,11 @@ import {
 
 const NOW = new Date("2026-11-11T10:00:00.000Z");
 
-function order(total: number, createdAt: string, extra: { discount?: number; promoId?: string } = {}) {
+function order(
+  total: number,
+  createdAt: string,
+  extra: { discount?: number; promoId?: string; customerCount?: number } = {},
+) {
   return { total, createdAt, ...extra };
 }
 
@@ -308,7 +312,26 @@ describe("calculateSalesForecast", () => {
     expect(forecast.forecastDays[0].upperBoundRevenue).toBeGreaterThan(forecast.forecastDays[0].projectedRevenue);
   });
 
-  it("projects linear upward trend with LINEAR_REGRESSION method", () => {
+  it("projects weighted moving average giving more weight to recent spikes than flat mean", () => {
+    const historical = [
+      { date: "2026-11-01", day: "Min", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-02", day: "Sen", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-03", day: "Sel", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-04", day: "Rab", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-05", day: "Kam", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-06", day: "Jum", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 2, customers: 2 },
+      { date: "2026-11-07", day: "Sab", isToday: false, revenue: 280_000, cost: 106_400, discount: 0, orders: 7, customers: 7 },
+    ];
+    const flatMean = (100_000 * 6 + 280_000) / 7;
+
+    const forecast = calculateSalesForecast(historical, 7, "WEIGHTED_MOVING_AVERAGE");
+    expect(forecast.hasSufficientData).toBe(true);
+    expect(forecast.dailyAverageProjectedRevenue).toBeGreaterThan(flatMean);
+    // On a 7-day cycle with normalized DOW multipliers, the average projected day equals the WMA (~145k)
+    expect(forecast.dailyAverageProjectedRevenue).toBeGreaterThan(140_000);
+  });
+
+  it("projects linear upward trend for revenue and orders with LINEAR_REGRESSION method", () => {
     const historical = [
       { date: "2026-11-01", day: "Min", isToday: false, revenue: 100_000, cost: 38_000, discount: 0, orders: 1, customers: 1 },
       { date: "2026-11-02", day: "Sen", isToday: false, revenue: 200_000, cost: 76_000, discount: 0, orders: 2, customers: 2 },
@@ -321,8 +344,23 @@ describe("calculateSalesForecast", () => {
     expect(forecast.hasSufficientData).toBe(true);
     expect(forecast.methodology).toContain("Linear regression");
     expect(forecast.forecastDays).toHaveLength(3);
-    // Projecting forward from upward slope should yield revenue >= base
-    expect(forecast.forecastDays[0].projectedRevenue).toBeGreaterThan(0);
+    expect(forecast.forecastDays[0].projectedRevenue).toBe(600_000);
+    expect(forecast.forecastDays[1].projectedRevenue).toBe(700_000);
+    expect(forecast.forecastDays[2].projectedRevenue).toBe(800_000);
+    expect(forecast.forecastDays[0].projectedOrders).toBe(6);
+    expect(forecast.forecastDays[1].projectedOrders).toBe(7);
+    expect(forecast.forecastDays[2].projectedOrders).toBe(8);
+  });
+
+  it("marks single-day historical data as insufficient and avoids claiming regression/WMA", () => {
+    const forecast = calculateSalesForecast(
+      [{ date: "2026-11-01", day: "Min", isToday: false, revenue: 150_000, cost: 57_000, discount: 0, orders: 3, customers: 4 }],
+      7,
+      "LINEAR_REGRESSION"
+    );
+    expect(forecast.hasSufficientData).toBe(false);
+    expect(forecast.methodology).not.toContain("Linear regression");
+    expect(forecast.methodology).toContain("kurang dari 3 hari");
   });
 
   it("handles empty historical series without crashing", () => {
@@ -348,14 +386,22 @@ describe("resolveComparisonRange", () => {
     expect(range.label).toBe("Minggu lalu");
   });
 
-  it("resolves LAST_MONTH shifting backward by one month", () => {
+  it("resolves LAST_MONTH shifting backward by one month and clamping month-end dates", () => {
     const range = resolveComparisonRange("2026-11-10", "2026-11-16", "LAST_MONTH");
     expect(range.startDate).toBe("2026-10-10");
     expect(range.endDate).toBe("2026-10-16");
     expect(range.label).toBe("Bulan lalu");
+
+    const marRange = resolveComparisonRange("2026-03-01", "2026-03-31", "LAST_MONTH");
+    expect(marRange.startDate).toBe("2026-02-01");
+    expect(marRange.endDate).toBe("2026-02-28");
+
+    const mayRange = resolveComparisonRange("2026-05-31", "2026-05-31", "LAST_MONTH");
+    expect(mayRange.startDate).toBe("2026-04-30");
+    expect(mayRange.endDate).toBe("2026-04-30");
   });
 
-  it("resolves CUSTOM range when provided", () => {
+  it("resolves CUSTOM range when provided and handles malformed inputs safely", () => {
     const range = resolveComparisonRange("2026-11-10", "2026-11-16", "CUSTOM", {
       startDate: "2026-10-01",
       endDate: "2026-10-07",
@@ -363,5 +409,38 @@ describe("resolveComparisonRange", () => {
     expect(range.startDate).toBe("2026-10-01");
     expect(range.endDate).toBe("2026-10-07");
     expect(range.label).toBe("Periode kustom");
+
+    const bad = resolveComparisonRange("2026-99-99", "not-a-date", "LAST_MONTH");
+    expect(/^\d{4}-\d{2}-\d{2}$/.test(bad.startDate)).toBe(true);
+    expect(/^\d{4}-\d{2}-\d{2}$/.test(bad.endDate)).toBe(true);
+  });
+});
+
+describe("WITA midnight boundary & zero-baseline comparison", () => {
+  it("maps UTC 17:00:00Z into the next WITA calendar day and 01:00 hour slot", () => {
+    // 2026-11-11T17:00:00.000Z === 2026-11-12T01:00:00+08:00 (WITA)
+    const utcEveningOrder = order(75_000, "2026-11-11T17:00:00.000Z", { customerCount: 2 });
+    const days = bucketLastSevenDays([utcEveningOrder], new Date("2026-11-12T04:00:00.000Z"));
+    expect(days.find((d) => d.date === "2026-11-12")?.revenue).toBe(75_000);
+    expect(days.find((d) => d.date === "2026-11-11")?.revenue).toBe(0);
+
+    const hourly = bucketHourly([utcEveningOrder]);
+    expect(hourly.find((h) => h.hour === "08:00")?.orders).toBe(1);
+  });
+
+  it("returns null percentages and false baseline flags when previous period is zero", () => {
+    const comparison = calculatePeriodComparison(
+      [order(120_000, "2026-11-10T10:00:00", { customerCount: 2 })],
+      [],
+      { startDate: "2026-11-08", endDate: "2026-11-14" },
+      { startDate: "2026-11-01", endDate: "2026-11-07" }
+    );
+    expect(comparison.deltas.hasRevenueBaseline).toBe(false);
+    expect(comparison.deltas.revenuePercent).toBeNull();
+    expect(comparison.deltas.hasOrdersBaseline).toBe(false);
+    expect(comparison.deltas.ordersPercent).toBeNull();
+    expect(comparison.deltas.hasCustomersBaseline).toBe(false);
+    expect(comparison.deltas.customersPercent).toBeNull();
+    expect(comparison.deltas.revenueAmount).toBe(120_000);
   });
 });

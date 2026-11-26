@@ -25,7 +25,11 @@ import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
 import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import { useSettings } from "@/contexts/SettingsContext";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
-import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
+import type {
+  CoworkingBooking,
+  CoworkingMembershipPlan,
+  CoworkingSpaceItem,
+} from "@/types/coworking";
 
 const DAYS_AHEAD = 10;
 const WITA = "Asia/Makassar";
@@ -43,6 +47,7 @@ export interface SpaceBookingRequest {
 interface SpaceViewProps {
   spaces: readonly CoworkingSpaceItem[];
   bookings: readonly CoworkingBooking[];
+  plans?: readonly CoworkingMembershipPlan[];
   isDateOpen: (date: string) => { isOpen: boolean; reason: string };
   defaultName: string;
   defaultPhone: string;
@@ -92,14 +97,33 @@ export function SpaceView(props: SpaceViewProps) {
 
   const slots = getAvailableTimeSlots();
   const bookable = props.spaces.filter((space) => space.status !== "MAINTENANCE");
+  const membershipPlans = props.plans ?? MEMBERSHIP_PLANS;
   const dayStatus = props.isDateOpen(date);
+
+  const isSpaceSlotRangeFree = (
+    space: CoworkingSpaceItem,
+    start: string,
+    duration: number
+  ) =>
+    duration >= 1 &&
+    duration <= COWORKING_MAX_HOURS &&
+    isWithinCoworkingHours(start, duration) &&
+    isRangeFree(
+      props.bookings,
+      space.id,
+      date,
+      start,
+      duration,
+      spaceMaxCapacity(space)
+    );
 
   const open = (space: CoworkingSpaceItem, start: string) => {
     setSelection({ space, start });
-    const defaultHours =
-      Array.isArray(space.tieredRates) && space.tieredRates.length > 0
-        ? space.tieredRates[0].hours
-        : 1;
+    const tieredOptions = Array.isArray(space.tieredRates) ? space.tieredRates : [];
+    const firstFreeTier = tieredOptions.find((t) =>
+      isSpaceSlotRangeFree(space, start, t.hours)
+    );
+    const defaultHours = firstFreeTier ? firstFreeTier.hours : 1;
     setHours(defaultHours);
     setName((current) => current || props.defaultName);
     setPhone((current) => current || props.defaultPhone);
@@ -114,18 +138,7 @@ export function SpaceView(props: SpaceViewProps) {
 
   const checkSlotRangeFree = (duration: number) => {
     if (!selection) return false;
-    return (
-      duration <= COWORKING_MAX_HOURS &&
-      isWithinCoworkingHours(selection.start, duration) &&
-      isRangeFree(
-        props.bookings,
-        selection.space.id,
-        date,
-        selection.start,
-        duration,
-        spaceMaxCapacity(selection.space)
-      )
-    );
+    return isSpaceSlotRangeFree(selection.space, selection.start, duration);
   };
 
   const basePrice = selection ? getPriceForHours(selection.space, hours) : 0;
@@ -133,6 +146,8 @@ export function SpaceView(props: SpaceViewProps) {
   const total = basePrice + taxAmount;
   const canSubmit =
     selection !== null &&
+    dayStatus.isOpen &&
+    hours >= 1 &&
     name.trim() !== "" &&
     phone.trim() !== "" &&
     checkSlotRangeFree(hours);
@@ -198,7 +213,7 @@ export function SpaceView(props: SpaceViewProps) {
                   <span className="block text-xs text-muted-foreground">per jam</span>
                 </span>
               </div>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
                 {slotAvailability(
                   props.bookings,
                   space.id,
@@ -252,7 +267,7 @@ export function SpaceView(props: SpaceViewProps) {
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-          {MEMBERSHIP_PLANS.map((plan) => (
+          {membershipPlans.map((plan) => (
             <div key={plan.id} className="flex flex-col justify-between rounded-xl border bg-card overflow-hidden">
               <div className="flex flex-col">
                 <SpacePhotoThumbnail
@@ -292,20 +307,18 @@ export function SpaceView(props: SpaceViewProps) {
           {selection ? (
             <>
               <SheetHeader>
-                <div className="mb-2">
-                  <SpacePhotoThumbnail
-                    src={getSpaceImageUrl(selection.space)}
-                    alt={selection.space.name}
-                    aspectRatio="aspect-video"
-                    className="border"
-                  />
-                </div>
                 <SheetTitle className="text-lg font-medium">{selection.space.name}</SheetTitle>
                 <SheetDescription>
                   {days.find((day) => day.value === date)?.day}, {selection.start} sampai {calculateEndTime(selection.start, hours)} WITA
                 </SheetDescription>
               </SheetHeader>
               <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-4">
+                <SpacePhotoThumbnail
+                  src={getSpaceImageUrl(selection.space)}
+                  alt={selection.space.name}
+                  aspectRatio="aspect-video"
+                  className="border"
+                />
                 <div className="flex flex-col gap-2 rounded-xl border p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Paket durasi</span>
@@ -315,31 +328,49 @@ export function SpaceView(props: SpaceViewProps) {
                   </div>
                   {selection.space.tieredRates && selection.space.tieredRates.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {selection.space.tieredRates.map((tier) => {
-                        const isAvailable = checkSlotRangeFree(tier.hours);
-                        const isSelected = hours === tier.hours;
-                        return (
-                          <button
-                            key={tier.hours}
-                            type="button"
-                            disabled={!isAvailable}
-                            onClick={() => setHours(tier.hours)}
-                            className={cn(
-                              "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-colors touch-manipulation",
-                              isSelected
-                                ? "border-primary bg-primary/10 text-primary font-medium ring-1 ring-primary"
-                                : !isAvailable
-                                ? "cursor-not-allowed border-border/40 bg-muted/30 text-muted-foreground opacity-50"
-                                : "border-border bg-card hover:bg-muted/40 text-foreground"
-                            )}
-                          >
-                            <span className="text-xs font-medium">{tier.hours} Jam</span>
-                            <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                              {formatCurrencyIDR(tier.price)}
-                            </span>
-                          </button>
-                        );
-                      })}
+                      {(() => {
+                        const baseTiers = selection.space.tieredRates.map((t) => ({
+                          hours: t.hours,
+                          price: t.price,
+                        }));
+                        const hasOneHourTier = baseTiers.some((t) => Number(t.hours) === 1);
+                        const tierOptions =
+                          !hasOneHourTier && checkSlotRangeFree(1)
+                            ? [
+                                {
+                                  hours: 1,
+                                  price: getPriceForHours(selection.space, 1),
+                                },
+                                ...baseTiers,
+                              ]
+                            : baseTiers;
+
+                        return tierOptions.map((tier) => {
+                          const isAvailable = checkSlotRangeFree(tier.hours);
+                          const isSelected = hours === tier.hours;
+                          return (
+                            <button
+                              key={tier.hours}
+                              type="button"
+                              disabled={!isAvailable}
+                              onClick={() => setHours(tier.hours)}
+                              className={cn(
+                                "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-colors touch-manipulation",
+                                isSelected
+                                  ? "border-primary bg-primary/10 text-primary font-medium ring-1 ring-primary"
+                                  : !isAvailable
+                                  ? "cursor-not-allowed border-border/40 bg-muted/30 text-muted-foreground opacity-50"
+                                  : "border-border bg-card hover:bg-muted/40 text-foreground"
+                              )}
+                            >
+                              <span className="text-xs font-medium">{tier.hours} Jam</span>
+                              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                                {formatCurrencyIDR(tier.price)}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                   ) : (
                     <div className="flex items-center justify-between">

@@ -322,7 +322,12 @@ export function validateCoworkingBookingSchedule(
     };
   }
 
-  if (normalizedType === "DAILY" && endYmd && endYmd !== startYmd) {
+  if (
+    normalizedType === "DAILY" &&
+    endYmd &&
+    endYmd !== startYmd &&
+    (candidate.duration === undefined || candidate.duration < 7)
+  ) {
     const rangeStatus = validateCoworkingDateRange(startYmd, endYmd, config);
     if (!rangeStatus.isValid) {
       const firstClosed = rangeStatus.closedDates[0];
@@ -418,6 +423,77 @@ export function validateCoworkingDateRange(
   };
 }
 
+function enumerateYmdRange(
+  startYmd: string,
+  endYmd: string,
+  maxDays = 366
+): string[] {
+  const startMatch = startYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const endMatch = endYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!startMatch || !endMatch || endYmd < startYmd) {
+    return startYmd ? [startYmd] : [];
+  }
+  const cur = new Date(
+    Date.UTC(Number(startMatch[1]), Number(startMatch[2]) - 1, Number(startMatch[3]))
+  );
+  const endMs = Date.UTC(
+    Number(endMatch[1]),
+    Number(endMatch[2]) - 1,
+    Number(endMatch[3])
+  );
+  const days: string[] = [];
+  while (cur.getTime() <= endMs && days.length < maxDays) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return days;
+}
+
+function getMaxHourlyConcurrency(hourlyBookings: CoworkingBooking[]): {
+  maxConcurrent: number;
+  peakBooking?: CoworkingBooking;
+} {
+  if (hourlyBookings.length === 0) {
+    return { maxConcurrent: 0 };
+  }
+
+  const events: Array<{ min: number; delta: 1 | -1; booking: CoworkingBooking }> = [];
+  for (const hb of hourlyBookings) {
+    const startMin = parseTimeToMinutes(hb.startTime);
+    const parsedEnd = parseTimeToMinutes(hb.endTime);
+    const endMin =
+      parsedEnd !== null
+        ? parsedEnd
+        : startMin !== null && typeof hb.duration === "number" && hb.duration > 0
+          ? startMin + hb.duration * 60
+          : null;
+
+    if (startMin === null || endMin === null || endMin <= startMin) {
+      events.push({ min: 0, delta: 1, booking: hb });
+      events.push({ min: 24 * 60, delta: -1, booking: hb });
+    } else {
+      events.push({ min: startMin, delta: 1, booking: hb });
+      events.push({ min: endMin, delta: -1, booking: hb });
+    }
+  }
+
+  events.sort((a, b) => a.min - b.min || a.delta - b.delta);
+
+  let active = 0;
+  let maxConcurrent = 0;
+  let peakBooking: CoworkingBooking | undefined;
+
+  for (const ev of events) {
+    active += ev.delta;
+    if (active > maxConcurrent) {
+      maxConcurrent = active;
+      peakBooking = ev.booking;
+    }
+  }
+
+  return { maxConcurrent, peakBooking };
+}
+
 /**
  * Anti Double-Booking Collision Detector.
  * Prevents overlapping bookings for the same workspace.
@@ -447,27 +523,27 @@ export function checkCoworkingBookingConflict(
   const candEndMin = parseTimeToMinutes(candidate.endTime);
   const allowedConcurrent = Math.max(1, candidate.maxCapacity ?? 1);
 
+  const relevantBookings = existingBookings.filter((b) => {
+    if (candidate.id && b.id === candidate.id) return false;
+    if (
+      b.checkInStatus === "CANCELLED" ||
+      b.checkInStatus === "COMPLETED" ||
+      (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
+    ) {
+      return false;
+    }
+    if (b.spaceId !== candidate.spaceId) return false;
+    const bStartYmd = normalizeDateToYMD(b.date);
+    const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
+    return !(candEndYmd < bStartYmd || candStartYmd > bEndYmd);
+  });
+
   if (
     candidate.bookingType === "HOURLY" &&
     candStartMin !== null &&
     candEndMin !== null &&
     candStartYmd === candEndYmd
   ) {
-    const relevantBookings = existingBookings.filter((b) => {
-      if (candidate.id && b.id === candidate.id) return false;
-      if (
-        b.checkInStatus === "CANCELLED" ||
-        b.checkInStatus === "COMPLETED" ||
-        (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
-      ) {
-        return false;
-      }
-      if (b.spaceId !== candidate.spaceId) return false;
-      const bStartYmd = normalizeDateToYMD(b.date);
-      const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
-      return !(candEndYmd < bStartYmd || candStartYmd > bEndYmd);
-    });
-
     for (let min = candStartMin; min < candEndMin; min += 30) {
       const windowEnd = min + 30;
       const overlapping = relevantBookings.filter((b) => {
@@ -495,27 +571,56 @@ export function checkCoworkingBookingConflict(
     return { hasConflict: false };
   }
 
+  if (candidate.bookingType === "DAILY" || candidate.bookingType === "MONTHLY") {
+    const candDays = enumerateYmdRange(candStartYmd, candEndYmd, 366);
+    for (const dayYmd of candDays) {
+      const dayBookings = relevantBookings.filter((b) => {
+        const bStartYmd = normalizeDateToYMD(b.date);
+        const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
+        return bStartYmd <= dayYmd && dayYmd <= bEndYmd;
+      });
+      if (dayBookings.length === 0) continue;
+
+      if (allowedConcurrent === 1) {
+        const firstOverlap = dayBookings[0];
+        return {
+          hasConflict: true,
+          conflictingBooking: firstOverlap,
+          message: `Jadwal bentrok: Workspace ${candidate.spaceName || firstOverlap.spaceName} sudah memiliki reservasi aktif (${firstOverlap.bookingType}) oleh ${firstOverlap.guestName} pada rentang ${firstOverlap.date}${firstOverlap.endDate ? ` s/d ${firstOverlap.endDate}` : ""} (Kode: ${firstOverlap.bookingCode}).`,
+        };
+      }
+
+      const dailyMonthlyBookings = dayBookings.filter(
+        (b) => b.bookingType === "DAILY" || b.bookingType === "MONTHLY"
+      );
+      const hourlyBookings = dayBookings.filter(
+        (b) => b.bookingType !== "DAILY" && b.bookingType !== "MONTHLY"
+      );
+      const { maxConcurrent: maxHourlyConcurrentOnDay, peakBooking } =
+        getMaxHourlyConcurrency(hourlyBookings);
+      const totalConcurrentOnDay = dailyMonthlyBookings.length + maxHourlyConcurrentOnDay;
+
+      if (totalConcurrentOnDay >= allowedConcurrent) {
+        const conflictingBooking =
+          dailyMonthlyBookings[0] ?? peakBooking ?? dayBookings[0];
+        const remainingSeats = Math.max(0, allowedConcurrent - totalConcurrentOnDay);
+        return {
+          hasConflict: true,
+          conflictingBooking,
+          message: `Kapasitas slot tidak mencukupi pada ${dayYmd}: Workspace ${candidate.spaceName || conflictingBooking.spaceName} sudah terisi ${totalConcurrentOnDay}/${allowedConcurrent} kursi (tersisa ${remainingSeats} kursi).`,
+        };
+      }
+    }
+
+    return { hasConflict: false };
+  }
+
   let overlappingCount = 0;
   let firstOverlap: CoworkingBooking | undefined;
 
-  for (const b of existingBookings) {
-    if (candidate.id && b.id === candidate.id) continue;
-
-    if (
-      b.checkInStatus === "CANCELLED" ||
-      b.checkInStatus === "COMPLETED" ||
-      (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
-    ) {
-      continue;
-    }
-
-    if (b.spaceId !== candidate.spaceId) continue;
-
+  for (const b of relevantBookings) {
     const bookStartYmd = normalizeDateToYMD(b.date);
     const bookEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bookStartYmd;
-
-    const datesOverlap = !(candEndYmd < bookStartYmd || candStartYmd > bookEndYmd);
-    if (!datesOverlap) continue;
 
     if (
       candidate.bookingType === "HOURLY" &&

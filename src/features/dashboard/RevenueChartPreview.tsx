@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -25,7 +25,6 @@ import {
 import { EmptyState } from "@/components/app/empty-state";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -44,6 +43,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
+import { formatWitaDateTime, toWitaDateKey } from "@/lib/date-utils";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
 import {
@@ -83,10 +83,9 @@ const chartConfig = {
   customers: { label: "Customer", color: "var(--chart-3)" },
   currentRevenue: { label: "Omzet periode ini", color: "var(--chart-1)" },
   previousRevenue: { label: "Omzet periode lalu", color: "var(--muted-foreground)" },
-  currentOrders: { label: "Transaksi periode ini", color: "var(--chart-2)" },
-  previousOrders: { label: "Transaksi periode lalu", color: "var(--muted)" },
+  historicalRevenue: { label: "Omzet historis", color: "var(--chart-1)" },
   projectedRevenue: { label: "Proyeksi omzet", color: "var(--chart-1)" },
-  upperBoundRevenue: { label: "Batas atas proyeksi", color: "var(--muted-foreground)" },
+  bandWidth: { label: "Rentang estimasi", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 const currencyFormatter = (value: unknown) => formatCurrencyIDR(Number(value) || 0);
@@ -96,6 +95,47 @@ function Summary({ label, value }: { label: string; value: string }) {
     <div className="flex flex-col gap-0.5">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-sm font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function ComparisonDeltaSummary({
+  label,
+  percent,
+  hasBaseline,
+  amount,
+  formatDeltaAmount,
+}: {
+  label: string;
+  percent: number | null;
+  hasBaseline: boolean;
+  amount: number;
+  formatDeltaAmount: (value: number) => string;
+}) {
+  const isNewBaseline = percent === null;
+  const isEmptyComparison = !hasBaseline && amount === 0;
+  const isPositive = isNewBaseline || (percent !== null && percent >= 0);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-1.5 font-medium tabular-nums">
+        {isEmptyComparison ? (
+          <span className="text-sm text-muted-foreground">—</span>
+        ) : (
+          <>
+            {isPositive ? (
+              <TrendingUp className="size-4 text-success" />
+            ) : (
+              <TrendingDown className="size-4 text-destructive" />
+            )}
+            <span className="text-sm">
+              {isNewBaseline ? "Baru" : `${percent > 0 ? "+" : ""}${percent}%`}
+            </span>
+          </>
+        )}
+        <span className="text-xs text-muted-foreground">({formatDeltaAmount(amount)})</span>
+      </div>
     </div>
   );
 }
@@ -146,8 +186,8 @@ export function RevenueChartPreview() {
   const previousScopedOrders = useMemo(() => {
     const isPrevInRange = (dateStr: string) => {
       if (!dateStr) return false;
-      const key = dateStr.slice(0, 10);
-      return key >= compareRange.startDate && key <= compareRange.endDate;
+      const key = toWitaDateKey(dateStr);
+      return Boolean(key) && key >= compareRange.startDate && key <= compareRange.endDate;
     };
     const outletOrders = isAllOutlets
       ? allOrders
@@ -191,27 +231,30 @@ export function RevenueChartPreview() {
   // Transition historical daily data into projected days for seamless visualization
   const forecastCombinedChartData = useMemo(() => {
     const recentHistorical = daily.slice(-7).map((d) => ({
-      label: d.day,
+      label: formatWitaDateTime(d.date, "dd MMM") || d.day,
       fullDate: d.date,
       historicalRevenue: d.revenue,
       projectedRevenue: undefined as number | undefined,
+      lowerBound: undefined as number | undefined,
+      bandWidth: undefined as number | undefined,
       upperBound: undefined as number | undefined,
       orders: d.orders,
       isForecast: false,
     }));
 
     if (recentHistorical.length > 0 && forecast.forecastDays.length > 0) {
-      // Anchor projection at the last known historical point
+      // Anchor projection at the last known historical point without setting confidence bounds
       const lastHist = recentHistorical[recentHistorical.length - 1];
       lastHist.projectedRevenue = lastHist.historicalRevenue;
-      lastHist.upperBound = lastHist.historicalRevenue;
     }
 
     const projectedPoints = forecast.forecastDays.map((f) => ({
-      label: `${f.day}*`,
+      label: `${formatWitaDateTime(f.date, "dd MMM") || f.day}*`,
       fullDate: f.date,
       historicalRevenue: undefined as number | undefined,
       projectedRevenue: f.projectedRevenue,
+      lowerBound: f.lowerBoundRevenue,
+      bandWidth: Math.max(0, f.upperBoundRevenue - f.lowerBoundRevenue),
       upperBound: f.upperBoundRevenue,
       orders: f.projectedOrders,
       isForecast: true,
@@ -272,14 +315,14 @@ export function RevenueChartPreview() {
 
   return (
     <Card className="h-full">
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader className="flex flex-col gap-3">
         <div className="flex flex-col gap-1 min-w-0">
           <CardTitle className="text-sm font-medium">Tren penjualan dan traffic</CardTitle>
           <CardDescription>{VIEW_DESCRIPTIONS[view]}</CardDescription>
         </div>
-        <CardAction className="w-full sm:w-auto overflow-x-auto">
-          <Tabs value={view} onValueChange={(value) => setView(value as ChartView)}>
-            <TabsList className="h-8 w-full sm:w-auto overflow-x-auto p-0.5 justify-start">
+        <div className="w-full min-w-0 overflow-x-auto pb-0.5">
+          <Tabs value={view} onValueChange={(value) => setView(value as ChartView)} className="w-max">
+            <TabsList className="h-8 w-max justify-start p-0.5">
               <TabsTrigger value="weekly">Harian</TabsTrigger>
               <TabsTrigger value="hourly">Jam sibuk</TabsTrigger>
               <TabsTrigger value="dayOfWeek">Pola hari</TabsTrigger>
@@ -288,7 +331,7 @@ export function RevenueChartPreview() {
               <TabsTrigger value="promo">Promo</TabsTrigger>
             </TabsList>
           </Tabs>
-        </CardAction>
+        </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
@@ -296,9 +339,9 @@ export function RevenueChartPreview() {
         {view === "hourly" ? (
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-muted-foreground">Metrik traffic sumbu Y:</span>
-                <div className="inline-flex rounded-md border bg-background p-0.5">
+                <div className="inline-flex flex-wrap max-w-full rounded-md border bg-background p-0.5">
                   <button
                     type="button"
                     onClick={() => setTrafficMetric("orders")}
@@ -379,7 +422,7 @@ export function RevenueChartPreview() {
         {view === "weekly" ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
             <span className="text-xs text-muted-foreground">Tampilan visual:</span>
-            <div className="inline-flex rounded-md border bg-background p-0.5">
+            <div className="inline-flex flex-wrap max-w-full rounded-md border bg-background p-0.5">
               <button
                 type="button"
                 onClick={() => setWeeklyComboMode("combo")}
@@ -411,9 +454,9 @@ export function RevenueChartPreview() {
         {/* Kontrol filter Perbandingan Antarperiode */}
         {view === "comparison" ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Periode pembanding:</span>
-              <div className="inline-flex rounded-md border bg-background p-0.5">
+              <div className="inline-flex flex-wrap max-w-full rounded-md border bg-background p-0.5">
                 <button
                   type="button"
                   onClick={() => setCompareMode("PREVIOUS_PERIOD")}
@@ -462,9 +505,9 @@ export function RevenueChartPreview() {
         {/* Kontrol metode Forecasting */}
         {view === "forecast" ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Metode prediksi statistik:</span>
-              <div className="inline-flex rounded-md border bg-background p-0.5">
+              <div className="inline-flex flex-wrap max-w-full rounded-md border bg-background p-0.5">
                 <button
                   type="button"
                   onClick={() => setForecastMethod("WEIGHTED_MOVING_AVERAGE")}
@@ -599,7 +642,7 @@ export function RevenueChartPreview() {
                 />
                 <Bar
                   dataKey={trafficMetric}
-                  fill="var(--color-orders)"
+                  fill={trafficMetric === "customers" ? "var(--color-customers)" : "var(--color-orders)"}
                   radius={4}
                   maxBarSize={40}
                 />
@@ -700,15 +743,21 @@ export function RevenueChartPreview() {
                   content={
                     <ChartTooltipContent
                       formatter={(value, name, item) => {
-                        const payload = item.payload as { isForecast?: boolean; fullDate?: string; orders?: number };
+                        const payload = item.payload as {
+                          isForecast?: boolean;
+                          fullDate?: string;
+                          orders?: number;
+                          lowerBound?: number;
+                          upperBound?: number;
+                        };
                         if (name === "historicalRevenue") {
                           return `Omzet historis: ${currencyFormatter(value)} (${payload.orders ?? 0} trx)`;
                         }
                         if (name === "projectedRevenue") {
                           return `Estimasi proyeksi*: ${currencyFormatter(value)} (${payload.orders ?? 0} trx)`;
                         }
-                        if (name === "upperBound") {
-                          return `Batas atas estimasi: ${currencyFormatter(value)}`;
+                        if (name === "bandWidth") {
+                          return `Rentang estimasi: ${currencyFormatter(payload.lowerBound ?? 0)} – ${currencyFormatter(payload.upperBound ?? 0)}`;
                         }
                         return `${name}: ${currencyFormatter(value)}`;
                       }}
@@ -716,19 +765,31 @@ export function RevenueChartPreview() {
                   }
                 />
                 <ChartLegend content={<ChartLegendContent />} />
-                {/* Confidence interval band for projections */}
+                {/* Confidence interval band strictly between lowerBound and upperBound */}
                 <Area
-                  dataKey="upperBound"
+                  dataKey="lowerBound"
+                  stackId="band"
                   type="monotone"
-                  stroke="transparent"
+                  stroke="none"
+                  fill="transparent"
+                  legendType="none"
+                  tooltipType="none"
+                  isAnimationActive={false}
+                />
+                <Area
+                  dataKey="bandWidth"
+                  stackId="band"
+                  type="monotone"
+                  stroke="none"
                   fill="var(--color-projectedRevenue)"
                   fillOpacity={0.12}
+                  isAnimationActive={false}
                 />
                 {/* Historical solid line */}
                 <Line
                   dataKey="historicalRevenue"
                   type="monotone"
-                  stroke="var(--color-revenue)"
+                  stroke="var(--color-historicalRevenue)"
                   strokeWidth={2.5}
                   dot={{ r: 3.5 }}
                 />
@@ -760,6 +821,18 @@ export function RevenueChartPreview() {
               </BarChart>
             )}
           </ChartContainer>
+        ) : view === "forecast" && periodOrders > 0 && daily.length < 3 ? (
+          <EmptyState
+            className="h-72"
+            title="Pilih rentang minimal 3 hari"
+            description="Proyeksi statistik membutuhkan minimal 3 hari data transaksi."
+          />
+        ) : view === "forecast" && periodOrders > 0 && !forecast.hasSufficientData ? (
+          <EmptyState
+            className="h-72"
+            title="Belum ada omzet untuk diproyeksikan"
+            description="Transaksi pada rentang ini bernilai omzet Rp 0 sehingga proyeksi penjualan belum dapat dihitung."
+          />
         ) : (
           <EmptyState
             className="h-72"
@@ -770,13 +843,13 @@ export function RevenueChartPreview() {
 
         {/* Ringkasan metrik di bagian bawah kartu */}
         {view === "weekly" ? (
-          <div className="grid grid-cols-3 gap-4 border-t pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
             <Summary label="Omzet periode" value={formatCurrencyIDR(periodRevenue)} />
             <Summary label="Margin kotor (estimasi)" value={`${grossMargin}%`} />
             <Summary label="Total transaksi" value={`${periodOrders} transaksi`} />
           </div>
         ) : view === "hourly" ? (
-          <div className="grid grid-cols-3 gap-4 border-t pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
             <Summary label="Total transaksi" value={`${periodOrders} transaksi`} />
             <Summary label="Total customer" value={`${periodCustomers} customer`} />
             <Summary
@@ -789,7 +862,7 @@ export function RevenueChartPreview() {
             />
           </div>
         ) : view === "dayOfWeek" ? (
-          <div className="grid grid-cols-3 gap-4 border-t pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
             <Summary
               label="Hari omzet tertinggi"
               value={
@@ -810,83 +883,64 @@ export function RevenueChartPreview() {
               label="Rata-rata transaksi harian"
               value={
                 periodOrders > 0
-                  ? `${Math.round(periodOrders / Math.max(1, daily.length))} transaksi`
+                  ? (() => {
+                      const avg = periodOrders / Math.max(1, daily.length);
+                      return `${avg < 1 ? avg.toFixed(1) : Math.round(avg)} transaksi`;
+                    })()
                   : "-"
               }
             />
           </div>
         ) : view === "comparison" ? (
-          <div className="grid grid-cols-3 gap-4 border-t pt-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Delta penjualan (omzet)</span>
-              <div className="flex items-center gap-1.5 font-medium tabular-nums">
-                {periodComparison.deltas.revenuePercent >= 0 ? (
-                  <TrendingUp className="size-4 text-success" />
-                ) : (
-                  <TrendingDown className="size-4 text-destructive" />
-                )}
-                <span className="text-sm">
-                  {periodComparison.deltas.revenuePercent >= 0 ? "+" : ""}
-                  {periodComparison.deltas.revenuePercent}%
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  ({formatCompactIDR(periodComparison.deltas.revenueAmount)})
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Delta traffic (transaksi)</span>
-              <div className="flex items-center gap-1.5 font-medium tabular-nums">
-                {periodComparison.deltas.ordersPercent >= 0 ? (
-                  <TrendingUp className="size-4 text-success" />
-                ) : (
-                  <TrendingDown className="size-4 text-destructive" />
-                )}
-                <span className="text-sm">
-                  {periodComparison.deltas.ordersPercent >= 0 ? "+" : ""}
-                  {periodComparison.deltas.ordersPercent}%
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  ({periodComparison.deltas.ordersCount >= 0 ? "+" : ""}
-                  {periodComparison.deltas.ordersCount} pesanan)
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Delta customer</span>
-              <div className="flex items-center gap-1.5 font-medium tabular-nums">
-                {periodComparison.deltas.customersPercent >= 0 ? (
-                  <TrendingUp className="size-4 text-success" />
-                ) : (
-                  <TrendingDown className="size-4 text-destructive" />
-                )}
-                <span className="text-sm">
-                  {periodComparison.deltas.customersPercent >= 0 ? "+" : ""}
-                  {periodComparison.deltas.customersPercent}%
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  ({periodComparison.deltas.customersCount >= 0 ? "+" : ""}
-                  {periodComparison.deltas.customersCount} orang)
-                </span>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
+            <ComparisonDeltaSummary
+              label="Delta penjualan (omzet)"
+              percent={periodComparison.deltas.revenuePercent}
+              hasBaseline={periodComparison.deltas.hasRevenueBaseline}
+              amount={periodComparison.deltas.revenueAmount}
+              formatDeltaAmount={(v) => `${v > 0 ? "+" : ""}${formatCompactIDR(v)}`}
+            />
+            <ComparisonDeltaSummary
+              label="Delta traffic (transaksi)"
+              percent={periodComparison.deltas.ordersPercent}
+              hasBaseline={periodComparison.deltas.hasOrdersBaseline}
+              amount={periodComparison.deltas.ordersCount}
+              formatDeltaAmount={(v) => `${v > 0 ? "+" : ""}${v} pesanan`}
+            />
+            <ComparisonDeltaSummary
+              label="Delta customer"
+              percent={periodComparison.deltas.customersPercent}
+              hasBaseline={periodComparison.deltas.hasCustomersBaseline}
+              amount={periodComparison.deltas.customersCount}
+              formatDeltaAmount={(v) => `${v > 0 ? "+" : ""}${v} orang`}
+            />
           </div>
         ) : view === "forecast" ? (
           <div className="flex flex-col gap-3 border-t pt-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Summary
                 label="Proyeksi 7 hari ke depan"
-                value={formatCurrencyIDR(forecast.totalProjectedRevenue)}
+                value={
+                  hasData && forecast.hasSufficientData
+                    ? formatCurrencyIDR(forecast.totalProjectedRevenue)
+                    : "—"
+                }
               />
               <Summary
                 label="Rata-rata proyeksi / hari"
-                value={formatCurrencyIDR(forecast.dailyAverageProjectedRevenue)}
+                value={
+                  hasData && forecast.hasSufficientData
+                    ? formatCurrencyIDR(forecast.dailyAverageProjectedRevenue)
+                    : "—"
+                }
               />
               <Summary
                 label="Estimasi total transaksi"
-                value={`${forecast.totalProjectedOrders} transaksi`}
+                value={
+                  hasData && forecast.hasSufficientData
+                    ? `${forecast.totalProjectedOrders} transaksi`
+                    : "—"
+                }
               />
             </div>
             <div className="rounded-md border bg-muted/30 p-2.5 text-xs text-muted-foreground">
@@ -896,7 +950,7 @@ export function RevenueChartPreview() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-4 border-t pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
             <Summary
               label="Omzet reguler"
               value={formatCurrencyIDR(

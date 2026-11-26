@@ -1,9 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Image from "next/image";
 import { Laptop } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const OPTIMIZED_IMAGE_HOSTS = new Set([
+  "images.unsplash.com",
+  "upload.wikimedia.org",
+]);
+
+function isAllowedOptimizedImageSrc(src: string): boolean {
+  if (src.startsWith("/") && !src.startsWith("//")) {
+    return true;
+  }
+  try {
+    const parsed = new URL(src);
+    return (
+      parsed.protocol === "https:" &&
+      OPTIMIZED_IMAGE_HOSTS.has(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
 
 interface SpacePhotoThumbnailProps {
   src?: string;
@@ -26,13 +46,20 @@ export function SpacePhotoThumbnail({
   sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
   priority = false,
 }: SpacePhotoThumbnailProps) {
-  const [hasError, setHasError] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
-  useEffect(() => {
-    setHasError(false);
-  }, [src]);
+  const imageRef = useCallback(
+    (node: HTMLImageElement | null) => {
+      if (src && node?.complete && node.naturalWidth === 0) {
+        setFailedSrc(src);
+      }
+    },
+    [src]
+  );
 
-  if (!src || hasError) {
+  const hasError = !src || failedSrc === src;
+
+  if (hasError) {
     return (
       <div
         className={cn(
@@ -59,12 +86,14 @@ export function SpacePhotoThumbnail({
       )}
     >
       <Image
+        ref={imageRef}
         src={src}
         alt={alt}
         fill
         sizes={sizes}
         priority={priority}
-        onError={() => setHasError(true)}
+        unoptimized={!isAllowedOptimizedImageSrc(src)}
+        onError={() => setFailedSrc(src)}
         className="object-cover"
       />
     </div>
