@@ -22,7 +22,10 @@ import type { CoworkingSpaceItem } from "@/types/coworking";
 import type { PromoConfig } from "@/lib/promo";
 import { useSettings } from "@/contexts/SettingsContext";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
-import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import {
+  formatCoworkingTaxLabel,
+  calculateCoworkingPrice,
+} from "@/features/coworking/coworking-domain";
 
 import {
   COWORKING_CLOSE_MINUTES,
@@ -121,8 +124,11 @@ export function CustomerBookingModal({
   const cwTaxType = cwTaxEnabled && cwTaxRatePercent > 0 ? (cwTaxConfig?.taxType || "PPN") : "NON_TAX";
 
   const isHourly = bookingDurationMode === "HOURLY";
-  const rate = isHourly ? space.hourlyRate : (space.dailyRate || space.hourlyRate * 8);
-  const baseCost = isHourly ? rate * bookingDurationHours : rate;
+  const quote = calculateCoworkingPrice(space, {
+    bookingType: bookingDurationMode,
+    duration: isHourly ? bookingDurationHours : 1,
+  });
+  const baseCost = quote.basePrice;
 
   let discount = 0;
   if (activePromo && activePromo.isActive) {
@@ -228,19 +234,34 @@ export function CustomerBookingModal({
                   Selesai pukul {endTime} WITA
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {[1, 2, 4, 8].map((hrs) => {
-                  const exceedsClosing = !isWithinCoworkingHours(bookingStartTime, hrs);
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(space.tieredRates && space.tieredRates.length > 0
+                  ? space.tieredRates.map((t) => ({
+                      hours: t.hours,
+                      price: t.price,
+                    }))
+                  : [
+                      { hours: 1, price: space.hourlyRate },
+                      { hours: 2, price: space.hourlyRate * 2 },
+                      { hours: 4, price: space.hourlyRate * 4 },
+                      { hours: 8, price: space.dailyRate || space.hourlyRate * 8 },
+                    ]
+                ).map((t) => {
+                  const exceedsClosing = !isWithinCoworkingHours(bookingStartTime, t.hours);
                   return (
                     <Button
-                      key={hrs}
+                      key={t.hours}
                       type="button"
                       size="sm"
                       disabled={exceedsClosing}
-                      variant={bookingDurationHours === hrs ? "default" : "outline"}
-                      onClick={() => onBookingDurationHoursChange(hrs)}
+                      variant={bookingDurationHours === t.hours ? "default" : "outline"}
+                      onClick={() => onBookingDurationHoursChange(t.hours)}
+                      className="flex flex-col h-auto py-1.5"
                     >
-                      {hrs} jam
+                      <span>{t.hours} jam</span>
+                      <span className="text-xs font-mono opacity-80">
+                        {formatCurrencyIDR(t.price)}
+                      </span>
                     </Button>
                   );
                 })}

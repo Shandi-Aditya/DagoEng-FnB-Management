@@ -339,12 +339,28 @@ model CashierShift {
 // -----------------------------------------------------------------------------
 
 model RoomCategory {
-  id        String   @id @default(uuid())
-  name      String   // "Hot Desk", "Meeting Suite", "Podcast Studio", "Event Space", "Private Office"
-  priceType String   @map("price_type") // "HOURLY", "DAILY", "MONTHLY"
-  rooms     Room[]
+  id          String           @id @default(uuid())
+  name        String           // "Open Space", "Space Monitor", "Small Meeting Room", "Large Meeting Room"
+  priceType   String           @map("price_type") // "HOURLY", "DAILY", "MONTHLY", "TIERED"
+  rooms       Room[]
+  tieredRates RoomTieredRate[]
+  membershipPackages MembershipPackage[]
 
   @@map("room_categories")
+}
+
+model RoomTieredRate {
+  id          String       @id @default(uuid())
+  categoryId  String       @map("category_id")
+  durationHrs Int          @map("duration_hrs") // 2, 3, 4, 6, 8
+  price       Int          // e.g. 20000, 50000, 70000
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  category    RoomCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, durationHrs])
+  @@map("room_tiered_rates")
 }
 
 model Room {
@@ -383,13 +399,16 @@ model Reservation {
 }
 
 model MembershipPackage {
-  id           String               @id @default(uuid())
-  name         String               // e.g. "Flexi Nomad Pass (50 Jam)", "Resident Dedicated"
-  price        Int
-  creditHours  Int                  @map("credit_hours")
-  discountFnb  Float                @default(10.0) @map("discount_fnb")
-  validityDays Int                  @default(30) @map("validity_days")
-  memberships  CustomerMembership[]
+  id             String               @id @default(uuid())
+  name           String               // e.g. "Open Space - 1 Minggu", "Small Meeting Room - 1 Bulan"
+  price          Int
+  creditHours    Int                  @map("credit_hours")
+  discountFnb    Float                @default(10.0) @map("discount_fnb")
+  validityDays   Int                  @default(30) @map("validity_days")
+  roomCategoryId String?              @map("room_category_id")
+  benefits       String[]             @default([])
+  roomCategory   RoomCategory?        @relation(fields: [roomCategoryId], references: [id], onDelete: SetNull)
+  memberships    CustomerMembership[]
 
   @@map("membership_packages")
 }

@@ -723,10 +723,10 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!formPlanName.trim()) return;
     const priceNum = Number(formPlanPrice) || 0;
+    const validCycles = ["1 Minggu", "2 Minggu", "1 Bulan", "Harian", "Paket 10 Hari", "Bulanan"] as const;
     const cycle: CoworkingMembershipPlan["billingCycle"] =
-      formPlanCycle === "Harian" || formPlanCycle === "Paket 10 Hari"
-        ? formPlanCycle
-        : "Bulanan";
+      (validCycles.find((c) => c.toLowerCase() === formPlanCycle.trim().toLowerCase()) as CoworkingMembershipPlan["billingCycle"]) ||
+      "1 Bulan";
     const newPlan: CoworkingMembershipPlan = {
       id: `plan-${Date.now()}`,
       name: formPlanName.trim(),
@@ -749,10 +749,10 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!editingPlan || !formPlanName.trim()) return;
     const priceNum = Number(formPlanPrice) || 0;
+    const validCycles = ["1 Minggu", "2 Minggu", "1 Bulan", "Harian", "Paket 10 Hari", "Bulanan"] as const;
     const cycle: CoworkingMembershipPlan["billingCycle"] =
-      formPlanCycle === "Harian" || formPlanCycle === "Paket 10 Hari"
-        ? formPlanCycle
-        : "Bulanan";
+      (validCycles.find((c) => c.toLowerCase() === formPlanCycle.trim().toLowerCase()) as CoworkingMembershipPlan["billingCycle"]) ||
+      "1 Bulan";
     cwUpdatePlan(editingPlan.id, {
       name: formPlanName.trim(),
       billingCycle: cycle,

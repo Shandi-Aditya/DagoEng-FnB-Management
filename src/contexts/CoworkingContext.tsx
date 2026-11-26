@@ -38,7 +38,7 @@ import {
   validateCoworkingBookingSchedule,
 } from "@/lib/operating-hours";
 import { notify } from "@/components/app/notify";
-import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
+import { getTodayWitaDateString, resolveSpaceCapacity } from "@/features/coworking/coworking-domain";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useSettings } from "./SettingsContext";
@@ -210,23 +210,26 @@ function deriveEffectiveSpaces(
       return space;
     }
 
-    const activeCheckedIn = bookings.find(
+    const maxCap = resolveSpaceCapacity(space);
+    const activeCheckedIn = bookings.filter(
       (b) => b.spaceId === space.id && b.checkInStatus === "CHECKED_IN"
     );
-    if (activeCheckedIn) {
+    if (activeCheckedIn.length > 0) {
+      const isFull = activeCheckedIn.length >= maxCap;
+      const latestCheckedIn = activeCheckedIn[0];
       const sessionMatches =
-        space.currentSession?.bookingCode === activeCheckedIn.bookingCode;
+        space.currentSession?.bookingCode === latestCheckedIn.bookingCode;
       return {
         ...space,
-        status: "OCCUPIED",
+        status: isFull ? "OCCUPIED" : "AVAILABLE",
         currentSession: sessionMatches
           ? space.currentSession
           : {
-              guestName: activeCheckedIn.guestName,
-              company: activeCheckedIn.company || "Personal",
-              checkInTime: activeCheckedIn.startTime || "Aktif",
-              endTime: activeCheckedIn.endTime || "Selesai",
-              bookingCode: activeCheckedIn.bookingCode,
+              guestName: latestCheckedIn.guestName,
+              company: latestCheckedIn.company || "Personal",
+              checkInTime: latestCheckedIn.startTime || "Aktif",
+              endTime: latestCheckedIn.endTime || "Selesai",
+              bookingCode: latestCheckedIn.bookingCode,
             },
       };
     }
@@ -616,7 +619,11 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
 
     const targetSpace = spaces.find((s) => s.id === bookingData.spaceId);
     const maxCapacity =
-      targetSpace?.type === "HOT_DESK" ? targetSpace.capacity || 8 : 1;
+      targetSpace?.type === "OPEN_SPACE" ||
+      targetSpace?.type === "SPACE_MONITOR" ||
+      targetSpace?.type === "HOT_DESK"
+        ? Math.max(1, targetSpace.capacity || 1)
+        : 1;
     const resolvedEndTime =
       bookingData.endTime ||
       (bookingData.bookingType === "HOURLY"
@@ -659,7 +666,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const newBooking: CoworkingBookingRecord = {
       ...bookingData,
       endTime: resolvedEndTime,
-      id: `bk-${now.getTime()}`,
+      id: `bk-${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
       bookingCode,
       outletId:
         bookingData.outletId ||
@@ -675,7 +682,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
 
     const newLog: CheckInOutLog | undefined = isCheckedInNow
       ? {
-          id: `chk-${now.getTime()}`,
+          id: `chk-${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
           bookingCode,
           guestName: bookingData.guestName,
           spaceName: bookingData.spaceName,
@@ -687,10 +694,18 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
         }
       : undefined;
 
+    const maxCap = prevSpaceSnapshot ? resolveSpaceCapacity(prevSpaceSnapshot) : 1;
+    const currentCheckedInCount = bookingsRef.current.filter(
+      (b) => b.spaceId === bookingData.spaceId && b.checkInStatus === "CHECKED_IN"
+    ).length + (isCheckedInNow ? 1 : 0);
+    const nextStatus = isCheckedInNow
+      ? (currentCheckedInCount >= maxCap ? "OCCUPIED" : "AVAILABLE")
+      : "RESERVED";
+
     const sessionCmd: CoworkingMasterCommand = {
       op: "PATCH_SPACE_SESSION",
       spaceId: bookingData.spaceId,
-      status: isCheckedInNow ? "OCCUPIED" : "RESERVED",
+      status: nextStatus,
       currentSession: isCheckedInNow
         ? {
             guestName: bookingData.guestName,

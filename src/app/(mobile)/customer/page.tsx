@@ -31,6 +31,7 @@ import { isCoworkingDateOpen, isTenantAcceptingOrders } from "@/lib/operating-ho
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import { getAllFnbTenants, isTenantActive } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { calculateCoworkingPrice } from "@/features/coworking/coworking-domain";
 import type { CoworkingBooking } from "@/types/coworking";
 import type { EventTicketOrder } from "@/types/event";
 import type { OrderRecord } from "@/types/order";
@@ -282,7 +283,10 @@ function CustomerApp() {
     setIsBooking(true);
     try {
       const effectivePayment = qrisOnly ? "QRIS" : request.payment;
-      const subtotal = request.space.hourlyRate * request.hours;
+      const { basePrice: subtotal } = calculateCoworkingPrice(request.space, {
+        bookingType: "HOURLY",
+        duration: request.hours,
+      });
       const cwTaxConfig = settings?.categoryTax?.coworking;
       const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
       const cwTaxRatePercent = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) : 0;

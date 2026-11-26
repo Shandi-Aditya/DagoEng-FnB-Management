@@ -57,29 +57,38 @@ export function CustomerCoworkingTab({
           <Button
             type="button"
             size="sm"
-            variant={filterType === "HOT_DESK" ? "secondary" : "outline"}
-            onClick={() => setFilterType("HOT_DESK")}
-            className={filterType === "HOT_DESK" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+            variant={filterType === "OPEN_SPACE" ? "secondary" : "outline"}
+            onClick={() => setFilterType("OPEN_SPACE")}
+            className={filterType === "OPEN_SPACE" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
           >
-            Hot desk
+            Open space
           </Button>
           <Button
             type="button"
             size="sm"
-            variant={filterType === "DEDICATED_DESK" ? "secondary" : "outline"}
-            onClick={() => setFilterType("DEDICATED_DESK")}
-            className={filterType === "DEDICATED_DESK" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+            variant={filterType === "SPACE_MONITOR" ? "secondary" : "outline"}
+            onClick={() => setFilterType("SPACE_MONITOR")}
+            className={filterType === "SPACE_MONITOR" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
           >
-            Dedicated desk
+            Space monitor
           </Button>
           <Button
             type="button"
             size="sm"
-            variant={filterType === "MEETING_ROOM" ? "secondary" : "outline"}
-            onClick={() => setFilterType("MEETING_ROOM")}
-            className={filterType === "MEETING_ROOM" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+            variant={filterType === "SMALL_MEETING_ROOM" ? "secondary" : "outline"}
+            onClick={() => setFilterType("SMALL_MEETING_ROOM")}
+            className={filterType === "SMALL_MEETING_ROOM" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
           >
-            Ruang rapat
+            Small meeting
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={filterType === "LARGE_MEETING_ROOM" ? "secondary" : "outline"}
+            onClick={() => setFilterType("LARGE_MEETING_ROOM")}
+            className={filterType === "LARGE_MEETING_ROOM" ? "border-foreground/20 font-medium" : "text-muted-foreground"}
+          >
+            Large meeting
           </Button>
         </div>
       </div>
@@ -150,15 +159,31 @@ export function CustomerCoworkingTab({
 
                 <div className="flex items-center justify-between border-t p-4 pt-3 bg-muted/10">
                   <div className="flex flex-col">
-                    <span className="font-mono text-base font-medium text-foreground tabular-nums">
-                      {formatCurrencyIDR(space.hourlyRate)}
-                      <span className="text-xs font-normal text-muted-foreground">/jam</span>
-                    </span>
-                    {space.dailyRate ? (
-                      <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                        {formatCurrencyIDR(space.dailyRate)}/hari
-                      </span>
-                    ) : null}
+                    {space.tieredRates && space.tieredRates.length > 0 ? (
+                      <>
+                        <span className="font-mono text-base font-medium text-foreground tabular-nums">
+                          {formatCurrencyIDR(space.tieredRates[0].price)}
+                          <span className="text-xs font-normal text-muted-foreground">
+                            /{space.tieredRates[0].hours} jam
+                          </span>
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                          Mulai {space.tieredRates.map((t) => `${t.hours}j`).join(" · ")}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-mono text-base font-medium text-foreground tabular-nums">
+                          {formatCurrencyIDR(space.hourlyRate)}
+                          <span className="text-xs font-normal text-muted-foreground">/jam</span>
+                        </span>
+                        {space.dailyRate ? (
+                          <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                            {formatCurrencyIDR(space.dailyRate)}/hari
+                          </span>
+                        ) : null}
+                      </>
+                    )}
                   </div>
 
                   <Button

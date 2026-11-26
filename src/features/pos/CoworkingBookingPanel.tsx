@@ -15,7 +15,10 @@ import {
   spaceTypeLabel,
   type SlotAvailabilityResult,
 } from "@/features/pos/pos-coworking";
-import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import {
+  formatCoworkingTaxLabel,
+  calculateCoworkingPrice,
+} from "@/features/coworking/coworking-domain";
 import { useAuth } from "@/contexts/AuthContext";
 import { canUserViewFullCustomerContacts, maskCustomerPhone } from "@/features/customers/customers-domain";
 import type { CoworkingOrderItemMeta, POSCartItem, POSPaymentMethod } from "@/features/pos/types";
@@ -139,10 +142,11 @@ export function CoworkingBookingPanel({
 
   const handleAddToUnifiedCart = () => {
     if (!onAddToUnifiedCart) return;
-    const baseUnitPrice =
-      cwDuration >= 8 && selectedSpace.dailyRate
-        ? selectedSpace.dailyRate
-        : (selectedSpace.hourlyRate || 15000) * cwDuration;
+    const quote = calculateCoworkingPrice(selectedSpace, {
+      bookingType: "HOURLY",
+      duration: cwDuration,
+    });
+    const baseUnitPrice = quote.basePrice;
     const durationLabel = formatCoworkingDuration(cwDuration);
     const timeRangeLabel = `${cwStartTime}–${endTime} WITA`;
     const coworkingMeta: CoworkingOrderItemMeta = {
@@ -223,12 +227,22 @@ export function CoworkingBookingPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {QUICK_DURATIONS.map((item) => {
+          {(Array.isArray(selectedSpace.tieredRates) && selectedSpace.tieredRates.length > 0
+            ? selectedSpace.tieredRates.map((t) => ({
+                hours: t.hours,
+                label: t.hours === 8 ? "Seharian (8 jam)" : `${t.hours} jam`,
+                price: t.price,
+              }))
+            : QUICK_DURATIONS.map((item) => ({
+                hours: item.hours,
+                label: item.label,
+                price:
+                  item.hours === 8 && selectedSpace.dailyRate
+                    ? selectedSpace.dailyRate
+                    : selectedSpace.hourlyRate * item.hours,
+              }))
+          ).map((item) => {
             const isSelected = cwDuration === item.hours;
-            const price =
-              item.hours === 8 && selectedSpace.dailyRate
-                ? selectedSpace.dailyRate
-                : selectedSpace.hourlyRate * item.hours;
 
             return (
               <button
@@ -244,7 +258,7 @@ export function CoworkingBookingPanel({
               >
                 <span className="text-xs font-medium">{item.label}</span>
                 <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {formatCurrencyIDR(price)}
+                  {formatCurrencyIDR(item.price)}
                 </span>
               </button>
             );

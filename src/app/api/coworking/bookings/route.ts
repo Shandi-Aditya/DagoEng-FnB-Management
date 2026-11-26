@@ -6,6 +6,10 @@ import {
   validateCoworkingBookingSchedule,
 } from "@/lib/operating-hours";
 import {
+  calculateCoworkingPrice,
+  resolveSpaceCapacity,
+} from "@/features/coworking/coworking-domain";
+import {
   claimQrisSessionForOrder,
   getCoworkingBookings,
   getPersistentOrders,
@@ -23,7 +27,7 @@ import { resolveSelfOrderPaymentMethod } from "@/lib/self-order-policy";
 import { getRequestAuthUser, type ServerAuthResult } from "@/lib/server-auth";
 import { coworkingMasterDomainSpec } from "@/lib/sync-domains/spaces-spec";
 import type { RoleSlug } from "@/types/auth";
-import { INITIAL_SPACES } from "@/lib/sync-domains/spaces-spec";
+import { INITIAL_SPACES, LEGACY_SPACES } from "@/lib/sync-domains/spaces-spec";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 import { calculateEndTime, isSlotPast } from "@/features/pos/pos-coworking";
 import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
@@ -349,7 +353,10 @@ export async function POST(req: NextRequest) {
       { spaces: INITIAL_SPACES }
     );
     const spaces = masterData?.spaces || INITIAL_SPACES;
-    const space = spaces.find((s) => s.id === booking.spaceId);
+    let space = spaces.find((s) => s.id === booking.spaceId);
+    if (!space) {
+      space = LEGACY_SPACES.find((s) => s.id === booking.spaceId);
+    }
 
     if (!space) {
       return NextResponse.json(
@@ -365,8 +372,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const maxCapacity: number =
-      space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
+    const maxCapacity: number = resolveSpaceCapacity(space);
     booking.maxCapacity = maxCapacity;
 
     if (
@@ -497,7 +503,9 @@ export async function POST(req: NextRequest) {
       if (scheduleError) return scheduleError;
 
       const coworkingState = await readPersistentDomainState(coworkingMasterDomainSpec);
-      const matchedSpace = coworkingState.spaces.find((s) => s.id === booking.spaceId);
+      const matchedSpace =
+        coworkingState.spaces.find((s) => s.id === booking.spaceId) ||
+        LEGACY_SPACES.find((s) => s.id === booking.spaceId);
       if (!matchedSpace) {
         return NextResponse.json(
           { error: "INVALID_SPACE: Ruang co-working tidak ditemukan di daftar resmi outlet." },
@@ -508,26 +516,27 @@ export async function POST(req: NextRequest) {
       let duration = 1;
       if (booking.duration !== undefined && booking.duration !== null) {
         const parsedDuration = Number(booking.duration);
-        if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
+        if (!Number.isFinite(parsedDuration) || !Number.isInteger(parsedDuration) || parsedDuration < 1 || parsedDuration > 9) {
           return NextResponse.json(
-            { error: "INVALID_DURATION: Durasi booking coworking wajib berupa angka positif." },
+            { error: "INVALID_DURATION: Durasi booking coworking wajib berupa bilangan bulat positif antara 1 hingga 9 jam." },
             { status: 400 }
           );
         }
         duration = parsedDuration;
       }
 
-      const bookingType =
+      const rawBookingType =
         typeof booking.bookingType === "string"
           ? booking.bookingType.trim().toUpperCase()
           : "HOURLY";
-      const rate =
-        bookingType === "DAILY"
-          ? Number(matchedSpace.dailyRate || 0)
-          : bookingType === "MONTHLY"
-          ? Number(matchedSpace.monthlyRate ?? (matchedSpace.dailyRate || 0) * 20)
-          : Number(matchedSpace.hourlyRate || 0);
-      const authoritativePrice = Math.max(0, Math.round(rate * duration));
+      const resolvedBookingType =
+        rawBookingType === "DAILY" || rawBookingType === "MONTHLY" ? rawBookingType : "HOURLY";
+
+      const quote = calculateCoworkingPrice(matchedSpace, {
+        bookingType: resolvedBookingType,
+        duration,
+      });
+      const authoritativePrice = Math.max(0, quote.basePrice);
 
       const cwTax = platformSettings.categoryTax?.coworking;
       const taxEnabled = Boolean(cwTax?.isEnabled && Number(cwTax.taxRatePercent) > 0);
@@ -559,8 +568,7 @@ export async function POST(req: NextRequest) {
         spaceId: matchedSpace.id,
         spaceName: matchedSpace.name,
         spaceType: matchedSpace.type,
-        bookingType:
-          bookingType === "DAILY" || bookingType === "MONTHLY" ? bookingType : "HOURLY",
+        bookingType: resolvedBookingType,
         date: bookingDate,
         ...(typeof booking.endDate === "string" && booking.endDate.trim()
           ? { endDate: booking.endDate.trim() }

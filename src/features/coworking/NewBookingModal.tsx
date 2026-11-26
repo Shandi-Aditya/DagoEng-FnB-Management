@@ -30,6 +30,7 @@ import {
   spaceTypeLabel,
   getTodayWitaDateString,
   formatCoworkingTaxLabel,
+  resolveSpaceCapacity,
   type DailyPreset,
 } from "./coworking-domain";
 import {
@@ -192,10 +193,7 @@ export function NewBookingModal({
       return;
     }
 
-    const maxCapacity =
-      selectedSpace.type === "HOT_DESK"
-        ? Math.max(1, selectedSpace.capacity || 8)
-        : 1;
+    const maxCapacity = resolveSpaceCapacity(selectedSpace);
 
     const conflict = checkCoworkingBookingConflict(bookings, {
       spaceId: selectedSpace.id,

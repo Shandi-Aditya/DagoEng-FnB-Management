@@ -414,7 +414,11 @@ export function getOrCreateSimulatedCoworkingVoucher(
     return found;
   }
 
-  const isMeeting = spaceType === "MEETING_ROOM" || bookingType === "MEETING_ROOM";
+  const isMeeting =
+    spaceType === "MEETING_ROOM" ||
+    spaceType === "SMALL_MEETING_ROOM" ||
+    spaceType === "LARGE_MEETING_ROOM" ||
+    bookingType === "MEETING_ROOM";
   const graceMinutes = isMeeting ? 20 : 15;
   const totalMinutes = durationHours * 60 + graceMinutes;
   const maxDevices = isMeeting ? 10 : 1;

@@ -93,6 +93,84 @@ export function calculateHourlyEndTime(startTime: string, hours: number): string
   return `${endH.toString().padStart(2, "0")}:${(m || 0).toString().padStart(2, "0")}`;
 }
 
+export function resolveSpaceCapacity(space?: CoworkingSpaceItem | null): number {
+  if (!space) return 1;
+  const isShared =
+    space.type === "OPEN_SPACE" ||
+    space.type === "SPACE_MONITOR" ||
+    space.type === "HOT_DESK";
+  return isShared ? Math.max(1, space.capacity || 1) : 1;
+}
+
+export interface CoworkingPricingRequest {
+  bookingType?: "HOURLY" | "DAILY" | "MONTHLY" | string;
+  duration?: number;
+}
+
+export interface CoworkingPriceQuote {
+  basePrice: number;
+  rateDescription: string;
+  isTieredMatch: boolean;
+}
+
+export function calculateCoworkingPrice(
+  space: Pick<CoworkingSpaceItem, "hourlyRate" | "dailyRate" | "monthlyRate" | "tieredRates">,
+  request: CoworkingPricingRequest
+): CoworkingPriceQuote {
+  const duration = Math.max(1, Number(request.duration) || 1);
+  const bookingType =
+    typeof request.bookingType === "string"
+      ? request.bookingType.trim().toUpperCase()
+      : "HOURLY";
+
+  if (bookingType === "DAILY") {
+    const dailyRate = Number(space.dailyRate || 0);
+    return {
+      basePrice: Math.round(dailyRate * duration),
+      rateDescription: `${dailyRate}/hari`,
+      isTieredMatch: false,
+    };
+  }
+
+  if (bookingType === "MONTHLY") {
+    const monthlyRate = Number(space.monthlyRate ?? (space.dailyRate || 0) * 20);
+    const months = duration >= 28 ? Math.max(1, Math.round(duration / 30)) : duration;
+    return {
+      basePrice: Math.round(monthlyRate * months),
+      rateDescription: `${monthlyRate}/bulan`,
+      isTieredMatch: false,
+    };
+  }
+
+  // HOURLY booking: check tiered rates first
+  if (Array.isArray(space.tieredRates) && space.tieredRates.length > 0) {
+    const matchedTier = space.tieredRates.find((t) => Number(t.hours) === duration);
+    if (matchedTier && Number(matchedTier.price) > 0) {
+      return {
+        basePrice: Number(matchedTier.price),
+        rateDescription: `Paket ${duration} jam`,
+        isTieredMatch: true,
+      };
+    }
+  }
+
+  // Fallback: Durasi >= 8 jam otomatis pakai tarif harian jika lebih hemat
+  if (duration >= 8 && space.dailyRate && space.dailyRate < (space.hourlyRate * duration)) {
+    return {
+      basePrice: Number(space.dailyRate),
+      rateDescription: "Seharian penuh",
+      isTieredMatch: false,
+    };
+  }
+
+  const hourlyRate = Number(space.hourlyRate || 0);
+  return {
+    basePrice: Math.round(hourlyRate * duration),
+    rateDescription: `${hourlyRate}/jam`,
+    isTieredMatch: false,
+  };
+}
+
 export function computeBookingPricing(params: {
   space: CoworkingSpaceItem;
   bookType: "HOURLY" | "DAILY" | "MONTHLY";
@@ -110,8 +188,12 @@ export function computeBookingPricing(params: {
   const { space, bookType, durationHours, dailyPreset, startDate, endDate, startTime } = params;
 
   if (bookType === "HOURLY") {
-    const computedDuration = Math.max(2, Number(durationHours) || 2);
-    const computedTotal = (space.hourlyRate || 0) * computedDuration;
+    const computedDuration = Math.max(1, Number(durationHours) || 1);
+    const quote = calculateCoworkingPrice(space, {
+      bookingType: "HOURLY",
+      duration: computedDuration,
+    });
+    const computedTotal = quote.basePrice;
     const computedEndTime = `${calculateHourlyEndTime(startTime, computedDuration)} WITA`;
     return {
       computedDuration,
@@ -337,6 +419,10 @@ export function buildCoworkingExportData(
 }
 
 const SPACE_TYPE_LABELS: Record<string, string> = {
+  OPEN_SPACE: "Open space",
+  SPACE_MONITOR: "Space monitor",
+  SMALL_MEETING_ROOM: "Small meeting room",
+  LARGE_MEETING_ROOM: "Large meeting room",
   HOT_DESK: "Hot desk",
   PRIVATE_POD: "Pod privat",
   MEETING_ROOM: "Ruang rapat",

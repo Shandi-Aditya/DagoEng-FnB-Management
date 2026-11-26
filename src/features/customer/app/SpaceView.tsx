@@ -14,7 +14,11 @@ import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField
 import { isRangeFree, slotAvailability } from "@/features/customer/space-slots";
 import { COWORKING_MAX_HOURS, isWithinCoworkingHours } from "@/lib/operating-hours";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
-import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import {
+  formatCoworkingTaxLabel,
+  calculateCoworkingPrice,
+  resolveSpaceCapacity,
+} from "@/features/coworking/coworking-domain";
 import { useSettings } from "@/contexts/SettingsContext";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
@@ -60,7 +64,7 @@ interface Selection {
 }
 
 function spaceMaxCapacity(space: CoworkingSpaceItem): number {
-  return space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1;
+  return resolveSpaceCapacity(space);
 }
 
 /** Pick a day, see each room's free hours, tap one to book it. */
@@ -88,27 +92,46 @@ export function SpaceView(props: SpaceViewProps) {
 
   const open = (space: CoworkingSpaceItem, start: string) => {
     setSelection({ space, start });
-    setHours(1);
+    const defaultHours =
+      Array.isArray(space.tieredRates) && space.tieredRates.length > 0
+        ? space.tieredRates[0].hours
+        : 1;
+    setHours(defaultHours);
     setName((current) => current || props.defaultName);
     setPhone((current) => current || props.defaultPhone);
   };
 
-  const canExtend =
-    selection !== null &&
-    hours < COWORKING_MAX_HOURS &&
-    isWithinCoworkingHours(selection.start, hours + 1) &&
-    isRangeFree(
-      props.bookings,
-      selection.space.id,
-      date,
-      selection.start,
-      hours + 1,
-      spaceMaxCapacity(selection.space)
+  const getPriceForHours = (space: CoworkingSpaceItem, h: number) => {
+    return calculateCoworkingPrice(space, {
+      bookingType: "HOURLY",
+      duration: h,
+    }).basePrice;
+  };
+
+  const checkSlotRangeFree = (duration: number) => {
+    if (!selection) return false;
+    return (
+      duration <= COWORKING_MAX_HOURS &&
+      isWithinCoworkingHours(selection.start, duration) &&
+      isRangeFree(
+        props.bookings,
+        selection.space.id,
+        date,
+        selection.start,
+        duration,
+        spaceMaxCapacity(selection.space)
+      )
     );
-  const basePrice = selection ? selection.space.hourlyRate * hours : 0;
+  };
+
+  const basePrice = selection ? getPriceForHours(selection.space, hours) : 0;
   const taxAmount = cwTaxEnabled && cwTaxRatePercent > 0 ? Math.round(basePrice * (cwTaxRatePercent / 100)) : 0;
   const total = basePrice + taxAmount;
-  const canSubmit = selection !== null && name.trim() !== "" && phone.trim() !== "";
+  const canSubmit =
+    selection !== null &&
+    name.trim() !== "" &&
+    phone.trim() !== "" &&
+    checkSlotRangeFree(hours);
 
   return (
     <div className="flex flex-col gap-5">
@@ -217,19 +240,69 @@ export function SpaceView(props: SpaceViewProps) {
                 </SheetDescription>
               </SheetHeader>
               <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-4">
-                <div className="flex items-center justify-between rounded-xl border p-4">
-                  <span className="text-sm font-medium">Durasi</span>
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" size="icon" disabled={hours <= 1} onClick={() => setHours((h) => h - 1)} aria-label="Kurangi satu jam">
-                      <Minus />
-                    </Button>
-                    <span className="w-14 text-center text-sm">
-                      <span className="font-mono tabular-nums">{hours}</span> jam
+                <div className="flex flex-col gap-2 rounded-xl border p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Paket Durasi</span>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {hours === 8 ? "Seharian (8 jam)" : `${hours} jam`}
                     </span>
-                    <Button variant="outline" size="icon" disabled={!canExtend} onClick={() => setHours((h) => h + 1)} aria-label="Tambah satu jam">
-                      <Plus />
-                    </Button>
                   </div>
+                  {selection.space.tieredRates && selection.space.tieredRates.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {selection.space.tieredRates.map((tier) => {
+                        const isAvailable = checkSlotRangeFree(tier.hours);
+                        const isSelected = hours === tier.hours;
+                        return (
+                          <button
+                            key={tier.hours}
+                            type="button"
+                            disabled={!isAvailable}
+                            onClick={() => setHours(tier.hours)}
+                            className={cn(
+                              "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-colors touch-manipulation",
+                              isSelected
+                                ? "border-primary bg-primary/10 text-primary font-medium ring-1 ring-primary"
+                                : !isAvailable
+                                ? "cursor-not-allowed border-border/40 bg-muted/30 text-muted-foreground opacity-50"
+                                : "border-border bg-card hover:bg-muted/40 text-foreground"
+                            )}
+                          >
+                            <span className="text-xs font-medium">{tier.hours} Jam</span>
+                            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                              {formatCurrencyIDR(tier.price)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Pilih durasi</span>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          disabled={hours <= 1}
+                          onClick={() => setHours((h) => h - 1)}
+                          aria-label="Kurangi satu jam"
+                        >
+                          <Minus />
+                        </Button>
+                        <span className="w-14 text-center text-sm">
+                          <span className="font-mono tabular-nums">{hours}</span> jam
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          disabled={!checkSlotRangeFree(hours + 1)}
+                          onClick={() => setHours((h) => h + 1)}
+                          aria-label="Tambah satu jam"
+                        >
+                          <Plus />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <FieldGroup>
                   <Field>

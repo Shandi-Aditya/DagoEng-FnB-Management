@@ -1,5 +1,8 @@
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
-import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
+import {
+  getTodayWitaDateString,
+  resolveSpaceCapacity,
+} from "@/features/coworking/coworking-domain";
 import { normalizeDateToYMD, parseTimeToMinutes } from "@/lib/operating-hours";
 
 export const COWORKING_TIME_SLOTS = [
@@ -145,7 +148,7 @@ export function checkSlotAvailability({
   now = new Date(),
 }: CheckSlotParams): SlotAvailabilityResult {
   const space = spaces.find((s) => s.id === spaceId);
-  const maxCapacity = space?.type === "HOT_DESK" ? space.capacity || 8 : 1;
+  const maxCapacity = resolveSpaceCapacity(space);
   const isPast = checkPast
     ? isSlotPast(targetDate, `${startHour.toString().padStart(2, "0")}:00`, now)
     : false;
@@ -246,6 +249,10 @@ export function checkSlotAvailability({
 }
 
 const SPACE_TYPE_LABELS: Record<string, string> = {
+  OPEN_SPACE: "Open space",
+  SPACE_MONITOR: "Space monitor",
+  SMALL_MEETING_ROOM: "Small meeting room",
+  LARGE_MEETING_ROOM: "Large meeting room",
   HOT_DESK: "Hot desk",
   DEDICATED_DESK: "Dedicated desk",
   MEETING_ROOM: "Meeting room",

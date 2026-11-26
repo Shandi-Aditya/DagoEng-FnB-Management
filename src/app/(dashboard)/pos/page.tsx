@@ -126,7 +126,7 @@ import { CoworkingRoomCard } from "@/features/pos/CoworkingRoomCard";
 import { CoworkingBookingPanel } from "@/features/pos/CoworkingBookingPanel";
 import { CoworkingPhotoModal } from "@/features/pos/CoworkingPhotoModal";
 import { CoworkingQrisModal } from "@/features/coworking/CoworkingQrisModal";
-import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
+import { getTodayWitaDateString, calculateCoworkingPrice } from "@/features/coworking/coworking-domain";
 import { CoworkingBooking } from "@/types/coworking";
 import { PosVoucherModal } from "@/features/pos/PosVoucherModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
@@ -322,7 +322,7 @@ export default function POSPage() {
 
   const meetingRoomsList = useMemo(() => {
     return (cwSpaces || [])
-      .filter((s) => s.type === "MEETING_ROOM")
+      .filter((s) => s.type === "MEETING_ROOM" || s.type === "SMALL_MEETING_ROOM" || s.type === "LARGE_MEETING_ROOM")
       .map((s) => ({
         id: s.id,
         name: s.name,
@@ -356,6 +356,11 @@ export default function POSPage() {
     const endHour = startHour + duration;
     const endTime = startTime ? `${String(endHour).padStart(2, "0")}:00` : "";
 
+    const { basePrice: totalRoomPrice } = calculateCoworkingPrice(room, {
+      bookingType: "HOURLY",
+      duration,
+    });
+
     const roomCartItem: POSCartItem = {
       cartItemId: `bundle-meeting-${room.id}`,
       productId: `space-${room.id}`,
@@ -363,8 +368,8 @@ export default function POSPage() {
       quantity: duration,
       basePrice: room.hourlyRate,
       selectedModifiers: [],
-      unitFinalPrice: room.hourlyRate,
-      itemTotal: room.hourlyRate * duration,
+      unitFinalPrice: Math.round(totalRoomPrice / duration),
+      itemTotal: totalRoomPrice,
       tenantId: "DAGO_HUB",
       itemType: "COWORKING",
       notes: `Paket Ruang Meeting Perusahaan (${room.capacity} Pax) - ${duration} Jam`,
@@ -1040,7 +1045,11 @@ export default function POSPage() {
         const hourlyRate = linkedRoom.hourlyRate;
         const totalRoomPrice = hourlyRate * meetingDuration;
         const maxCapacity =
-          linkedRoom.type === "HOT_DESK" ? Math.max(1, linkedRoom.capacity || 8) : 1;
+          linkedRoom.type === "OPEN_SPACE" ||
+          linkedRoom.type === "SPACE_MONITOR" ||
+          linkedRoom.type === "HOT_DESK"
+            ? Math.max(1, linkedRoom.capacity || 1)
+            : 1;
         const calculatedEndTime = calculateEndTime(meetingTime, meetingDuration).replace(
           /\s*WITA$/i,
           ""
@@ -1151,6 +1160,47 @@ export default function POSPage() {
         ? `${corporateInfo.companyName} (PIC: ${corporateInfo.picName})`
         : customerName.trim() ||
           (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
+
+      // Sinkronisasi pemesanan Co-Working dari keranjang gabungan POS (Unified Cart)
+      for (const entry of resolvedCartMeta) {
+        if (entry.isCw && entry.item.coworkingMeta) {
+          // Lewati paket corporate meeting karena sudah dibooking secara terdedikasi di atas
+          if (entry.item.cartItemId.startsWith("bundle-meeting-")) {
+            continue;
+          }
+          const cwMeta = entry.item.coworkingMeta;
+          const targetSpace = cwSpaces.find((s) => s.id === cwMeta.spaceId);
+          if (targetSpace) {
+            try {
+              const itemTotal = entry.item.unitFinalPrice * entry.item.quantity;
+              cwBookSpace({
+                guestName: effectiveCustomerName,
+                guestPhone: selectedMember?.phone || "-",
+                guestEmail: selectedMember?.email || "-",
+                spaceId: targetSpace.id,
+                spaceName: targetSpace.name,
+                spaceType: targetSpace.type,
+                bookingType: "HOURLY",
+                date: cwMeta.bookingDate || getTodayWitaDateString(),
+                startTime: cwMeta.startTime || "09:00",
+                endTime: cwMeta.endTime || calculateEndTime(cwMeta.startTime || "09:00", cwMeta.durationHours || 1),
+                duration: cwMeta.durationHours || 1,
+                price: entry.item.basePrice,
+                discount: 0,
+                totalAmount: itemTotal,
+                paidAmount: isInvoicePayment ? 0 : itemTotal,
+                remainingAmount: isInvoicePayment ? itemTotal : 0,
+                paymentStatus: isInvoicePayment ? "PENDING" : "PAID",
+                paymentMethod: isInvoicePayment ? "INVOICE" : paymentData.method,
+                billedViaPosOrder: true,
+                linkedOrderId: receiptNo,
+              });
+            } catch (err: unknown) {
+              console.warn("[POS Unified Cart] Gagal sinkronisasi reservasi coworking:", err);
+            }
+          }
+        }
+      }
 
       const { order: optimisticOrder, serverSync } = createPosOrderWithSync({
         orderNumber: receiptNo,
@@ -1517,10 +1567,11 @@ export default function POSPage() {
 
   const cwBaseAmount = useMemo(() => {
     if (!selectedSpace) return 0;
-    if (cwDuration >= 8 && selectedSpace.dailyRate) {
-      return selectedSpace.dailyRate;
-    }
-    return (selectedSpace.hourlyRate || 15000) * cwDuration;
+    const { basePrice } = calculateCoworkingPrice(selectedSpace, {
+      bookingType: "HOURLY",
+      duration: cwDuration,
+    });
+    return basePrice;
   }, [selectedSpace, cwDuration]);
 
   const cwTaxConfig = settings?.categoryTax?.coworking;
@@ -1620,7 +1671,12 @@ export default function POSPage() {
       date: cwDate,
       startTime: cwStartTime,
       endTime: `${startH + cwDuration}:00 WITA`,
-      maxCapacity: selectedSpace.type === "HOT_DESK" ? Math.max(1, selectedSpace.capacity || 8) : 1,
+      maxCapacity:
+        selectedSpace.type === "OPEN_SPACE" ||
+        selectedSpace.type === "SPACE_MONITOR" ||
+        selectedSpace.type === "HOT_DESK"
+          ? Math.max(1, selectedSpace.capacity || 1)
+          : 1,
     });
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");

@@ -9,6 +9,10 @@ import { cn } from "@/lib/utils";
 
 export const COWORKING_TYPE_FILTERS = [
   { key: "ALL", label: "Semua tipe" },
+  { key: "OPEN_SPACE", label: "Open space" },
+  { key: "SPACE_MONITOR", label: "Space monitor" },
+  { key: "SMALL_MEETING_ROOM", label: "Small meeting" },
+  { key: "LARGE_MEETING_ROOM", label: "Large meeting" },
   { key: "HOT_DESK", label: "Hot desk" },
   { key: "DEDICATED_DESK", label: "Dedicated desk" },
   { key: "MEETING_ROOM", label: "Meeting room" },

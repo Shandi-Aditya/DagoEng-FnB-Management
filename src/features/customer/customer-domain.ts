@@ -71,6 +71,14 @@ export function customerOrderStatusTone(status: OrderRecord["status"] | string):
 
 export function spaceTypeLabel(type: string): string {
   switch (type) {
+    case "OPEN_SPACE":
+      return "Open space";
+    case "SPACE_MONITOR":
+      return "Space monitor";
+    case "SMALL_MEETING_ROOM":
+      return "Small meeting room";
+    case "LARGE_MEETING_ROOM":
+      return "Large meeting room";
     case "HOT_DESK":
       return "Hot desk";
     case "DEDICATED_DESK":
