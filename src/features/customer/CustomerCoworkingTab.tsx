@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Award, Check, Laptop, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
-import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +11,8 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { CoworkingMembershipPlan, CoworkingSpaceItem } from "@/types/coworking";
 
 import { spaceTypeLabel } from "./customer-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
+import { getSpaceImageUrl } from "@/features/coworking/coworking-domain";
 
 export interface CustomerCoworkingTabProps {
   spaces: CoworkingSpaceItem[];
@@ -110,20 +111,13 @@ export function CustomerCoworkingTab({
               <Card key={space.id} className="flex flex-col justify-between overflow-hidden shadow-xs hover:border-foreground/25 transition-colors">
                 <div className="flex flex-col">
                   {/* Foto Ruang */}
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted border-b">
-                    {space.imageUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={space.imageUrl}
-                        alt={space.name}
-                        className="size-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex size-full items-center justify-center bg-muted/40 text-muted-foreground">
-                        <Laptop className="size-8 opacity-30" />
-                      </div>
-                    )}
+                  <div className="relative w-full border-b">
+                    <SpacePhotoThumbnail
+                      src={getSpaceImageUrl(space)}
+                      alt={space.name}
+                      aspectRatio="aspect-video"
+                      className="rounded-none"
+                    />
                     <div className="absolute top-2.5 right-2.5">
                       <Badge variant="secondary" className="backdrop-blur-md bg-background/80 shadow-xs font-normal">
                         {spaceTypeLabel(space.type)}
@@ -216,27 +210,35 @@ export function CustomerCoworkingTab({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {membershipPlans.map((plan) => (
-              <Card key={plan.id} className="flex flex-col justify-between">
-                <CardHeader className="p-4 pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium">{plan.name}</CardTitle>
-                    <Badge variant="secondary">{plan.billingCycle}</Badge>
-                  </div>
-                  <span className="font-mono text-base font-medium text-foreground tabular-nums mt-1 block">
-                    {plan.priceFormatted}
-                  </span>
-                  <p className="text-xs text-muted-foreground mt-1">{plan.deskAccess}</p>
-                </CardHeader>
-                <CardContent className="p-4 pt-2">
-                  <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-                    {plan.amenities?.map((item, i) => (
-                      <li key={i} className="flex items-center gap-1.5">
-                        <Check className="size-3 text-success shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
+              <Card key={plan.id} className="flex flex-col justify-between overflow-hidden">
+                <div className="flex flex-col">
+                  <SpacePhotoThumbnail
+                    src={getSpaceImageUrl(plan)}
+                    alt={plan.name}
+                    aspectRatio="aspect-video"
+                    className="border-b rounded-none"
+                  />
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">{plan.name}</CardTitle>
+                      <Badge variant="secondary">{plan.billingCycle}</Badge>
+                    </div>
+                    <span className="font-mono text-base font-medium text-foreground tabular-nums mt-1 block">
+                      {plan.priceFormatted}
+                    </span>
+                    <p className="text-xs text-muted-foreground mt-1">{plan.deskAccess}</p>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-2">
+                    <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      {plan.amenities?.map((item, i) => (
+                        <li key={i} className="flex items-center gap-1.5">
+                          <Check className="size-3 text-success shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </div>
               </Card>
             ))}
           </div>

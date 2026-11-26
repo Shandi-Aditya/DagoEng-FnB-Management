@@ -515,3 +515,36 @@ export function isSpaceAvailableNow(space: CoworkingSpaceItem): boolean {
   return space.status === "AVAILABLE" && !space.currentSession;
 }
 
+export const SPACE_DEFAULT_IMAGES: Record<string, string> = {
+  OPEN_SPACE: "/images/spaces/openspace.jpeg",
+  SPACE_MONITOR: "/images/spaces/spacemonitor.jpeg",
+  SMALL_MEETING_ROOM: "/images/spaces/smallmeetingroom.jpeg",
+  LARGE_MEETING_ROOM: "/images/spaces/largemeetingroom.jpeg",
+  // Legacy mappings
+  HOT_DESK: "/images/spaces/openspace.jpeg",
+  DEDICATED_DESK: "/images/spaces/spacemonitor.jpeg",
+  MEETING_ROOM: "/images/spaces/smallmeetingroom.jpeg",
+  PRIVATE_POD: "/images/spaces/spacemonitor.jpeg",
+};
+
+/**
+ * Returns the effective image URL for a coworking space or membership plan,
+ * falling back gracefully to category-based and default images.
+ */
+export function getSpaceImageUrl(space?: {
+  imageUrl?: string;
+  type?: string;
+  roomCategory?: string;
+}): string {
+  if (space?.imageUrl && typeof space.imageUrl === "string" && space.imageUrl.trim().length > 0) {
+    return space.imageUrl;
+  }
+  if (space?.type && SPACE_DEFAULT_IMAGES[space.type]) {
+    return SPACE_DEFAULT_IMAGES[space.type];
+  }
+  if (space?.roomCategory && SPACE_DEFAULT_IMAGES[space.roomCategory]) {
+    return SPACE_DEFAULT_IMAGES[space.roomCategory];
+  }
+  return "/images/spaces/openspace.jpeg";
+}
+

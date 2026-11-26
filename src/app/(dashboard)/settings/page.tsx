@@ -41,6 +41,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
+import { getSpaceImageUrl } from "@/features/coworking/coworking-domain";
 import { useOutlet, type OutletItem } from "@/contexts/OutletContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -746,12 +747,13 @@ export default function SettingsPage() {
     if (!formSpaceName.trim()) return;
     const created = addSpace({
       name: formSpaceName.trim(),
-      type: formSpaceType.trim() || "HOT_DESK",
-      area: formSpaceArea.trim() || "Ground Floor Main",
+      type: formSpaceType.trim() || "OPEN_SPACE",
+      area: formSpaceArea.trim() || "Main Open Area",
       capacity: Number(formSpaceCap) || 1,
       hourlyRate: Number(formSpaceHourly) || 15000,
       dailyRate: Number(formSpaceDaily) || 65000,
       status: formSpaceStatus as any,
+      imageUrl: getSpaceImageUrl({ type: formSpaceType.trim() }),
       amenities: ["WiFi 100Mbps", "Power Hub", "Air Conditioner"],
     });
     setLocalSpaces((prev) => [...prev, created]);
@@ -802,6 +804,13 @@ export default function SettingsPage() {
       priceNumber: priceNum,
       priceFormatted: `Rp ${priceNum.toLocaleString("id-ID")}`,
       color: "blue",
+      imageUrl: getSpaceImageUrl({
+        roomCategory: formPlanName.toLowerCase().includes("large")
+          ? "LARGE_MEETING_ROOM"
+          : formPlanName.toLowerCase().includes("small") || formPlanName.toLowerCase().includes("meeting")
+          ? "SMALL_MEETING_ROOM"
+          : "OPEN_SPACE",
+      }),
       deskAccess: formPlanDeskAccess.trim() || "Akses Hot Desk Bebas Pakai",
       meetingCredits: "Termasuk kuota ruang rapat standar",
       fnbPerk: "Diskon 10% mitra F&B",

@@ -31,8 +31,10 @@ import {
   getTodayWitaDateString,
   formatCoworkingTaxLabel,
   resolveSpaceCapacity,
+  getSpaceImageUrl,
   type DailyPreset,
 } from "./coworking-domain";
+import { SpacePhotoThumbnail } from "./SpacePhotoThumbnail";
 import {
   checkSlotAvailability,
   getValidOperationalTime,
@@ -272,7 +274,13 @@ export function NewBookingModal({
 
           {/* Selected Space Preview */}
           {selectedSpace && (
-            <div className="space-y-1.5 rounded-lg border bg-muted/40 p-3 text-xs">
+            <div className="space-y-2.5 rounded-lg border bg-muted/40 p-3 text-xs">
+              <SpacePhotoThumbnail
+                src={getSpaceImageUrl(selectedSpace)}
+                alt={selectedSpace.name}
+                aspectRatio="aspect-video"
+                className="border"
+              />
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <span className="block text-xs font-medium text-muted-foreground">

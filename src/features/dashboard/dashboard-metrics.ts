@@ -21,6 +21,22 @@ export interface MetricOrder {
   createdAt?: string;
   discount?: number;
   promoId?: string;
+  customerCount?: number;
+  customerName?: string;
+  customerPhone?: string;
+  corporateInfo?: {
+    headcount?: number;
+  };
+}
+
+export function extractOrderCustomerCount(order: MetricOrder): number {
+  if (typeof order.customerCount === "number" && order.customerCount > 0) {
+    return order.customerCount;
+  }
+  if (order.corporateInfo?.headcount && order.corporateInfo.headcount > 0) {
+    return order.corporateInfo.headcount;
+  }
+  return 1;
 }
 
 /** Estimated cost of goods sold until real recipe costs are wired in. */
@@ -92,6 +108,7 @@ export interface DayBucket {
   cost: number;
   discount: number;
   orders: number;
+  customers: number;
 }
 
 /** Seven daily buckets ending today in WITA. Orders outside the window are ignored. */
@@ -109,6 +126,7 @@ export function bucketLastSevenDays(orders: readonly MetricOrder[], now: Date = 
       cost: 0,
       discount: 0,
       orders: 0,
+      customers: 0,
     });
   }
 
@@ -121,6 +139,7 @@ export function bucketLastSevenDays(orders: readonly MetricOrder[], now: Date = 
     bucket.discount += order.discount || 0;
     bucket.cost += Math.round((order.total || 0) * ESTIMATED_COST_RATIO);
     bucket.orders += 1;
+    bucket.customers += extractOrderCustomerCount(order);
   }
 
   return days;
@@ -152,6 +171,7 @@ export function bucketOrdersByDateRange(
       cost: 0,
       discount: 0,
       orders: 0,
+      customers: 0,
     });
   }
 
@@ -164,6 +184,7 @@ export function bucketOrdersByDateRange(
     bucket.discount += order.discount || 0;
     bucket.cost += Math.round((order.total || 0) * ESTIMATED_COST_RATIO);
     bucket.orders += 1;
+    bucket.customers += extractOrderCustomerCount(order);
   }
 
   return days;
@@ -173,6 +194,7 @@ export interface HourBucket {
   hour: string;
   revenue: number;
   orders: number;
+  customers: number;
 }
 
 function slotForHour(hour: number): string {
@@ -186,9 +208,11 @@ function slotForHour(hour: number): string {
   return "08:00";
 }
 
-/** Revenue and order counts per two-hour slot in WITA. */
+/** Revenue, order, and customer counts per two-hour slot in WITA. */
 export function bucketHourly(orders: readonly MetricOrder[]): HourBucket[] {
-  const slots = new Map<string, HourBucket>(HOUR_SLOTS.map((hour) => [hour, { hour, revenue: 0, orders: 0 }]));
+  const slots = new Map<string, HourBucket>(
+    HOUR_SLOTS.map((hour) => [hour, { hour, revenue: 0, orders: 0, customers: 0 }])
+  );
   for (const order of orders) {
     if (!order.createdAt) continue;
     const hour = getWitaHour(order.createdAt);
@@ -197,8 +221,323 @@ export function bucketHourly(orders: readonly MetricOrder[]): HourBucket[] {
     if (!slot) continue;
     slot.revenue += order.total || 0;
     slot.orders += 1;
+    slot.customers += extractOrderCustomerCount(order);
   }
   return [...slots.values()];
+}
+
+export type TrafficMetric = "orders" | "customers";
+
+export interface PeakAndQuietHours {
+  busiest: HourBucket | null;
+  quietest: HourBucket | null;
+  metric: TrafficMetric;
+}
+
+/** Finds the busiest and quietest operational hour slots based on traffic. */
+export function findPeakAndQuietHours(
+  hourlyBuckets: readonly HourBucket[],
+  metric: TrafficMetric = "orders"
+): PeakAndQuietHours {
+  if (!hourlyBuckets || hourlyBuckets.length === 0) {
+    return { busiest: null, quietest: null, metric };
+  }
+
+  const hasTraffic = hourlyBuckets.some((slot) => (slot[metric] || 0) > 0);
+  if (!hasTraffic) {
+    return { busiest: null, quietest: null, metric };
+  }
+
+  let busiest = hourlyBuckets[0];
+  let quietest = hourlyBuckets[0];
+
+  for (const slot of hourlyBuckets) {
+    if (slot[metric] > busiest[metric]) {
+      busiest = slot;
+    }
+    if (slot[metric] < quietest[metric]) {
+      quietest = slot;
+    }
+  }
+
+  return { busiest, quietest, metric };
+}
+
+export interface DayOfWeekBucket {
+  dayIndex: number;
+  dayKey: string;
+  dayName: string;
+  revenue: number;
+  orders: number;
+  customers: number;
+  averageOrderValue: number;
+}
+
+const ORDERED_DAYS = [
+  { index: 1, key: "Sen", name: "Senin", utcDay: 1 },
+  { index: 2, key: "Sel", name: "Selasa", utcDay: 2 },
+  { index: 3, key: "Rab", name: "Rabu", utcDay: 3 },
+  { index: 4, key: "Kam", name: "Kamis", utcDay: 4 },
+  { index: 5, key: "Jum", name: "Jumat", utcDay: 5 },
+  { index: 6, key: "Sab", name: "Sabtu", utcDay: 6 },
+  { index: 7, key: "Min", name: "Minggu", utcDay: 0 },
+] as const;
+
+/** Aggregates traffic and sales across Monday through Sunday. */
+export function bucketDayOfWeekTraffic(orders: readonly MetricOrder[]): DayOfWeekBucket[] {
+  const buckets = new Map<number, DayOfWeekBucket>(
+    ORDERED_DAYS.map((d) => [
+      d.utcDay,
+      {
+        dayIndex: d.index,
+        dayKey: d.key,
+        dayName: d.name,
+        revenue: 0,
+        orders: 0,
+        customers: 0,
+        averageOrderValue: 0,
+      },
+    ])
+  );
+
+  for (const order of orders) {
+    if (!order.createdAt) continue;
+    const dateKey = toWitaDateKey(order.createdAt);
+    if (!dateKey) continue;
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    const bucket = buckets.get(dayOfWeek);
+    if (!bucket) continue;
+
+    bucket.revenue += order.total || 0;
+    bucket.orders += 1;
+    bucket.customers += extractOrderCustomerCount(order);
+  }
+
+  return ORDERED_DAYS.map((d) => {
+    const b = buckets.get(d.utcDay)!;
+    return {
+      ...b,
+      averageOrderValue: b.orders > 0 ? Math.round(b.revenue / b.orders) : 0,
+    };
+  });
+}
+
+/** Computes the equivalent previous period date range ending the day before current range start. */
+export function getPreviousPeriodRange(
+  startDate: string,
+  endDate: string
+): { startDate: string; endDate: string } {
+  if (
+    !startDate ||
+    !endDate ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
+  ) {
+    const today = new Date().toISOString().slice(0, 10);
+    return { startDate: today, endDate: today };
+  }
+
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const startUtc = Date.UTC(sy, sm - 1, sd);
+  const endUtc = Date.UTC(ey, em - 1, ed);
+
+  if (Number.isNaN(startUtc) || Number.isNaN(endUtc)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return { startDate: today, endDate: today };
+  }
+
+  const spanDays = Math.max(1, Math.round((endUtc - startUtc) / 86_400_000) + 1);
+
+  const prevEndUtc = startUtc - 86_400_000;
+  const prevStartUtc = prevEndUtc - (spanDays - 1) * 86_400_000;
+
+  return {
+    startDate: new Date(prevStartUtc).toISOString().slice(0, 10),
+    endDate: new Date(prevEndUtc).toISOString().slice(0, 10),
+  };
+}
+
+export interface PeriodTrafficComparison {
+  current: {
+    startDate: string;
+    endDate: string;
+    revenue: number;
+    orders: number;
+    customers: number;
+  };
+  previous: {
+    startDate: string;
+    endDate: string;
+    revenue: number;
+    orders: number;
+    customers: number;
+  };
+  deltas: {
+    revenueAmount: number;
+    revenuePercent: number;
+    ordersCount: number;
+    ordersPercent: number;
+    customersCount: number;
+    customersPercent: number;
+  };
+}
+
+export function calculatePeriodComparison(
+  currentOrders: readonly MetricOrder[],
+  previousOrders: readonly MetricOrder[],
+  currentRange: { startDate: string; endDate: string },
+  previousRange: { startDate: string; endDate: string }
+): PeriodTrafficComparison {
+  const sumMetrics = (list: readonly MetricOrder[]) => {
+    let revenue = 0;
+    let orders = 0;
+    let customers = 0;
+    for (const o of list) {
+      revenue += o.total || 0;
+      orders += 1;
+      customers += extractOrderCustomerCount(o);
+    }
+    return { revenue, orders, customers };
+  };
+
+  const curr = sumMetrics(currentOrders);
+  const prev = sumMetrics(previousOrders);
+
+  const calcPercent = (c: number, p: number): number => {
+    if (p === 0) return c > 0 ? 100 : 0;
+    return Number((((c - p) / p) * 100).toFixed(1));
+  };
+
+  return {
+    current: {
+      startDate: currentRange.startDate,
+      endDate: currentRange.endDate,
+      ...curr,
+    },
+    previous: {
+      startDate: previousRange.startDate,
+      endDate: previousRange.endDate,
+      ...prev,
+    },
+    deltas: {
+      revenueAmount: curr.revenue - prev.revenue,
+      revenuePercent: calcPercent(curr.revenue, prev.revenue),
+      ordersCount: curr.orders - prev.orders,
+      ordersPercent: calcPercent(curr.orders, prev.orders),
+      customersCount: curr.customers - prev.customers,
+      customersPercent: calcPercent(curr.customers, prev.customers),
+    },
+  };
+}
+
+export interface ForecastDayItem {
+  date: string;
+  day: string;
+  dayName: string;
+  projectedRevenue: number;
+  projectedOrders: number;
+  projectedCustomers: number;
+  lowerBoundRevenue: number;
+  upperBoundRevenue: number;
+}
+
+export interface SalesForecastResult {
+  forecastDays: ForecastDayItem[];
+  totalProjectedRevenue: number;
+  totalProjectedOrders: number;
+  totalProjectedCustomers: number;
+  dailyAverageProjectedRevenue: number;
+  hasSufficientData: boolean;
+}
+
+/** Projects sales and traffic for the upcoming period using weighted average and day-of-week seasonality. */
+export function calculateSalesForecast(
+  historicalDaily: readonly DayBucket[],
+  horizonDays: number = 7
+): SalesForecastResult {
+  if (historicalDaily.length === 0) {
+    return {
+      forecastDays: [],
+      totalProjectedRevenue: 0,
+      totalProjectedOrders: 0,
+      totalProjectedCustomers: 0,
+      dailyAverageProjectedRevenue: 0,
+      hasSufficientData: false,
+    };
+  }
+
+  const totalRev = historicalDaily.reduce((sum, d) => sum + d.revenue, 0);
+  const totalOrd = historicalDaily.reduce((sum, d) => sum + d.orders, 0);
+  const totalCust = historicalDaily.reduce((sum, d) => sum + d.customers, 0);
+  const dayCount = historicalDaily.length;
+
+  const baseDailyRev = dayCount > 0 ? totalRev / dayCount : 0;
+  const baseDailyOrd = dayCount > 0 ? totalOrd / dayCount : 0;
+  const baseDailyCust = dayCount > 0 ? totalCust / dayCount : 0;
+
+  const dowSums = new Map<number, { rev: number; count: number }>();
+  for (const d of historicalDaily) {
+    const [y, m, day] = d.date.split("-").map(Number);
+    const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay();
+    const existing = dowSums.get(dow) || { rev: 0, count: 0 };
+    dowSums.set(dow, { rev: existing.rev + d.revenue, count: existing.count + 1 });
+  }
+
+  const dowMultiplier = (dow: number): number => {
+    const entry = dowSums.get(dow);
+    if (!entry || entry.count === 0 || baseDailyRev <= 0) return 1.0;
+    const dowAvg = entry.rev / entry.count;
+    const factor = dowAvg / baseDailyRev;
+    return Math.max(0.5, Math.min(2.0, factor));
+  };
+
+  const lastDateKey = historicalDaily[historicalDaily.length - 1].date;
+  const [ly, lm, ld] = lastDateKey.split("-").map(Number);
+
+  const forecastDays: ForecastDayItem[] = [];
+  let totalProjectedRevenue = 0;
+  let totalProjectedOrders = 0;
+  let totalProjectedCustomers = 0;
+
+  for (let offset = 1; offset <= horizonDays; offset += 1) {
+    const nextDate = new Date(Date.UTC(ly, lm - 1, ld + offset));
+    const nextDateKey = nextDate.toISOString().slice(0, 10);
+    const dow = nextDate.getUTCDay();
+    const multiplier = dowMultiplier(dow);
+
+    const projectedRevenue = Math.round(baseDailyRev * multiplier);
+    const projectedOrders = Math.max(0, Math.round(baseDailyOrd * multiplier));
+    const projectedCustomers = Math.max(0, Math.round(baseDailyCust * multiplier));
+
+    const lowerBoundRevenue = Math.max(0, Math.round(projectedRevenue * 0.88));
+    const upperBoundRevenue = Math.round(projectedRevenue * 1.12);
+
+    totalProjectedRevenue += projectedRevenue;
+    totalProjectedOrders += projectedOrders;
+    totalProjectedCustomers += projectedCustomers;
+
+    forecastDays.push({
+      date: nextDateKey,
+      day: DAY_NAMES[dow],
+      dayName: ORDERED_DAYS.find((o) => o.utcDay === dow)?.name ?? DAY_NAMES[dow],
+      projectedRevenue,
+      projectedOrders,
+      projectedCustomers,
+      lowerBoundRevenue,
+      upperBoundRevenue,
+    });
+  }
+
+  return {
+    forecastDays,
+    totalProjectedRevenue,
+    totalProjectedOrders,
+    totalProjectedCustomers,
+    dailyAverageProjectedRevenue: horizonDays > 0 ? Math.round(totalProjectedRevenue / horizonDays) : 0,
+    hasSufficientData: totalRev > 0,
+  };
 }
 
 export interface DashboardOrderScopeOptions {
@@ -346,8 +685,10 @@ const compactNumber = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 
 /** Short Rupiah labels for chart axes, e.g. 1_500_000 -> "Rp 1,5 jt". */
 export function formatCompactIDR(value: number): string {
   if (!value) return "Rp 0";
-  if (value >= 1_000_000_000) return `Rp ${compactNumber.format(value / 1_000_000_000)} M`;
-  if (value >= 1_000_000) return `Rp ${compactNumber.format(value / 1_000_000)} jt`;
-  if (value >= 1_000) return `Rp ${Math.round(value / 1_000)} rb`;
-  return `Rp ${value.toLocaleString("id-ID")}`;
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000) return `${sign}Rp ${compactNumber.format(abs / 1_000_000_000)} M`;
+  if (abs >= 1_000_000) return `${sign}Rp ${compactNumber.format(abs / 1_000_000)} jt`;
+  if (abs >= 1_000) return `${sign}Rp ${Math.round(abs / 1_000)} rb`;
+  return `${sign}Rp ${abs.toLocaleString("id-ID")}`;
 }

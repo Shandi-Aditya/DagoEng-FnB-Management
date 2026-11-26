@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useEffect } from "react";
-import { Check, Clock, Laptop, Users, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,9 @@ import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import {
   formatCoworkingTaxLabel,
   calculateCoworkingPrice,
+  getSpaceImageUrl,
 } from "@/features/coworking/coworking-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
 
 import {
   COWORKING_CLOSE_MINUTES,
@@ -161,6 +163,13 @@ export function CustomerBookingModal({
           </DialogDescription>
         </DialogHeader>
 
+        <SpacePhotoThumbnail
+          src={getSpaceImageUrl(space)}
+          alt={space.name}
+          aspectRatio="aspect-video"
+          className="border"
+        />
+
         <form onSubmit={onSubmitBooking} className="flex flex-col gap-4 py-2 text-xs">
           {/* 1. Mode Durasi: Per Jam vs Harian */}
           <div className="grid grid-cols-2 gap-2">
@@ -289,7 +298,7 @@ export function CustomerBookingModal({
               <NativeSelect
                 id="bookUsageType"
                 value={bookingUsageType}
-                onChange={(e) => onBookingUsageTypeChange(e.target.value as any)}
+                onChange={(e) => onBookingUsageTypeChange(e.target.value as "INDIVIDUAL" | "TEAM")}
               >
                 <NativeSelectOption value="INDIVIDUAL">Individu / Pribadi</NativeSelectOption>
                 <NativeSelectOption value="TEAM">Tim / Perusahaan</NativeSelectOption>

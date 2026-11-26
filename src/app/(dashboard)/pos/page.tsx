@@ -2471,7 +2471,7 @@ export default function POSPage() {
                             handleSelectSpace(space.id);
                           }
                         }}
-                        onPreviewPhoto={space.imageUrl ? () => setPreviewSpacePhoto(space) : undefined}
+                        onPreviewPhoto={() => setPreviewSpacePhoto(space)}
                       />
                     );
                   })}

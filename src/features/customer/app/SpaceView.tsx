@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Laptop, Minus, Plus, Users } from "lucide-react";
+import { Award, Check, Laptop, Minus, Plus, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,10 @@ import {
   formatCoworkingTaxLabel,
   calculateCoworkingPrice,
   resolveSpaceCapacity,
+  getSpaceImageUrl,
 } from "@/features/coworking/coworking-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
+import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import { useSettings } from "@/contexts/SettingsContext";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
@@ -174,6 +178,12 @@ export function SpaceView(props: SpaceViewProps) {
         <ul className="flex flex-col gap-3">
           {bookable.map((space) => (
             <li key={space.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+              <SpacePhotoThumbnail
+                src={getSpaceImageUrl(space)}
+                alt={space.name}
+                aspectRatio="aspect-video"
+                className="border"
+              />
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">{space.name}</span>
@@ -229,11 +239,67 @@ export function SpaceView(props: SpaceViewProps) {
         </ul>
       )}
 
+      {/* Paket Membership Co-Working */}
+      <div className="flex flex-col gap-3 pt-6 border-t">
+        <div>
+          <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Award className="size-4 text-muted-foreground" />
+            <span>Paket membership</span>
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Akses fleksibel tanpa repot bayar harian dengan kuota jam dan benefit lengkap.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+          {MEMBERSHIP_PLANS.map((plan) => (
+            <div key={plan.id} className="flex flex-col justify-between rounded-xl border bg-card overflow-hidden">
+              <div className="flex flex-col">
+                <SpacePhotoThumbnail
+                  src={getSpaceImageUrl(plan)}
+                  alt={plan.name}
+                  aspectRatio="aspect-video"
+                  className="border-b rounded-none"
+                />
+                <div className="p-3.5 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{plan.name}</span>
+                    <Badge variant="secondary" className="text-xs">{plan.billingCycle}</Badge>
+                  </div>
+                  <span className="font-mono text-sm font-medium text-foreground tabular-nums mt-1 block">
+                    {plan.priceFormatted}
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{plan.deskAccess}</p>
+                </div>
+                <div className="p-3.5 pt-1">
+                  <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                    {plan.amenities?.map((item, i) => (
+                      <li key={i} className="flex items-center gap-1.5">
+                        <Check className="size-3 text-success shrink-0" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <Sheet open={selection !== null} onOpenChange={(isOpen) => !isOpen && setSelection(null)}>
         <SheetContent side="bottom" className="mx-auto max-h-[92svh] max-w-2xl rounded-t-2xl">
           {selection ? (
             <>
               <SheetHeader>
+                <div className="mb-2">
+                  <SpacePhotoThumbnail
+                    src={getSpaceImageUrl(selection.space)}
+                    alt={selection.space.name}
+                    aspectRatio="aspect-video"
+                    className="border"
+                  />
+                </div>
                 <SheetTitle className="text-lg font-medium">{selection.space.name}</SheetTitle>
                 <SheetDescription>
                   {days.find((day) => day.value === date)?.day}, {selection.start} sampai {calculateEndTime(selection.start, hours)} WITA
@@ -242,7 +308,7 @@ export function SpaceView(props: SpaceViewProps) {
               <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-4">
                 <div className="flex flex-col gap-2 rounded-xl border p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Paket Durasi</span>
+                    <span className="text-sm font-medium">Paket durasi</span>
                     <span className="font-mono text-xs tabular-nums text-muted-foreground">
                       {hours === 8 ? "Seharian (8 jam)" : `${hours} jam`}
                     </span>

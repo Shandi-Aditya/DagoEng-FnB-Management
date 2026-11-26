@@ -1,7 +1,6 @@
 "use client";
 
-import { Building, MapPin, Users } from "lucide-react";
-import { useState } from "react";
+import { MapPin, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { spaceTypeLabel } from "@/features/pos/pos-coworking";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
+import { getSpaceImageUrl } from "@/features/coworking/coworking-domain";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import { formatCurrencyIDR } from "@/lib/utils";
 
@@ -29,8 +30,6 @@ export function CoworkingPhotoModal({
   space,
   onSelectSpace,
 }: CoworkingPhotoModalProps) {
-  const [imageFailed, setImageFailed] = useState(false);
-
   if (!space) return null;
 
   return (
@@ -56,20 +55,12 @@ export function CoworkingPhotoModal({
           </DialogDescription>
         </DialogHeader>
 
-        {space.imageUrl && !imageFailed ? (
-          <div className="relative h-48 w-full overflow-hidden rounded-lg bg-muted">
-            <img
-              src={space.imageUrl}
-              alt={space.name}
-              onError={() => setImageFailed(true)}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="flex h-36 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 text-muted-foreground">
-            <Building className="size-8 opacity-40" />
-          </div>
-        )}
+        <SpacePhotoThumbnail
+          src={getSpaceImageUrl(space)}
+          alt={space.name}
+          aspectRatio="aspect-video"
+          className="border"
+        />
 
         {space.description && (
           <p className="text-xs text-muted-foreground leading-relaxed">

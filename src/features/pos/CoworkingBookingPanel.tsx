@@ -18,7 +18,9 @@ import {
 import {
   formatCoworkingTaxLabel,
   calculateCoworkingPrice,
+  getSpaceImageUrl,
 } from "@/features/coworking/coworking-domain";
+import { SpacePhotoThumbnail } from "@/features/coworking/SpacePhotoThumbnail";
 import { useAuth } from "@/contexts/AuthContext";
 import { canUserViewFullCustomerContacts, maskCustomerPhone } from "@/features/customers/customers-domain";
 import type { CoworkingOrderItemMeta, POSCartItem, POSPaymentMethod } from "@/features/pos/types";
@@ -183,6 +185,16 @@ export function CoworkingBookingPanel({
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 text-xs text-card-foreground shadow-xs">
+      {/* Space Photo & Info */}
+      <div className="relative overflow-hidden rounded-lg">
+        <SpacePhotoThumbnail
+          src={getSpaceImageUrl(selectedSpace)}
+          alt={selectedSpace.name}
+          aspectRatio="aspect-video"
+          className="rounded-lg shadow-xs"
+        />
+      </div>
+
       {/* Panel header */}
       <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
         <div className="space-y-0.5 min-w-0">

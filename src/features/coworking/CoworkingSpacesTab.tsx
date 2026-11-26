@@ -12,7 +12,9 @@ import {
   getSpaceStatusTone,
   isSpaceAvailableNow,
   spaceTypeLabel,
+  getSpaceImageUrl,
 } from "./coworking-domain";
+import { SpacePhotoThumbnail } from "./SpacePhotoThumbnail";
 
 export interface CoworkingSpacesTabProps {
   spaces: CoworkingSpaceItem[];
@@ -51,19 +53,12 @@ export function CoworkingSpacesTab({
           >
             <div className="space-y-3">
               {/* Space Photo Cover */}
-              {sp.imageUrl ? (
-                <div className="relative h-36 w-full overflow-hidden rounded-lg border bg-muted">
-                  <img
-                    src={sp.imageUrl}
-                    alt={sp.name}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="relative flex h-24 w-full items-center justify-center rounded-lg border bg-muted text-muted-foreground">
-                  <Laptop className="size-8 opacity-40" />
-                </div>
-              )}
+              <SpacePhotoThumbnail
+                src={getSpaceImageUrl(sp)}
+                alt={sp.name}
+                aspectRatio="aspect-video"
+                className="border"
+              />
 
               <div className="flex items-start justify-between gap-2 border-b pb-2">
                 <div className="min-w-0">

@@ -116,6 +116,7 @@ export interface CoworkingMembershipPlan {
   creditHours?: number;
   validityDays?: number;
   roomCategory?: SpaceType;
+  imageUrl?: string;
   benefits?: string[];
   popular?: boolean;
   color: string;

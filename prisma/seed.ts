@@ -9,6 +9,12 @@ async function main() {
   // 1. CLEAR EXISTING DATA (Clean seed)
   await prisma.auditLog.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.reservation.deleteMany();
+  await prisma.customerMembership.deleteMany();
+  await prisma.membershipPackage.deleteMany();
+  await prisma.roomTieredRate.deleteMany();
+  await prisma.room.deleteMany();
+  await prisma.roomCategory.deleteMany();
   await prisma.table.deleteMany();
   await prisma.tableArea.deleteMany();
   await prisma.modifierOption.deleteMany();
@@ -510,6 +516,207 @@ async function main() {
   await prisma.table.create({ data: { tableAreaId: areaRenon.id, number: "BB-01", capacity: 4, status: "AVAILABLE" } });
 
   console.log("✅ Created Table Areas and Tables.");
+
+  // 9. CREATE COWORKING ROOM CATEGORIES, TIERED RATES, ROOMS & MEMBERSHIPS
+  const categoryOpenSpace = await prisma.roomCategory.create({
+    data: {
+      name: "Open Space",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/openspace.jpeg",
+      tieredRates: {
+        create: [
+          { durationHrs: 2, price: 20000 },
+          { durationHrs: 3, price: 30000 },
+          { durationHrs: 6, price: 50000 },
+          { durationHrs: 8, price: 70000 },
+        ],
+      },
+    },
+  });
+
+  const categorySpaceMonitor = await prisma.roomCategory.create({
+    data: {
+      name: "Space Monitor",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/spacemonitor.jpeg",
+      tieredRates: {
+        create: [
+          { durationHrs: 2, price: 26000 },
+          { durationHrs: 3, price: 40000 },
+          { durationHrs: 6, price: 60000 },
+          { durationHrs: 8, price: 80000 },
+        ],
+      },
+    },
+  });
+
+  const categorySmallMeeting = await prisma.roomCategory.create({
+    data: {
+      name: "Small Meeting Room",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+      tieredRates: {
+        create: [
+          { durationHrs: 2, price: 75000 },
+          { durationHrs: 4, price: 150000 },
+          { durationHrs: 8, price: 250000 },
+        ],
+      },
+    },
+  });
+
+  const categoryLargeMeeting = await prisma.roomCategory.create({
+    data: {
+      name: "Large Meeting Room",
+      priceType: "TIERED",
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+      tieredRates: {
+        create: [
+          { durationHrs: 2, price: 100000 },
+          { durationHrs: 4, price: 200000 },
+          { durationHrs: 8, price: 360000 },
+        ],
+      },
+    },
+  });
+
+  // Rooms
+  await prisma.room.create({
+    data: {
+      outletId: outletSingaraja.id,
+      categoryId: categoryOpenSpace.id,
+      name: "Open Space Flex",
+      capacity: 20,
+      hourlyRate: 10000,
+      status: "AVAILABLE",
+      imageUrl: "/images/spaces/openspace.jpeg",
+    },
+  });
+
+  await prisma.room.create({
+    data: {
+      outletId: outletSingaraja.id,
+      categoryId: categorySpaceMonitor.id,
+      name: "Dedicated Space Monitor",
+      capacity: 8,
+      hourlyRate: 13000,
+      status: "AVAILABLE",
+      imageUrl: "/images/spaces/spacemonitor.jpeg",
+    },
+  });
+
+  await prisma.room.create({
+    data: {
+      outletId: outletSingaraja.id,
+      categoryId: categorySmallMeeting.id,
+      name: "Small Meeting Room Alpha",
+      capacity: 6,
+      hourlyRate: 37500,
+      status: "AVAILABLE",
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+    },
+  });
+
+  await prisma.room.create({
+    data: {
+      outletId: outletSingaraja.id,
+      categoryId: categoryLargeMeeting.id,
+      name: "Large Meeting Room Beta",
+      capacity: 12,
+      hourlyRate: 50000,
+      status: "AVAILABLE",
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+    },
+  });
+
+  // Membership Packages
+  const membershipBenefits = [
+    "Economical & Transparent",
+    "Flexible Terms",
+    "Priority Access",
+    "High-Speed Wi-Fi",
+    "Complimentary Printing",
+  ];
+
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Open Space - 1 Minggu",
+      price: 150000,
+      creditHours: 20,
+      validityDays: 7,
+      roomCategoryId: categoryOpenSpace.id,
+      imageUrl: "/images/spaces/openspace.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Open Space - 2 Minggu",
+      price: 300000,
+      creditHours: 40,
+      validityDays: 14,
+      roomCategoryId: categoryOpenSpace.id,
+      imageUrl: "/images/spaces/openspace.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Open Space - 1 Bulan",
+      price: 450000,
+      creditHours: 60,
+      validityDays: 30,
+      roomCategoryId: categoryOpenSpace.id,
+      imageUrl: "/images/spaces/openspace.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Small Meeting Room - 2 Minggu",
+      price: 240000,
+      creditHours: 8,
+      validityDays: 14,
+      roomCategoryId: categorySmallMeeting.id,
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Small Meeting Room - 1 Bulan",
+      price: 450000,
+      creditHours: 15,
+      validityDays: 30,
+      roomCategoryId: categorySmallMeeting.id,
+      imageUrl: "/images/spaces/smallmeetingroom.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Large Meeting Room - 2 Minggu",
+      price: 320000,
+      creditHours: 8,
+      validityDays: 14,
+      roomCategoryId: categoryLargeMeeting.id,
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+  await prisma.membershipPackage.create({
+    data: {
+      name: "Large Meeting Room - 1 Bulan",
+      price: 600000,
+      creditHours: 15,
+      validityDays: 30,
+      roomCategoryId: categoryLargeMeeting.id,
+      imageUrl: "/images/spaces/largemeetingroom.jpeg",
+      benefits: membershipBenefits,
+    },
+  });
+
+  console.log("✅ Created Coworking Room Categories, Rooms & Membership Packages with Photos.");
   console.log("🎉 Seed finished successfully!");
 }
 
