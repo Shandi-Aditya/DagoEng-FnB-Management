@@ -1,11 +1,30 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import fs from "fs";
+import path from "path";
+import { NextRequest } from "next/server";
 import {
   generateTierSeats,
   getEventOccupiedSeats,
   validateSeatSelection,
   formatSeatsList,
 } from "@/lib/event-seating";
-import type { EventTicketOrder, CommunityEvent, EventTicketTier } from "@/types/event";
+import { validateEventTicketTiers } from "@/lib/event-validation";
+import {
+  createEventSubmission,
+  updateEventDetails,
+  updateEventStatus,
+  createEventBooking,
+  createInvitationTicket,
+  getPublicEventById,
+  updateBookingPaymentStatus,
+  requestTicketRefund,
+  adminProcessTicketRefund,
+  loadBookingsFromDisk,
+  saveBookingsToDisk,
+} from "@/lib/events";
+import * as dokuModule from "@/lib/doku";
+import { POST as handleBookPost } from "@/app/api/events/[id]/book/route";
+import type { EventTicketOrder, EventTicketTier } from "@/types/event";
 
 describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
   describe("generateTierSeats", () => {
@@ -56,6 +75,27 @@ describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
 
       const seats = generateTierSeats(tier);
       expect(seats).toEqual(["K1", "K2", "K3", "K4"]);
+    });
+
+    it("menghasilkan kode kursi yang benar untuk multi-karakter rowPrefix (1 baris dan >1 baris)", () => {
+      const singleRowVip = generateTierSeats({
+        rowPrefix: "VIP",
+        totalRows: 1,
+        seatsPerRow: 5,
+        quota: 5,
+      });
+      expect(singleRowVip).toEqual(["VIP1", "VIP2", "VIP3", "VIP4", "VIP5"]);
+
+      const multiRowVip = generateTierSeats({
+        rowPrefix: "VIP",
+        totalRows: 2,
+        seatsPerRow: 3,
+        quota: 6,
+      });
+      expect(multiRowVip).toEqual([
+        "VIP-A1", "VIP-A2", "VIP-A3",
+        "VIP-B1", "VIP-B2", "VIP-B3",
+      ]);
     });
   });
 
@@ -180,7 +220,7 @@ describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
     ];
 
     it("mengumpulkan kursi terisi hanya dari event yang sesuai dan mengecualikan CANCELLED / APPROVED refund", () => {
-      const occupied = getEventOccupiedSeats("evt-101", mockBookings);
+      const occupied = getEventOccupiedSeats("evt-101", mockBookings, Date.parse("2026-11-20T10:30:00Z"));
       expect(occupied.has("A1")).toBe(true);
       expect(occupied.has("A2")).toBe(true);
       expect(occupied.has("A3")).toBe(true);
@@ -189,6 +229,26 @@ describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
       // Kursi A5 dari tiket refund APPROVED harus tersedia kembali
       expect(occupied.has("A5")).toBe(false);
       expect(occupied.size).toBe(3);
+    });
+
+    it("mengabaikan booking PENDING yang sudah melewati expiresAt", () => {
+      const nowMs = Date.parse("2026-11-20T12:00:00Z");
+      const expiredPending: EventTicketOrder = {
+        ...mockBookings[1],
+        id: "ord-expired-pending",
+        selectedSeats: ["A9"],
+        expiresAt: "2026-11-20T11:30:00Z",
+      };
+      const activePending: EventTicketOrder = {
+        ...mockBookings[1],
+        id: "ord-active-pending",
+        selectedSeats: ["A10"],
+        expiresAt: "2026-11-20T12:30:00Z",
+      };
+
+      const occupied = getEventOccupiedSeats("evt-101", [expiredPending, activePending], nowMs);
+      expect(occupied.has("A9")).toBe(false);
+      expect(occupied.has("A10")).toBe(true);
     });
   });
 
@@ -286,6 +346,27 @@ describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
 
       expect(result.valid).toBe(true);
       expect(result.error).toBeUndefined();
+    });
+
+    it("menolak nilai non-string atau string kosong tanpa crash TypeError", () => {
+      const resNonString = validateSeatSelection({
+        hasSeatingChart: true,
+        selectedSeats: [123 as unknown as string],
+        ticketCount: 1,
+        tierSeats,
+        occupiedSeats,
+      });
+      expect(resNonString.valid).toBe(false);
+      expect(resNonString.error).toContain("tidak valid");
+
+      const resEmpty = validateSeatSelection({
+        hasSeatingChart: true,
+        selectedSeats: ["   "],
+        ticketCount: 1,
+        tierSeats,
+        occupiedSeats,
+      });
+      expect(resEmpty.valid).toBe(false);
     });
   });
 
@@ -440,6 +521,481 @@ describe("Task S-43: Logika Denah Kursi Event (Event Seating)", () => {
       ];
 
       expect(getEventOccupiedSeats(eventId, activeBookings).has("C1")).toBe(false);
+    });
+  });
+
+  describe("validateEventTicketTiers dengan konfigurasi kursi", () => {
+    it("mempertahankan dan memvalidasi rowPrefix, totalRows, seatsPerRow serta menolak tabrakan antar-tier", () => {
+      const validRes = validateEventTicketTiers(
+        [
+          {
+            id: "vip",
+            name: "VIP",
+            price: 150000,
+            quota: 10,
+            rowPrefix: "vip",
+            totalRows: 1,
+            seatsPerRow: 10,
+          },
+          {
+            id: "reg",
+            name: "Reguler",
+            price: 50000,
+            quota: 20,
+            rowPrefix: "b",
+            totalRows: 2,
+            seatsPerRow: 10,
+          },
+        ],
+        { hasSeatingChart: true }
+      );
+      expect(validRes.valid).toBe(true);
+      expect(validRes.value?.[0]).toMatchObject({
+        rowPrefix: "VIP",
+        totalRows: 1,
+        seatsPerRow: 10,
+      });
+      expect(validRes.value?.[1]).toMatchObject({
+        rowPrefix: "B",
+        totalRows: 2,
+        seatsPerRow: 10,
+      });
+
+      const insufficientGrid = validateEventTicketTiers([
+        {
+          id: "t1",
+          name: "VIP",
+          price: 100000,
+          quota: 30,
+          rowPrefix: "A",
+          totalRows: 2,
+          seatsPerRow: 10,
+        },
+      ]);
+      expect(insufficientGrid.valid).toBe(false);
+      expect(insufficientGrid.error).toContain("kurang dari kuota");
+
+      const collisionRes = validateEventTicketTiers(
+        [
+          { id: "t1", name: "Tier 1", price: 100000, quota: 5, rowPrefix: "A", totalRows: 2, seatsPerRow: 5 },
+          { id: "t2", name: "Tier 2", price: 50000, quota: 5, rowPrefix: "B", totalRows: 1, seatsPerRow: 5 },
+        ],
+        { hasSeatingChart: true }
+      );
+      // Tier 1 quota=5 on 2x5 only produces A1..A5, so let's make Tier 1 quota=10 (A1..B5) colliding with Tier 2 B1..B5
+      expect(collisionRes.valid).toBe(true);
+
+      const realCollision = validateEventTicketTiers(
+        [
+          { id: "t1", name: "Tier 1", price: 100000, quota: 10, rowPrefix: "A", totalRows: 2, seatsPerRow: 5 },
+          { id: "t2", name: "Tier 2", price: 50000, quota: 5, rowPrefix: "B", totalRows: 1, seatsPerRow: 5 },
+        ],
+        { hasSeatingChart: true }
+      );
+      expect(realCollision.valid).toBe(false);
+      expect(realCollision.error).toContain("Tabrakan nomor kursi");
+    });
+  });
+
+  describe("Integrasi Nyata S-43: Submission, Edit, Booking, Undangan, Cancel/Refund, dan Expired", () => {
+    const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
+    const EVENTS_FILE = path.join(DATA_DIR, "events.json");
+    const BOOKINGS_FILE = path.join(DATA_DIR, "event_bookings.json");
+    const AUDIT_LOGS_FILE = path.join(DATA_DIR, "audit_logs.json");
+
+    let originalEventsBackup: string | null = null;
+    let originalBookingsBackup: string | null = null;
+    let originalAuditLogsBackup: string | null = null;
+    let createdEventId = "";
+
+    beforeAll(() => {
+      if (fs.existsSync(EVENTS_FILE)) originalEventsBackup = fs.readFileSync(EVENTS_FILE, "utf-8");
+      if (fs.existsSync(BOOKINGS_FILE)) originalBookingsBackup = fs.readFileSync(BOOKINGS_FILE, "utf-8");
+      if (fs.existsSync(AUDIT_LOGS_FILE)) originalAuditLogsBackup = fs.readFileSync(AUDIT_LOGS_FILE, "utf-8");
+    });
+
+    afterAll(() => {
+      if (originalEventsBackup !== null) fs.writeFileSync(EVENTS_FILE, originalEventsBackup, "utf-8");
+      if (originalBookingsBackup !== null) fs.writeFileSync(BOOKINGS_FILE, originalBookingsBackup, "utf-8");
+      if (originalAuditLogsBackup !== null) fs.writeFileSync(AUDIT_LOGS_FILE, originalAuditLogsBackup, "utf-8");
+    });
+
+    it("menyimpan dan mempertahankan denah kursi multi-tier lewat createEventSubmission & updateEventDetails", async () => {
+      const start = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+      const end = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString();
+
+      const submitted = await createEventSubmission({
+        organizerName: "Komunitas Musik Bali",
+        organizerEmail: "musik-s43@dagohub.id",
+        organizerPhone: "081234567890",
+        title: "Konser Akustik S-43",
+        category: "CREATIVE",
+        description: "Konser akustik dengan pemilihan kursi per tier.",
+        startDate: start,
+        endDate: end,
+        location: "Main Hall Dago",
+        maxCapacity: 30,
+        isPaid: true,
+        price: 50000,
+        posterUrl: "https://example.com/s43-poster.jpg",
+        hasSeatingChart: true,
+        ticketTiers: [
+          {
+            id: "tier-vip-s43",
+            name: "VIP",
+            price: 150000,
+            quota: 10,
+            rowPrefix: "VIP",
+            totalRows: 1,
+            seatsPerRow: 10,
+          },
+          {
+            id: "tier-reg-s43",
+            name: "Reguler",
+            price: 50000,
+            quota: 20,
+            rowPrefix: "B",
+            totalRows: 2,
+            seatsPerRow: 10,
+          },
+        ],
+        refundPolicy: {
+          policyType: "REFUNDABLE_UNTIL_H_MINUS",
+          hMinusDays: 2,
+          refundFeePercent: 10,
+        },
+      });
+
+      createdEventId = submitted.id;
+      expect(submitted.hasSeatingChart).toBe(true);
+      expect(submitted.ticketTiers?.[0]).toMatchObject({
+        id: "tier-vip-s43",
+        rowPrefix: "VIP",
+        totalRows: 1,
+        seatsPerRow: 10,
+      });
+      expect(submitted.ticketTiers?.[1]).toMatchObject({
+        id: "tier-reg-s43",
+        rowPrefix: "B",
+        totalRows: 2,
+        seatsPerRow: 10,
+      });
+
+      const updated = await updateEventDetails(createdEventId, {
+        hasSeatingChart: true,
+        ticketTiers: [
+          {
+            id: "tier-vip-s43",
+            name: "VIP",
+            price: 150000,
+            quota: 10,
+            rowPrefix: "VIP",
+            totalRows: 2,
+            seatsPerRow: 5,
+          },
+          {
+            id: "tier-reg-s43",
+            name: "Reguler",
+            price: 50000,
+            quota: 20,
+            rowPrefix: "C",
+            totalRows: 2,
+            seatsPerRow: 10,
+          },
+        ],
+      });
+
+      expect(updated.ticketTiers?.[0]).toMatchObject({
+        rowPrefix: "VIP",
+        totalRows: 2,
+        seatsPerRow: 5,
+      });
+      expect(updated.ticketTiers?.[1]).toMatchObject({
+        rowPrefix: "C",
+        totalRows: 2,
+        seatsPerRow: 10,
+      });
+
+      await updateEventStatus(createdEventId, "APPROVED");
+      const pub = await getPublicEventById(createdEventId);
+      expect(pub).not.toBeNull();
+      expect(pub?.hasSeatingChart).toBe(true);
+      expect(pub?.ticketTiers?.[0].rowPrefix).toBe("VIP");
+      expect(pub?.occupiedSeats).toEqual([]);
+    });
+
+    it("mengunci kursi pada createEventBooking & menolak pemesanan kursi yang sama", async () => {
+      const booking1 = await createEventBooking({
+        eventId: createdEventId,
+        guestName: "Pembeli Pertama",
+        guestEmail: "buyer1-s43@example.com",
+        guestPhone: "081211112222",
+        ticketTierId: "tier-vip-s43",
+        ticketCount: 2,
+        selectedSeats: ["VIP-A1", "VIP-A2"],
+      });
+
+      expect(booking1.selectedSeats).toEqual(["VIP-A1", "VIP-A2"]);
+
+      await expect(
+        createEventBooking({
+          eventId: createdEventId,
+          guestName: "Pembeli Kedua",
+          guestEmail: "buyer2-s43@example.com",
+          guestPhone: "081233334444",
+          ticketTierId: "tier-vip-s43",
+          ticketCount: 1,
+          selectedSeats: ["VIP-A1"],
+        })
+      ).rejects.toThrow(/sudah dipesan atau tidak tersedia/i);
+
+      const pubAfter = await getPublicEventById(createdEventId);
+      expect(pubAfter?.occupiedSeats).toContain("VIP-A1");
+      expect(pubAfter?.occupiedSeats).toContain("VIP-A2");
+    });
+
+    it("createInvitationTicket wajib memilih dan mengunci kursi pada event berkursi", async () => {
+      await expect(
+        createInvitationTicket(
+          {
+            eventId: createdEventId,
+            guestName: "Tamu VIP Tanpa Kursi",
+            guestEmail: "vip-nokursi@example.com",
+            ticketTierId: "tier-vip-s43",
+            ticketCount: 1,
+          },
+          "admin"
+        )
+      ).rejects.toThrow(/pilih nomor kursi/i);
+
+      await expect(
+        createInvitationTicket(
+          {
+            eventId: createdEventId,
+            guestName: "Tamu VIP Bentrok",
+            guestEmail: "vip-bentrok@example.com",
+            ticketTierId: "tier-vip-s43",
+            ticketCount: 1,
+            selectedSeats: ["VIP-A1"],
+          } as Parameters<typeof createInvitationTicket>[0],
+          "admin"
+        )
+      ).rejects.toThrow(/sudah dipesan atau tidak tersedia/i);
+
+      const invite = await createInvitationTicket(
+        {
+          eventId: createdEventId,
+          guestName: "Tamu Kehormatan",
+          guestEmail: "vip-tamu@example.com",
+          ticketTierId: "tier-reg-s43",
+          ticketCount: 1,
+          selectedSeats: ["C1"],
+        } as Parameters<typeof createInvitationTicket>[0],
+        "admin"
+      );
+      expect(invite.selectedSeats).toEqual(["C1"]);
+
+      const pub = await getPublicEventById(createdEventId);
+      expect(pub?.occupiedSeats).toContain("C1");
+    });
+
+    it("membebaskan kursi saat booking dibatalkan (CANCELLED), di-refund (APPROVED), atau kedaluwarsa (PENDING expired)", async () => {
+      // 1. Cancel booking melepaskan kursi
+      const toCancel = await createEventBooking({
+        eventId: createdEventId,
+        guestName: "Pembeli Cancel",
+        guestEmail: "cancel-s43@example.com",
+        guestPhone: "081255556666",
+        ticketTierId: "tier-reg-s43",
+        ticketCount: 1,
+        selectedSeats: ["C2"],
+      });
+      await updateBookingPaymentStatus(toCancel.id, "CANCELLED");
+      expect((await getPublicEventById(createdEventId))?.occupiedSeats).not.toContain("C2");
+
+      // Kursi C2 bisa dipesan lagi
+      const rebooked = await createEventBooking({
+        eventId: createdEventId,
+        guestName: "Pembeli Rebook",
+        guestEmail: "rebook-s43@example.com",
+        guestPhone: "081277778888",
+        ticketTierId: "tier-reg-s43",
+        ticketCount: 1,
+        selectedSeats: ["C2"],
+      });
+      await updateBookingPaymentStatus(rebooked.id, "PAID");
+
+      // 2. Refund disetujui melepaskan kursi
+      await requestTicketRefund(rebooked.id, {
+        reason: "Berhalangan hadir mendadak karena tugas luar kota",
+        bankName: "BCA",
+        accountNumber: "1234567890",
+        accountHolder: "Pembeli Rebook",
+      });
+      await adminProcessTicketRefund(rebooked.id, { decision: "APPROVE" });
+      expect((await getPublicEventById(createdEventId))?.occupiedSeats).not.toContain("C2");
+
+      // 3. Expired PENDING booking melepaskan kursi
+      const toExpire = await createEventBooking({
+        eventId: createdEventId,
+        guestName: "Pembeli Expired",
+        guestEmail: "expired-s43@example.com",
+        guestPhone: "081299990000",
+        ticketTierId: "tier-reg-s43",
+        ticketCount: 1,
+        selectedSeats: ["C3"],
+      });
+      const currentBookings = loadBookingsFromDisk();
+      const idx = currentBookings.findIndex((b) => b.id === toExpire.id);
+      currentBookings[idx] = {
+        ...currentBookings[idx],
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      };
+      await saveBookingsToDisk(currentBookings);
+
+      const pubAfterExpiry = await getPublicEventById(createdEventId);
+      expect(pubAfterExpiry?.occupiedSeats).not.toContain("C3");
+
+      const rebookedExpiredSeat = await createEventBooking({
+        eventId: createdEventId,
+        guestName: "Pembeli Ambil Kursi Expired",
+        guestEmail: "take-expired-s43@example.com",
+        guestPhone: "081200001111",
+        ticketTierId: "tier-reg-s43",
+        ticketCount: 1,
+        selectedSeats: ["C3"],
+      });
+      expect(rebookedExpiredSeat.selectedSeats).toEqual(["C3"]);
+    });
+
+    it("menangani Promise.all createEventBooking paralel untuk kursi yang sama: tepat satu berhasil dan satu ditolak", async () => {
+      const results = await Promise.all([
+        createEventBooking({
+          eventId: createdEventId,
+          guestName: "Pembeli Konkuren Satu",
+          guestEmail: "conc1-s43@example.com",
+          guestPhone: "081211100011",
+          ticketTierId: "tier-vip-s43",
+          ticketCount: 1,
+          selectedSeats: ["VIP-B1"],
+        }).then(
+          (booking) => ({ ok: true as const, booking }),
+          (err: Error) => ({ ok: false as const, error: err.message })
+        ),
+        createEventBooking({
+          eventId: createdEventId,
+          guestName: "Pembeli Konkuren Dua",
+          guestEmail: "conc2-s43@example.com",
+          guestPhone: "081211100022",
+          ticketTierId: "tier-vip-s43",
+          ticketCount: 1,
+          selectedSeats: ["VIP-B1"],
+        }).then(
+          (booking) => ({ ok: true as const, booking }),
+          (err: Error) => ({ ok: false as const, error: err.message })
+        ),
+      ]);
+
+      const successes = results.filter((r) => r.ok);
+      const failures = results.filter((r) => !r.ok);
+      expect(successes).toHaveLength(1);
+      expect(failures).toHaveLength(1);
+      expect(failures[0].error).toMatch(/sudah dipesan atau tidak tersedia/i);
+    });
+
+    it("tetap mengunci kursi jika paymentProofUrl sudah diunggah meskipun expiresAt sudah lewat", async () => {
+      const bookingWithProof = await createEventBooking({
+        eventId: createdEventId,
+        guestName: "Pembeli Dengan Bukti",
+        guestEmail: "proof-past-expiry@example.com",
+        guestPhone: "081222233344",
+        ticketTierId: "tier-reg-s43",
+        ticketCount: 1,
+        selectedSeats: ["C4"],
+      });
+
+      expect(bookingWithProof.paymentStatus).toBe("PENDING");
+      expect(bookingWithProof.expiresAt).toBeDefined();
+      expect(Number.isFinite(Date.parse(bookingWithProof.expiresAt!))).toBe(true);
+
+      const currentBookings = loadBookingsFromDisk();
+      const idx = currentBookings.findIndex((b) => b.id === bookingWithProof.id);
+      currentBookings[idx] = {
+        ...currentBookings[idx],
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        paymentProofUrl: "/api/events/proofs/bukti-transfer-c4.jpg",
+      };
+      await saveBookingsToDisk(currentBookings);
+
+      expect(getEventOccupiedSeats(createdEventId, currentBookings, Date.now()).has("C4")).toBe(true);
+
+      const pub = await getPublicEventById(createdEventId);
+      expect(pub?.occupiedSeats).toContain("C4");
+
+      await expect(
+        createEventBooking({
+          eventId: createdEventId,
+          guestName: "Pembeli Penyerobot C4",
+          guestEmail: "snatch-c4@example.com",
+          guestPhone: "081222233355",
+          ticketTierId: "tier-reg-s43",
+          ticketCount: 1,
+          selectedSeats: ["C4"],
+        })
+      ).rejects.toThrow(/sudah dipesan atau tidak tersedia/i);
+    });
+
+    it("melepaskan kursi dan membatalkan booking saat DOKU Checkout melempar DokuCheckoutError dengan isDefiniteFailure=true", async () => {
+      const dokuSpy = vi
+        .spyOn(dokuModule, "createDokuCheckoutSession")
+        .mockRejectedValueOnce(new dokuModule.DokuCheckoutError("MCH-400: Invalid config", true, 400));
+
+      try {
+        const req = new NextRequest(`http://localhost:3000/api/events/${createdEventId}/book`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            guestName: "Pembeli DOKU Gagal",
+            guestEmail: "doku-fail-c5@example.com",
+            guestPhone: "081244455566",
+            ticketTierId: "tier-reg-s43",
+            ticketCount: 1,
+            selectedSeats: ["C5"],
+            paymentMethod: "DOKU_CHECKOUT",
+          }),
+        });
+
+        const res = await handleBookPost(req, {
+          params: Promise.resolve({ id: createdEventId }),
+        });
+        const json = await res.json();
+
+        expect(res.status).toBe(502);
+        expect(json.success).toBe(false);
+        expect(json.error).toContain("Kuota tiket telah dilepaskan");
+
+        const bookingsAfter = loadBookingsFromDisk();
+        const failedBooking = bookingsAfter.find((b) => b.guestEmail === "doku-fail-c5@example.com");
+        expect(failedBooking?.paymentStatus).toBe("CANCELLED");
+
+        const pub = await getPublicEventById(createdEventId);
+        expect(pub?.occupiedSeats).not.toContain("C5");
+
+        const rebookedC5 = await createEventBooking({
+          eventId: createdEventId,
+          guestName: "Pembeli Sukses C5",
+          guestEmail: "doku-rebook-c5@example.com",
+          guestPhone: "081244455577",
+          ticketTierId: "tier-reg-s43",
+          ticketCount: 1,
+          selectedSeats: ["C5"],
+        });
+        expect(rebookedC5.selectedSeats).toEqual(["C5"]);
+      } finally {
+        dokuSpy.mockRestore();
+      }
     });
   });
 });

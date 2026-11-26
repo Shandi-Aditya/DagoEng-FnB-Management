@@ -15,8 +15,8 @@ Dokumen ini merupakan laporan serah terima teknis menyeluruh (*technical handove
 | **Cabang Git Kerja** | `shandi-dev` |
 | **Target Integrasi** | `develop` ➔ `main` (Production) |
 | **Repositori Resmi** | `https://gitlab.com/devdagoeng/dagoeng-management.git` |
-| **Hasil Regresi Otomatis** | **191 file lulus dari 195 file uji** (**2.213 skenario uji lulus** dari **2.222 skenario**) |
-| **Status Baseline Error** | Tepat 4 file kegagalan baseline yang diizinkan sesuai panduan `AGENTS.md` |
+| **Hasil Regresi Otomatis** | **192 file lulus dari 195 file uji** (**2.255 skenario uji lulus** dari **2.263 skenario**) |
+| **Status Baseline Error** | **3 file gagal** (semuanya termasuk dalam 4 file pengecualian baseline `AGENTS.md`) |
 
 ---
 
@@ -30,18 +30,22 @@ Pengujian regresi penuh dijalankan dalam mode lokal terisolasi (tanpa menyentuh 
 DATABASE_URL="" DIRECT_URL="" npx vitest run --reporter=basic
 ```
 - **Total Test Files**: 195 file
-- **File Lulus**: 191 file (97,95%)
-- **Total Skenario Uji**: 2.222 skenario
-- **Skenario Lulus**: 2.213 skenario (99,59%)
-- **Skenario Gagal**: 9 skenario (terkonsentrasi pada file baseline `AGENTS.md`: `tests/etl-data-validation.test.ts`, `tests/final-demo-readiness.test.ts`, `tests/organizer-activation-hardening.test.ts`, dan `tests/storage-sync-safety.test.ts`).
+- **File Lulus**: 192 file (98,46%)
+- **Total Skenario Uji**: 2.263 skenario
+- **Skenario Lulus**: 2.255 skenario (99,65%)
+- **Skenario Gagal**: 8 skenario (terkonsentrasi pada 3 file pengecualian baseline `AGENTS.md`: `tests/etl-data-validation.test.ts`, `tests/final-demo-readiness.test.ts`, dan `tests/storage-sync-safety.test.ts`; `tests/organizer-activation-hardening.test.ts` lulus penuh).
 - **File Uji Keamanan & Domain Utama (100% Lulus)**:
   - `tests/events-portal-domain.test.ts` (11/11 lulus)
-  - `tests/checkin-security-and-atomic-resilience.test.ts` (13/13 lulus)
+  - `tests/checkin-security-and-atomic-resilience.test.ts` (14/14 lulus)
   - `tests/v20-pos-handover-docs.test.ts` (5/5 lulus)
-  - `tests/s39-weekly-settlement.test.ts` (11/11 lulus)
-  - `tests/s42-ticket-attendance.test.ts` (10/10 lulus)
-  - `tests/s43-seat-selection.test.ts` (12/12 lulus)
-  - `tests/s38-partner-management.test.ts` (15/15 lulus)
+  - `tests/s39-weekly-settlement.test.ts` (20/20 lulus, termasuk di bawah `TZ=UTC`)
+  - `tests/s42-ticket-attendance.test.ts` (20/20 lulus)
+  - `tests/s43-seat-selection.test.ts` (26/26 lulus)
+  - `tests/s38-partner-management.test.ts` (30/30 lulus)
+- **Gerbang Statis & Build (0 error / 0 temuan)**:
+  - `npm run lint:ui -- --strict src`: 0 temuan di 502 file.
+  - `npx tsc --noEmit -p .` dan `npx tsc --noEmit -p tests/tsconfig.json`: 0 error.
+  - `DATABASE_URL="" DIRECT_URL="" npm run build`: keluar dengan kode 0.
 
 ---
 
@@ -67,19 +71,15 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
   - Integrasi QR Scanner dengan pembacaan instan nomor tiket individu (`DAGO-EVT-XXX-01`, `02`).
   - File uji: `tests/s42-ticket-attendance.test.ts`, `tests/community-events-hardening.test.ts`.
 - **Task S-43 (Denah Pilih Kursi Interaktif Web Event)**:
-  - Visualisasi tata letak panggung, denah kursi baris A–H, nomor kursi 01–10.
-  - Pewarnaan status semantik (Tersedia, Terpilih, Terisi/Habis).
-  - Pemilihan kursi instan pada saat checkout dengan alokasi nomor kursi persisten di e-tiket dan invoice.
+  - Konfigurasi denah per kategori tiket (`rowPrefix` 1–4 karakter seperti `A` atau `VIP`, jumlah baris, kursi per baris), validasi kapasitas terhadap kuota dan anti-tabrakan antar-tier di `validateEventTicketTiers`.
+  - Pemilihan kursi saat checkout dan tiket undangan (`createInvitationTicket`) dengan penguncian kursi atomik di database, serta pelepasan kursi otomatis saat booking dibatalkan, di-refund, atau kedaluwarsa.
   - File uji: `tests/s43-seat-selection.test.ts`.
 - **Task S-38 (Kelola Mitra & Add-on Langganan Server-Side)**:
-  - Migrasi status mitra dan add-on fitur dari penyimpanan lokal browser ke database PostgreSQL via endpoint `/api/sync/subscription` dan `/api/sync/tenants`.
-  - Normalisasi data profil perbankan mitra untuk pencairan settlement.
+  - Data profil, rekening settlement, kontrak/PKS, tipe `INTERNAL`/`EXTERNAL`, auto-suspensi WITA (>14 hari sejak setoran), blokir order & pelunasan QRIS bagi mitra `SUSPENDED`/`INACTIVE`, alur undangan & aktivasi akun Owner (`/api/tenants/invite`, `/api/tenants/activate`), serta CRUD outlet (`/api/outlets`) tersinkronisasi server melalui `/api/sync/subscription` dan `/api/sync/tenants`.
   - File uji: `tests/s38-partner-management.test.ts`.
 - **Task S-39 (Bagi Hasil per Metode Bayar, MDR QRIS, Laporan #10 & #11)**:
-  - Logika pemisahan kas fisik (Tunai: mitra setor 15% ke Dago) dan uang digital (QRIS: Dago transfer 85% ke mitra setelah MDR).
-  - Pilihan pembebanan MDR QRIS 0,7%: Ditanggung Mitra, Ditanggung Dago, atau Dibagi Proporsional (85/15).
-  - Laporan #10 (Settlement mingguan per mitra) dan Laporan #11 (Konsolidasi semua mitra beserta total agregat).
-  - Tombol aksi Finance persisten: *Tandai Lunas* dan *Batal*.
+  - Logika pemisahan kas fisik (Tunai: mitra setor 15% ke Dago), uang digital (QRIS: Dago transfer 85% ke mitra setelah MDR), pembebanan MDR QRIS 0,7%, alokasi pro-rata `SPLIT`, pemotongan refund lintas minggu, serta penyaringan rentang mingguan WITA (cut-off Minggu 23:59, jatuh tempo Selasa).
+  - Laporan `#10` (Settlement mingguan per mitra) dan Laporan `#11` (Konsolidasi semua mitra per outlet beserta tren minggu sebelumnya dan mitra `INTERNAL`) dengan status pelunasan persisten di `/api/reports/settlement` dan konfirmasi dialog Finance (`SUPER_ADMIN` / org `OWNER`).
   - File uji: `tests/s39-weekly-settlement.test.ts`.
 
 ---
@@ -92,7 +92,7 @@ Sesuai arahan supervisi teknis Ka Ari (Notulen 11 Nov & evaluasi 19 Nov), beriku
    - Fitur: Penjelajahan event komunitas aktif, filter kategori & tanggal, kartu kapasitas tiket real-time, lencana status event (*Open, Sold Out, Past*).
 2. **Checkout Tiket & Denah Kursi Interaktif (S-43)**:
    - URL: `/events/[id]`
-   - Fitur: Pilihan tiket bertingkat (*multi-tier*), kode promo / tiket undangan gratis (S-13), pemilihan nomor kursi visual interaktif baris A–H.
+   - Fitur: Pilihan tiket bertingkat (*multi-tier*), kode promo / tiket undangan gratis (S-13), pemilihan nomor kursi visual interaktif per kategori dengan prefix baris kustom (`A`–`Z`, `VIP`, dll.).
 3. **Portal Pembayaran & E-Tiket Privat**:
    - URL: `/events/tickets/[token]`
    - Fitur: Instruksi transfer bank resmi, unggah bukti bayar (PNG/JPG/PDF < 5MB), penerbitan e-tiket ber-QR pasca verifikasi, unduh tiket PDF/cetak.
@@ -156,12 +156,20 @@ SUPERVISOR_OVERRIDE_PIN="pin-override-supervisor"
 # Alamat Aplikasi & API
 NEXT_PUBLIC_APP_URL="https://staging.pos.veryyyy.com"
 
-# Layanan Pengiriman Email Tiket (Opsional, gunakan SMTP aktif)
+# Layanan Pengiriman Email Tiket (Opsional, pilih SMTP / Resend / SendGrid aktif)
 SMTP_HOST="smtp.mailtrap.io"
 SMTP_PORT="587"
 SMTP_USER="username-smtp"
 SMTP_PASS="password-smtp"
 SMTP_FROM="no-reply@dagoeng.com"
+RESEND_API_KEY=""
+SENDGRID_API_KEY=""
+
+# DOKU & Flag UAT Login Demo
+DOKU_CLIENT_ID=""
+DOKU_SECRET_KEY=""
+ALLOW_DEMO_UAT="true"
+DISABLE_DEMO_LOGIN="false"
 
 # Nomor Layanan Pelanggan Resmi (Sentralisasi S-04)
 NEXT_PUBLIC_CS_WHATSAPP="+6282115501995"
@@ -195,12 +203,11 @@ NEXT_PUBLIC_CS_WHATSAPP="+6282115501995"
 
 Sebagai bagian dari prinsip transparansi rekayasa perangkat lunak, berikut catatan teknis dan keterbatasan yang diserahkan untuk menjadi perhatian tim selanjutnya:
 
-1. **4 File Baseline Test Kegagalan yang Dikecualikan**:
-   - `tests/etl-data-validation.test.ts`: Uji migrasi ETL lama yang membutuhkan database staging offline terpisah.
-   - `tests/final-demo-readiness.test.ts`: Uji siap-demo tanggal 30 Oktober 2026 yang mengunci tanggal lampau sehingga ditolak oleh validator tanggal hari ini WITA (`startDate > endDate` atau `event date past`).
-   - `tests/organizer-activation-hardening.test.ts`: Ekspektasi kode error HTTP 500 vs 401 pada simulasi kegagalan database ekstrem.
-   - `tests/storage-sync-safety.test.ts`: Simulasi timeout latensi database 5000ms pada mocking storage sync.
-   - *Rekomendasi*: Sesuaikan tanggal mock pada test fixture demo lama agar selaras dengan runtime dinamis sistem.
+1. **3 File Kegagalan Baseline `AGENTS.md` (dari 4 file pengecualian)**:
+   - `tests/etl-data-validation.test.ts`: Uji migrasi ETL lama yang membutuhkan data seed offline terpisah.
+   - `tests/final-demo-readiness.test.ts`: Uji siap-demo tanggal 30 Oktober 2026 yang mengunci tanggal lampau sehingga ditolak validator tanggal acara WITA.
+   - `tests/storage-sync-safety.test.ts`: Simulasi timeout latensi database pada mocking storage sync.
+   - *(Catatan: `tests/organizer-activation-hardening.test.ts` lulus pada eksekusi terbaru.)*
 
 2. **Layanan Pengiriman Email Eksternal**:
    - Saat variabel SMTP belum dikonfigurasi di server staging, dispatcher e-tiket akan mencatat log peringatan `[Email Dispatcher] Layanan pengiriman email eksternal belum dikonfigurasi` dan otomatis menyediakan tautan privat tiket (`https://dagoeng.com/events/tickets/[token]`) yang langsung dapat disalin atau dicetak oleh staf.

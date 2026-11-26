@@ -8,7 +8,9 @@ import {
 import {
   getCoworkingBookings,
   getPersistentOrders,
+  getPersistentProductsData,
   getPersistentQrisSession,
+  readPersistentDomainState,
   saveCoworkingBooking,
   savePersistentQrisSession,
   updatePersistentOrderIf,
@@ -18,12 +20,59 @@ import {
   updatePersistentLoyaltyPoints,
   QrisVerificationSessionRecord,
 } from "@/lib/persistent-storage";
+import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
+import {
+  findBlockedOrderTenant,
+  formatBlockedTenantError,
+  resolveCatalogOrderGuardItems,
+} from "@/lib/tenant-order-guard";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
 import type { CoworkingBooking } from "@/types/coworking";
 
+class TenantBlockedError extends Error {
+  readonly status = 403;
+  constructor(message: string) {
+    super(message);
+    this.name = "TenantBlockedError";
+  }
+}
+
 const POS_ALLOWED_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
 const SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+
+async function assertMatchingPendingOrderNotBlocked(params: {
+  orderId?: string;
+  invoiceNumber: string;
+  expectedAmount: number;
+}): Promise<void> {
+  const orders = await getPersistentOrders();
+  const matchedOrder = orders.find(
+    (o) =>
+      o.paymentStatus === "PENDING" &&
+      o.status !== "CANCELLED" &&
+      (o.id === params.orderId || o.orderNumber === params.invoiceNumber) &&
+      Math.round(o.total) === Math.round(params.expectedAmount)
+  );
+  if (!matchedOrder) return;
+
+  const [tenantsState, catalogData] = await Promise.all([
+    readPersistentDomainState(tenantsDomainSpec),
+    getPersistentProductsData(),
+  ]);
+  const guardItems = resolveCatalogOrderGuardItems(
+    matchedOrder.items,
+    catalogData.products
+  );
+  const blockedTenant = findBlockedOrderTenant(
+    guardItems,
+    tenantsState.profiles,
+    matchedOrder.tenantId
+  );
+  if (blockedTenant.blocked) {
+    throw new TenantBlockedError(formatBlockedTenantError(blockedTenant));
+  }
+}
 
 async function settleMatchingPendingTarget(params: {
   session: QrisVerificationSessionRecord;
@@ -68,6 +117,23 @@ async function settleMatchingPendingTarget(params: {
   );
 
   if (matchedOrder) {
+    const [tenantsState, catalogData] = await Promise.all([
+      readPersistentDomainState(tenantsDomainSpec),
+      getPersistentProductsData(),
+    ]);
+    const guardItems = resolveCatalogOrderGuardItems(
+      matchedOrder.items,
+      catalogData.products
+    );
+    const blockedTenant = findBlockedOrderTenant(
+      guardItems,
+      tenantsState.profiles,
+      matchedOrder.tenantId
+    );
+    if (blockedTenant.blocked) {
+      throw new TenantBlockedError(formatBlockedTenantError(blockedTenant));
+    }
+
     let creditedLoyaltyNow = false;
     let loyaltyKey = "";
     let earnedPoints = 0;
@@ -387,6 +453,12 @@ export async function POST(req: NextRequest) {
         updatedAt: nowIso,
       };
 
+      await assertMatchingPendingOrderNotBlocked({
+        orderId: sessionRecord.orderId,
+        invoiceNumber,
+        expectedAmount: authoritativeExpectedAmount,
+      });
+
       const savedSession = await savePersistentQrisSession(sessionRecord);
       const settledSession = await settleMatchingPendingTarget({
         session: savedSession,
@@ -512,6 +584,12 @@ export async function POST(req: NextRequest) {
         updatedAt: nowIso,
       };
 
+      await assertMatchingPendingOrderNotBlocked({
+        orderId: sessionRecord.orderId,
+        invoiceNumber: resolvedInvoice,
+        expectedAmount: existing.expectedAmount,
+      });
+
       const savedSession = await savePersistentQrisSession(sessionRecord);
       const settledSession = await settleMatchingPendingTarget({
         session: savedSession,
@@ -568,6 +646,12 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   } catch (err: any) {
+    if (err instanceof TenantBlockedError) {
+      return NextResponse.json(
+        { success: false, allowed: false, error: err.message },
+        { status: err.status }
+      );
+    }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

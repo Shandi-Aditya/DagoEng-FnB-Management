@@ -3,6 +3,7 @@
 import type React from "react";
 import { Check, Copy, Key, Power } from "lucide-react";
 
+import { notify } from "@/components/app/notify";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 
 import {
   formatSettingsDateTime,
@@ -189,8 +191,8 @@ export function PartnerModals(props: PartnerModalsProps) {
     <>
       {/* Tambah Mitra F&B */}
       <Dialog open={isAddTenantOpen} onOpenChange={onAddTenantOpenChange}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle>{isEditingTenant ? "Edit mitra F&B" : "Tambah mitra F&B"}</DialogTitle>
             <DialogDescription>
               {isEditingTenant
@@ -198,7 +200,8 @@ export function PartnerModals(props: PartnerModalsProps) {
                 : "Mitra baru tersedia untuk pengelompokan menu, transaksi POS, dan skema bagi hasil."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={onSaveNewTenant} className="flex flex-col gap-3">
+          <form onSubmit={onSaveNewTenant} className="flex flex-1 min-h-0 flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="tenantName">Nama mitra</Label>
               <Input
@@ -224,7 +227,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tenantBadge">Kategori / Badge</Label>
+                <Label htmlFor="tenantBadge">Kategori gerai</Label>
                 <Input
                   id="tenantBadge"
                   type="text"
@@ -243,8 +246,8 @@ export function PartnerModals(props: PartnerModalsProps) {
                   value={formTenantPartnerType}
                   onChange={(e) => onFormTenantPartnerTypeChange?.(e.target.value as TenantPartnerType)}
                 >
-                  <NativeSelectOption value="EXTERNAL">Eksternal (Bagi Hasil)</NativeSelectOption>
-                  <NativeSelectOption value="INTERNAL">Internal (In-House)</NativeSelectOption>
+                  <NativeSelectOption value="EXTERNAL">Eksternal (bagi hasil)</NativeSelectOption>
+                  <NativeSelectOption value="INTERNAL">Internal (dikelola hub)</NativeSelectOption>
                 </NativeSelect>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -361,7 +364,7 @@ export function PartnerModals(props: PartnerModalsProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="tenantPksFileUpload">Dokumen PKS (PDF/gambar)</Label>
+              <Label htmlFor="tenantPksFileUpload">Dokumen PKS (PDF/gambar, maks. 512 KB)</Label>
               <Input
                 id="tenantPksFileUpload"
                 type="file"
@@ -369,17 +372,36 @@ export function PartnerModals(props: PartnerModalsProps) {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  if (file.size <= 512 * 1024) {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      if (typeof reader.result === "string") {
-                        onFormTenantPksFileChange?.(`${file.name}|${reader.result}`);
-                      }
-                    };
-                    reader.readAsDataURL(file);
-                  } else {
-                    onFormTenantPksFileChange?.(file.name);
+                  const allowedMimes = new Set([
+                    "application/pdf",
+                    "image/png",
+                    "image/jpeg",
+                    "image/jpg",
+                  ]);
+                  const hasAllowedExt = /\.(pdf|png|jpe?g)$/i.test(file.name);
+                  if (!allowedMimes.has(file.type) && !hasAllowedExt) {
+                    notify.error(
+                      "Format berkas tidak didukung",
+                      "Pilih dokumen PKS berformat PDF, PNG, atau JPG."
+                    );
+                    e.target.value = "";
+                    return;
                   }
+                  if (file.size > 512 * 1024) {
+                    notify.error(
+                      "Ukuran berkas terlalu besar",
+                      "Ukuran dokumen PKS maksimal 512 KB."
+                    );
+                    e.target.value = "";
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    if (typeof reader.result === "string") {
+                      onFormTenantPksFileChange?.(`${file.name}|${reader.result}`);
+                    }
+                  };
+                  reader.readAsDataURL(file);
                 }}
               />
               {formTenantPksFile ? (
@@ -388,8 +410,9 @@ export function PartnerModals(props: PartnerModalsProps) {
                 </p>
               ) : null}
             </div>
+            </div>
 
-            <DialogFooter className="gap-2 pt-2">
+            <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
               <Button type="button" variant="outline" size="lg" onClick={() => onAddTenantOpenChange(false)}>
                 Batal
               </Button>
@@ -401,14 +424,15 @@ export function PartnerModals(props: PartnerModalsProps) {
 
       {/* Tambah Penyelenggara Event */}
       <Dialog open={isAddOrgOpen} onOpenChange={onAddOrgOpenChange}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle>Tambah penyelenggara event</DialogTitle>
             <DialogDescription>
               Daftarkan komunitas atau penyelenggara agar bisa menerbitkan event.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={onCreateOrganizerSubmit} className="flex flex-col gap-3">
+          <form onSubmit={onCreateOrganizerSubmit} className="flex flex-1 min-h-0 flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-3">
             {addOrgError ? (
               <Alert variant="destructive">
                 <AlertDescription>{addOrgError}</AlertDescription>
@@ -486,16 +510,16 @@ export function PartnerModals(props: PartnerModalsProps) {
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="orgNotes">Catatan</Label>
-              <textarea
+              <Textarea
                 id="orgNotes"
                 rows={2}
                 value={newOrgNotes}
                 onChange={(e) => onNewOrgNotesChange(e.target.value)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
+            </div>
 
-            <DialogFooter className="gap-2 pt-2">
+            <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
               <Button type="button" variant="outline" size="lg" onClick={() => onAddOrgOpenChange(false)}>
                 Batal
               </Button>
@@ -512,29 +536,31 @@ export function PartnerModals(props: PartnerModalsProps) {
         open={Boolean(activationModalData)}
         onOpenChange={(open) => !open && onCloseActivationModal()}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Tautan aktivasi penyelenggara</DialogTitle>
+        <DialogContent className="max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <DialogTitle>Tautan aktivasi akun</DialogTitle>
             <DialogDescription>
               {activationModalData
-                ? `Bagikan tautan ini ke ${activationModalData.organizerName} (${activationModalData.organizerEmail}).`
+                ? `Bagikan tautan ini ke ${activationModalData.organizerName}${activationModalData.organizerEmail ? ` (${activationModalData.organizerEmail})` : ""}.`
                 : ""}
             </DialogDescription>
           </DialogHeader>
-          {activationModalData ? (
-            <div className="flex flex-col gap-3 py-2 text-xs">
-              <div className="rounded-lg border bg-muted/40 p-3 font-mono break-all text-foreground">
-                {activationModalData.activationUrl}
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+            {activationModalData ? (
+              <div className="flex flex-col gap-3 text-xs">
+                <div className="rounded-lg border bg-muted/40 p-3 font-mono break-all text-foreground">
+                  {activationModalData.activationUrl}
+                </div>
+                <p className="text-muted-foreground">
+                  Berlaku sampai{" "}
+                  <span className="font-mono text-foreground tabular-nums">
+                    {formatSettingsDateTime(activationModalData.expiresAt)}
+                  </span>
+                </p>
               </div>
-              <p className="text-muted-foreground">
-                Berlaku sampai{" "}
-                <span className="font-mono text-foreground tabular-nums">
-                  {formatSettingsDateTime(activationModalData.expiresAt)}
-                </span>
-              </p>
-            </div>
-          ) : null}
-          <DialogFooter className="gap-2">
+            ) : null}
+          </div>
+          <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
             <Button type="button" variant="outline" size="lg" onClick={onCloseActivationModal}>
               Tutup
             </Button>
@@ -554,10 +580,10 @@ export function PartnerModals(props: PartnerModalsProps) {
 
       {/* Sheet Detail Mitra */}
       <Sheet open={Boolean(selectedPartner)} onOpenChange={(open) => !open && onClosePartnerDetail()}>
-        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-6 overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0 gap-0 overflow-hidden">
           {selectedPartner ? (
             <>
-              <SheetHeader>
+              <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">
                     {selectedPartner.type === "FNB" ? "Mitra F&B" : "Penyelenggara event"}
@@ -583,15 +609,14 @@ export function PartnerModals(props: PartnerModalsProps) {
                 <SheetDescription>{selectedPartner.categoryOrBadge}</SheetDescription>
               </SheetHeader>
 
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-4 text-xs">
               {selectedPartner.status === "SUSPENDED" ? (
-                <Alert variant="destructive" className="mt-3 border-warning/40 bg-warning/10 text-foreground">
+                <Alert className="border-warning/40 bg-warning/10 text-foreground">
                   <AlertDescription>
-                    <strong>Mitra Ditangguhkan:</strong> {selectedPartner.suspendedReason || "Keterlambatan setoran settlement melebihi 2 minggu (14 hari). Kasir outlet saat ini terkunci."}
+                    <strong>Mitra ditangguhkan:</strong> {selectedPartner.suspendedReason || "Keterlambatan setoran settlement melebihi 2 minggu (14 hari). Kasir outlet saat ini terkunci."}
                   </AlertDescription>
                 </Alert>
               ) : null}
-
-              <div className="flex flex-col gap-4 py-4 text-xs">
                 <div className="rounded-lg border p-3.5 space-y-2">
                   <p className="font-medium text-foreground">Kontak & penanggung jawab</p>
                   <div className="flex justify-between gap-2">
@@ -620,8 +645,8 @@ export function PartnerModals(props: PartnerModalsProps) {
                     <span className="text-muted-foreground">Tipe kemitraan</span>
                     <span className="font-medium text-foreground">
                       {selectedPartner.partnerType === "INTERNAL"
-                        ? "Internal (Tanpa Settlement Bagi Hasil)"
-                        : "Eksternal (Bagi Hasil POS)"}
+                        ? "Internal (tanpa settlement bagi hasil)"
+                        : "Eksternal (bagi hasil POS)"}
                     </span>
                   </div>
                   {selectedPartner.contractPksNumber ? (
@@ -697,7 +722,7 @@ export function PartnerModals(props: PartnerModalsProps) {
               </div>
 
               {selectedPartner.type === "EVENT" ? (
-                <SheetFooter className="mt-auto border-t pt-4 gap-2">
+                <SheetFooter className="mt-auto border-t px-6 py-4 shrink-0 gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -725,7 +750,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                   </Button>
                 </SheetFooter>
               ) : (
-                <SheetFooter className="mt-auto border-t pt-4 gap-2 flex-wrap">
+                <SheetFooter className="mt-auto border-t px-6 py-4 shrink-0 gap-2 flex-wrap">
                   {onEditTenant ? (
                     <Button
                       type="button"
@@ -758,7 +783,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                       disabled={isGeneratingInvite}
                     >
                       <Key />
-                      <span>Undang Owner</span>
+                      <span>Undang pemilik</span>
                     </Button>
                   ) : null}
                   {onToggleTenantStatus ? (
@@ -801,7 +826,7 @@ export function PartnerModals(props: PartnerModalsProps) {
                           }}
                         >
                           <Power />
-                          <span>Buka kunci (Aktifkan)</span>
+                          <span>Buka kunci (aktifkan)</span>
                         </Button>
                       ) : (
                         <Button

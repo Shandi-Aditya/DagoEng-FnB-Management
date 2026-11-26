@@ -2,14 +2,217 @@ import type { MasterProduct } from "@/types/product";
 import type { PromoConfig } from "@/lib/promo";
 import type { OrderRecord } from "@/types/order";
 import { normalizeTenantId } from "@/features/orders/orders-domain";
+import { POS_PRODUCTS } from "@/features/pos/mock-data";
+import type {
+  POSCartItem,
+  POSModifierGroup,
+  POSProductItem,
+  POSVariantOption,
+} from "@/features/pos/types";
+import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 
 export type CustomerBadgeTone = "success" | "warning" | "info" | "destructive" | "neutral";
+export type CustomerPortalTab = "space" | "order" | "activity" | "account";
 
 export interface CustomerCartItem {
+  lineKey?: string;
   product: MasterProduct;
   quantity: number;
   selectedVariant?: string;
+  selectedModifiers?: string[];
+  unitPrice?: number;
   notes?: string;
+}
+
+export interface ResolvedCustomerProductOptions {
+  variants: POSVariantOption[];
+  modifierGroups: POSModifierGroup[];
+  hasOptions: boolean;
+}
+
+/** Resolves initial `/customer` tab: Coworking (`space`) by default, or F&B (`order`) for table QR links / menu params. */
+export function resolveCustomerInitialView(
+  rawTab: string | null,
+  rawMeja?: string | null,
+): CustomerPortalTab {
+  switch ((rawTab ?? "").trim().toUpperCase()) {
+    case "MENU":
+    case "ORDER":
+    case "FNB":
+      return "order";
+    case "COWORKING":
+    case "SPACE":
+      return "space";
+    case "ORDERS":
+    case "ACTIVITY":
+      return "activity";
+    case "LOYALTY":
+    case "PROFILE":
+    case "ACCOUNT":
+      return "account";
+    default:
+      return rawMeja && rawMeja.trim() ? "order" : "space";
+  }
+}
+
+/** Resolves product variants and category modifier groups using the exact same rules as POS & self-order API. */
+export function resolveCustomerProductOptions(product: MasterProduct): ResolvedCustomerProductOptions {
+  const variants: POSVariantOption[] =
+    product.variants && product.variants.length > 0
+      ? product.variants
+      : POS_PRODUCTS.find((p) => p.id === product.id)?.variants ?? [];
+  const modifierGroups = resolveProductModifierGroups(product);
+
+  return {
+    variants,
+    modifierGroups,
+    hasOptions: variants.length > 0 || modifierGroups.length > 0,
+  };
+}
+
+/** Maps a master catalog product into a `POSProductItem` for the shared cashier `ModifierModal`. */
+export function toCustomerPosProductItem(product: MasterProduct): POSProductItem {
+  const { variants, modifierGroups } = resolveCustomerProductOptions(product);
+  return {
+    id: product.id,
+    name: product.name,
+    basePrice: product.basePrice,
+    category: product.category,
+    description: product.description,
+    imageUrl: product.imageUrl,
+    isAvailable: product.isAvailable,
+    variants,
+    modifierGroups,
+    tenantId: product.tenantId,
+  };
+}
+
+/** Builds a deterministic cart line key so distinct variant/modifier/note combinations stay separate lines. */
+export function getCustomerCartItemKey(
+  item: Pick<CustomerCartItem, "lineKey" | "product" | "selectedVariant" | "selectedModifiers" | "notes">,
+): string {
+  if (item.lineKey && item.lineKey.trim()) return item.lineKey;
+  const variantPart = (item.selectedVariant ?? "").trim();
+  const modifiersPart = [...(item.selectedModifiers ?? [])]
+    .map((m) => m.trim())
+    .filter(Boolean)
+    .sort()
+    .join("|");
+  const notesPart = (item.notes ?? "").trim();
+  return `${item.product.id}::${variantPart}::${modifiersPart}::${notesPart}`;
+}
+
+/** Returns authoritative per-unit price including selected variant/modifier adjustments. */
+export function getCustomerCartItemUnitPrice(
+  item: Pick<CustomerCartItem, "product" | "unitPrice">,
+): number {
+  if (item.unitPrice !== undefined && Number.isFinite(item.unitPrice) && item.unitPrice >= 0) {
+    return item.unitPrice;
+  }
+  return Math.max(0, Number(item.product.basePrice) || 0);
+}
+
+/** Converts a `POSCartItem` produced by `ModifierModal` into a `CustomerCartItem`. */
+export function buildCustomerCartItemFromPos(
+  product: MasterProduct,
+  posItem: POSCartItem,
+): CustomerCartItem {
+  const selectedVariant = posItem.selectedVariant?.name?.trim() || undefined;
+  const selectedModifiers = posItem.selectedModifiers
+    .map((m) => m.name.trim())
+    .filter(Boolean);
+  const notes = posItem.notes?.trim() || undefined;
+  const unitPrice = Math.max(0, Number(posItem.unitFinalPrice) || Number(product.basePrice) || 0);
+  const quantity = Math.max(1, Math.floor(Number(posItem.quantity) || 1));
+  const lineKey = getCustomerCartItemKey({
+    product,
+    selectedVariant,
+    selectedModifiers,
+    notes,
+  });
+
+  return {
+    lineKey,
+    product,
+    quantity,
+    ...(selectedVariant ? { selectedVariant } : {}),
+    ...(selectedModifiers.length > 0 ? { selectedModifiers } : {}),
+    unitPrice,
+    ...(notes ? { notes } : {}),
+  };
+}
+
+/** Merges an incoming cart item into the cart by canonical line key. */
+export function upsertCustomerCartItem(
+  cart: readonly CustomerCartItem[],
+  incoming: CustomerCartItem,
+): CustomerCartItem[] {
+  const key = getCustomerCartItemKey(incoming);
+  const qty = Math.max(1, Math.floor(Number(incoming.quantity) || 1));
+  const normalized: CustomerCartItem = {
+    ...incoming,
+    lineKey: key,
+    quantity: qty,
+  };
+  const existingIdx = cart.findIndex((entry) => getCustomerCartItemKey(entry) === key);
+  if (existingIdx === -1) {
+    return [...cart, normalized];
+  }
+  return cart.map((entry, idx) =>
+    idx === existingIdx ? { ...entry, lineKey: key, quantity: entry.quantity + qty } : entry,
+  );
+}
+
+/** Increments quantity of a single cart line identified by `lineKey`. */
+export function incrementCustomerCartLine(
+  cart: readonly CustomerCartItem[],
+  lineKey: string,
+): CustomerCartItem[] {
+  return cart.map((item) => {
+    const key = getCustomerCartItemKey(item);
+    return key === lineKey ? { ...item, lineKey: key, quantity: item.quantity + 1 } : item;
+  });
+}
+
+/** Decrements quantity (or removes when 1) of a single cart line identified by `lineKey`. */
+export function decrementCustomerCartLine(
+  cart: readonly CustomerCartItem[],
+  lineKey: string,
+): CustomerCartItem[] {
+  return cart.flatMap((item) => {
+    const key = getCustomerCartItemKey(item);
+    if (key !== lineKey) return [item];
+    return item.quantity > 1 ? [{ ...item, lineKey: key, quantity: item.quantity - 1 }] : [];
+  });
+}
+
+/** Decrements the most recently added cart line for `productId` from the menu catalog stepper. */
+export function decrementCustomerCartByProduct(
+  cart: readonly CustomerCartItem[],
+  productId: string,
+): CustomerCartItem[] {
+  let targetIdx = -1;
+  for (let i = cart.length - 1; i >= 0; i--) {
+    if (cart[i].product.id === productId) {
+      targetIdx = i;
+      break;
+    }
+  }
+  if (targetIdx === -1) return [...cart];
+  return cart.flatMap((item, idx) => {
+    if (idx !== targetIdx) return [item];
+    return item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : [];
+  });
+}
+
+/** Formats selected variant and modifier names for compact display inside checkout rows. */
+export function formatCustomerCartItemOptions(
+  item: Pick<CustomerCartItem, "selectedVariant" | "selectedModifiers">,
+): string {
+  return [item.selectedVariant, ...(item.selectedModifiers ?? [])]
+    .map((entry) => entry?.trim())
+    .filter((entry): entry is string => Boolean(entry))
+    .join(" · ");
 }
 
 export interface CustomerCartTotals {
@@ -167,8 +370,7 @@ export function calculateCartTotals(
   } = options;
 
   const subtotal = cartItems.reduce((acc, item) => {
-    const base = item.product.basePrice;
-    return acc + base * item.quantity;
+    return acc + getCustomerCartItemUnitPrice(item) * item.quantity;
   }, 0);
 
   let discountAmount = 0;

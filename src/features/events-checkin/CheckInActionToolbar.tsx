@@ -89,12 +89,12 @@ export function CheckInActionToolbar({
 
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         {/* Event Details */}
-        <div className="space-y-1.5 min-w-0 max-w-2xl">
+        <div className="space-y-1.5 min-w-0 w-full max-w-2xl">
           <h2 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground truncate">
             {event.title}
           </h2>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground min-w-0 max-w-full">
             <span className="inline-flex items-center gap-1.5 shrink-0">
               <Calendar className="size-3.5" />
               <span>{formattedDate}</span>
@@ -103,7 +103,7 @@ export function CheckInActionToolbar({
               <Clock className="size-3.5" />
               <span>{formattedTime}</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 truncate">
+            <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
               <MapPin className="size-3.5 shrink-0" />
               <span className="truncate">{event.location}</span>
             </span>

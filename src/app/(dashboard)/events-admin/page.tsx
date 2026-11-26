@@ -588,6 +588,8 @@ export default function AdminEventsPage() {
       maxCapacity: event.maxCapacity,
       ticketTiers: event.ticketTiers,
       refundPolicy: event.refundPolicy,
+      hasSeatingChart: Boolean(event.hasSeatingChart),
+      seatingConfig: event.seatingConfig,
     });
     setEditGuidelinesText((event.guidelines || []).join("\n"));
     setIsEditModalOpen(true);

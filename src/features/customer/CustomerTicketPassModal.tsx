@@ -104,9 +104,11 @@ export function CustomerTicketPassModal({
           paymentStatus: ticket.paymentStatus,
           eventLocation: ticket.eventLocation,
           eventDate: ticket.eventDate,
+          selectedSeats: ticket.selectedSeats,
           subTicketIndex: totalCount > 1 ? activeSeatIdx : undefined,
           subTicketCode: totalCount > 1 ? activeSubTicket.subTicketCode : undefined,
           subGuestLabel: totalCount > 1 ? activeSubTicket.guestLabel : undefined,
+          subSeatLabel: activeSubTicket.seatLabel,
           subCheckedIn: activeSubTicket.isCheckedIn,
         },
         qrSvg
@@ -118,8 +120,11 @@ export function CustomerTicketPassModal({
     }
   };
 
-  const displayTime =
-    activeSubTicket.timeFormatted !== "—" ? activeSubTicket.timeFormatted : overallTimeFormatted;
+  const displayTime = activeSubTicket.isCheckedIn
+    ? activeSubTicket.timeFormatted !== "—"
+      ? activeSubTicket.timeFormatted
+      : overallTimeFormatted
+    : "—";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -257,7 +262,7 @@ export function CustomerTicketPassModal({
                   {attendance.attendanceLabel}
                 </span>
               </div>
-              {(activeSubTicket.isCheckedIn || attendance.checkedInQty > 0) && displayTime !== "—" ? (
+              {activeSubTicket.isCheckedIn && displayTime !== "—" ? (
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Waktu check-in</span>
                   <span className="font-mono text-foreground text-right tabular-nums">

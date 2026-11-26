@@ -136,7 +136,7 @@ export function ReportsPreviewTable({
               >
                 <NativeSelectOption value="MITRA">MDR QRIS: Ditanggung mitra</NativeSelectOption>
                 <NativeSelectOption value="DAGO">MDR QRIS: Ditanggung DAGO</NativeSelectOption>
-                <NativeSelectOption value="SPLIT">MDR QRIS: Dibagi proporsional (85/15)</NativeSelectOption>
+                <NativeSelectOption value="SPLIT">MDR QRIS: Dibagi proporsional</NativeSelectOption>
               </NativeSelect>
             )}
 
@@ -186,19 +186,28 @@ export function ReportsPreviewTable({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {report.tableHeaders.map((header, i) => (
-                      <TableHead
-                        key={header}
-                        className={cn("whitespace-nowrap", numericColumns[i] && "text-right")}
-                      >
-                        {header}
-                      </TableHead>
-                    ))}
+                    {report.tableHeaders.map((header, i) => {
+                      const isStatusHeader =
+                        (reportType === "SETTLEMENT" ||
+                          reportType === "SETTLEMENT_CONSOLIDATED") &&
+                        i === report.tableHeaders.length - 1;
+                      return (
+                        <TableHead
+                          key={header}
+                          className={cn(
+                            "whitespace-nowrap",
+                            (numericColumns[i] || isStatusHeader) && "text-right"
+                          )}
+                        >
+                          {header}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedRows.map((row, rIdx) => {
-                    const isTotalRow = String(row[0]) === "TOTAL";
+                    const isTotalRow = String(row[0]).toLowerCase() === "total";
                     return (
                       <TableRow
                         key={`${safeCurrentPage}-${rIdx}`}
@@ -230,6 +239,13 @@ export function ReportsPreviewTable({
                                   className="whitespace-nowrap text-right font-medium"
                                 >
                                   <Badge variant="secondary">{cellStr}</Badge>
+                                </TableCell>
+                              );
+                            }
+                            if (cellStr === "Internal") {
+                              return (
+                                <TableCell key={cIdx} className="whitespace-nowrap text-right">
+                                  <StatusBadge status="neutral">Internal</StatusBadge>
                                 </TableCell>
                               );
                             }

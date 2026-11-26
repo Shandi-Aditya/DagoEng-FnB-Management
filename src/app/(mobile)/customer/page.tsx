@@ -20,13 +20,30 @@ import { OrderView, type PartnerOption } from "@/features/customer/app/OrderView
 import { SpaceView, type SpaceBookingRequest } from "@/features/customer/app/SpaceView";
 import { useGuestIdentity } from "@/features/customer/app/use-guest-identity";
 import { CustomerTicketPassModal } from "@/features/customer/CustomerTicketPassModal";
-import { calculateCartTotals, calculateEndTime, filterCustomerProducts, type CustomerCartItem } from "@/features/customer/customer-domain";
+import {
+  buildCustomerCartItemFromPos,
+  calculateCartTotals,
+  calculateEndTime,
+  decrementCustomerCartByProduct,
+  decrementCustomerCartLine,
+  filterCustomerProducts,
+  getCustomerCartItemKey,
+  getCustomerCartItemUnitPrice,
+  incrementCustomerCartLine,
+  resolveCustomerInitialView,
+  resolveCustomerProductOptions,
+  toCustomerPosProductItem,
+  upsertCustomerCartItem,
+  type CustomerCartItem,
+} from "@/features/customer/customer-domain";
 import { filterGuestBookings, filterGuestOrders, parseTableParam } from "@/features/customer/guest-session";
 import { CoworkingReceiptModal } from "@/features/coworking/CoworkingReceiptModal";
 import { resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import { buildOrderReceiptData } from "@/features/orders/orders-domain";
 import { PaymentWaitingModal } from "@/features/payment/PaymentWaitingModal";
+import { ModifierModal } from "@/features/pos/ModifierModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import type { POSCartItem } from "@/features/pos/types";
 import { isCoworkingDateOpen, isTenantAcceptingOrders } from "@/lib/operating-hours";
 import { isQrSelfOrderQrisOnly } from "@/lib/self-order-policy";
 import { getAllFnbTenants, isTenantActive } from "@/lib/tenant";
@@ -47,24 +64,6 @@ const UNSUPPORTED_BOOKING_ROLES = new Set<RoleSlug>([
 
 const DEFAULT_PARTNER = "tenant-ks";
 
-/** Old links used ?tab=MENU|COWORKING|ORDERS|LOYALTY|PROFILE; keep them working. */
-function viewFromParam(raw: string | null): CustomerView {
-  switch ((raw ?? "").toUpperCase()) {
-    case "COWORKING":
-    case "SPACE":
-      return "space";
-    case "ORDERS":
-    case "ACTIVITY":
-      return "activity";
-    case "LOYALTY":
-    case "PROFILE":
-    case "ACCOUNT":
-      return "account";
-    default:
-      return "order";
-  }
-}
-
 const EMPTY_FORM: CheckoutForm = { name: "", phone: "", orderType: "DINE_IN", tableNumber: "", payment: "QRIS", notes: "" };
 
 function CustomerApp() {
@@ -81,7 +80,9 @@ function CustomerApp() {
   const { settings } = useSettings();
   const qrisOnly = isQrSelfOrderQrisOnly(settings);
 
-  const [view, setView] = useState<CustomerView>(() => viewFromParam(searchParams.get("tab")));
+  const [view, setView] = useState<CustomerView>(() =>
+    resolveCustomerInitialView(searchParams.get("tab"), searchParams.get("meja")),
+  );
 
   // Identity: a signed-in member, or the name and WhatsApp a guest left at checkout on this device.
   const isStaff = Boolean(user && user.role?.slug !== "CUSTOMER");
@@ -144,6 +145,11 @@ function CustomerApp() {
 
   // Cart and checkout
   const [cart, setCart] = useState<CustomerCartItem[]>([]);
+  const [customizingProduct, setCustomizingProduct] = useState<MasterProduct | null>(null);
+  const customizingPosProduct = useMemo(
+    () => (customizingProduct ? toCustomerPosProductItem(customizingProduct) : null),
+    [customizingProduct],
+  );
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [form, setForm] = useState<CheckoutForm>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -161,20 +167,43 @@ function CustomerApp() {
       notify.error("Dapur sedang tutup", status.reason || "Dapur ini tidak menerima pesanan sekarang.");
       return;
     }
-    setCart((prev) =>
-      prev.some((item) => item.product.id === product.id)
-        ? prev.map((item) => (item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item))
-        : [...prev, { product, quantity: 1 }],
-    );
+    if (resolveCustomerProductOptions(product).hasOptions) {
+      setCustomizingProduct(product);
+      return;
+    }
+    setCart((prev) => upsertCustomerCartItem(prev, { product, quantity: 1 }));
   };
-  const addById = (productId: string) => {
-    const item = cart.find((entry) => entry.product.id === productId);
-    if (item) addProduct(item.product);
+
+  const handleAddCustomizedProduct = (posItem: POSCartItem) => {
+    const product =
+      customizingProduct && customizingProduct.id === posItem.productId
+        ? customizingProduct
+        : filteredProducts.find((p) => p.id === posItem.productId);
+    if (!product || !product.isAvailable) return;
+    const status = isTenantAcceptingOrders(product.tenantId || DEFAULT_PARTNER, settings?.tenantOperations);
+    if (!status.isOpen) {
+      notify.error("Dapur sedang tutup", status.reason || "Dapur ini tidak menerima pesanan sekarang.");
+      return;
+    }
+    setCart((prev) => upsertCustomerCartItem(prev, buildCustomerCartItemFromPos(product, posItem)));
   };
-  const removeProduct = (productId: string) =>
-    setCart((prev) =>
-      prev.flatMap((item) => (item.product.id !== productId ? [item] : item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : [])),
-    );
+
+  const incrementLine = (lineKey: string) => {
+    const entry = cart.find((item) => getCustomerCartItemKey(item) === lineKey);
+    if (!entry) return;
+    const status = isTenantAcceptingOrders(entry.product.tenantId || DEFAULT_PARTNER, settings?.tenantOperations);
+    if (!status.isOpen) {
+      notify.error("Dapur sedang tutup", status.reason || "Dapur ini tidak menerima pesanan sekarang.");
+      return;
+    }
+    setCart((prev) => incrementCustomerCartLine(prev, lineKey));
+  };
+
+  const decrementLine = (lineKey: string) =>
+    setCart((prev) => decrementCustomerCartLine(prev, lineKey));
+
+  const removeByProduct = (productId: string) =>
+    setCart((prev) => decrementCustomerCartByProduct(prev, productId));
 
   useEffect(() => {
     if (qrisOnly && form.payment !== "QRIS") {
@@ -229,14 +258,22 @@ function CustomerApp() {
         customerName: name,
         customerPhone: phone,
         orderType: form.orderType,
-        items: cart.map((item, index) => ({
-          id: `it-${Date.now()}-${index}`,
-          productId: item.product.id,
-          tenantId: item.product.tenantId,
-          productName: item.product.name,
-          quantity: item.quantity,
-          unitPrice: Number(item.product.basePrice) || 0,
-        })),
+        items: cart.map((item, index) => {
+          const modifiers = [
+            ...(item.selectedVariant ? [item.selectedVariant] : []),
+            ...(item.selectedModifiers ?? []),
+          ];
+          return {
+            id: `it-${Date.now()}-${index}`,
+            productId: item.product.id,
+            tenantId: item.product.tenantId,
+            productName: item.product.name,
+            quantity: item.quantity,
+            unitPrice: getCustomerCartItemUnitPrice(item),
+            ...(modifiers.length > 0 ? { modifiers } : {}),
+            ...(item.notes ? { notes: item.notes } : {}),
+          };
+        }),
         subtotal: totals.subtotal,
         serviceCharge: totals.serviceChargeAmount,
         serviceChargePercent: form.orderType === "DINE_IN" ? settings.serviceChargePercent : 0,
@@ -415,7 +452,7 @@ function CustomerApp() {
             products={products}
             cart={cart}
             onAdd={addProduct}
-            onRemove={removeProduct}
+            onRemove={removeByProduct}
             cartCount={cartCount}
             cartSubtotal={totals.subtotal}
             onOpenCheckout={openCheckout}
@@ -476,11 +513,18 @@ function CustomerApp() {
         }
         lockedTable={lockedTable}
         tables={freeTables}
-        onAdd={addById}
-        onRemove={removeProduct}
+        onAdd={incrementLine}
+        onRemove={decrementLine}
         onSubmit={submitOrder}
         isSubmitting={isSubmitting}
         qrisOnly={qrisOnly}
+      />
+
+      <ModifierModal
+        product={customizingPosProduct}
+        isOpen={customizingPosProduct !== null}
+        onClose={() => setCustomizingProduct(null)}
+        onAddToCart={handleAddCustomizedProduct}
       />
 
       {isPaymentOpen ? (

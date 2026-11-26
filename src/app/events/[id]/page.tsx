@@ -127,13 +127,17 @@ export default function EventDetailPage() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const bookingAttemptRef = useRef<string>("");
 
+  const selectedSeatsKey = Array.isArray(bookingForm.selectedSeats)
+    ? bookingForm.selectedSeats.join(",")
+    : "";
+
   useEffect(() => {
     if (isBookingModalOpen) {
       bookingAttemptRef.current = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `attempt-${Date.now()}`;
     } else {
       bookingAttemptRef.current = "";
     }
-  }, [isBookingModalOpen, bookingForm.ticketTierId, bookingForm.ticketCount, bookingForm.guestEmail]);
+  }, [isBookingModalOpen, bookingForm.ticketTierId, bookingForm.ticketCount, bookingForm.guestEmail, selectedSeatsKey]);
 
   // Tickets
   const [pendingTicket, setPendingTicket] = useState<EventTicketOrder | null>(null);
@@ -151,25 +155,38 @@ export default function EventDetailPage() {
     }
   }, [user, isBookingModalOpen]);
 
-  const fetchEventDetail = useCallback(async (eventId: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const res = await fetch(`/api/events/${eventId}`);
-      const json = await res.json();
+  const fetchEventDetail = useCallback(
+    async (eventId: string, options?: { silent?: boolean }): Promise<PublicCommunityEvent | null> => {
+      try {
+        if (!options?.silent) {
+          setIsLoading(true);
+          setError(null);
+        }
+        const res = await fetch(`/api/events/${eventId}`);
+        const json = await res.json();
 
-      if (!res.ok || !json.success) {
-        setError(json.error || "Event tidak ditemukan atau belum dipublikasikan.");
-        return;
+        if (!res.ok || !json.success) {
+          if (!options?.silent) {
+            setError(json.error || "Event tidak ditemukan atau belum dipublikasikan.");
+          }
+          return null;
+        }
+
+        setEvent(json.data);
+        return json.data as PublicCommunityEvent;
+      } catch (err: unknown) {
+        if (!options?.silent) {
+          setError(err instanceof Error ? err.message : "Gagal memuat informasi event.");
+        }
+        return null;
+      } finally {
+        if (!options?.silent) {
+          setIsLoading(false);
+        }
       }
-
-      setEvent(json.data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Gagal memuat informasi event.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     if (id) {
@@ -221,7 +238,21 @@ export default function EventDetailPage() {
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        setBookingError(json.error || "Gagal memproses pendaftaran tiket.");
+        const errMsg = String(json.error || "Gagal memproses pendaftaran tiket.");
+        setBookingError(errMsg);
+        if (res.status === 409 || /kursi|seat/i.test(errMsg)) {
+          void fetchEventDetail(event.id, { silent: true }).then((fresh) => {
+            if (fresh?.occupiedSeats) {
+              const occupied = new Set(fresh.occupiedSeats.map((s) => s.toUpperCase()));
+              setBookingForm((prev) => ({
+                ...prev,
+                selectedSeats: (prev.selectedSeats || []).filter(
+                  (s) => !occupied.has(s.toUpperCase())
+                ),
+              }));
+            }
+          });
+        }
         return;
       }
 
@@ -291,7 +322,7 @@ export default function EventDetailPage() {
             title="Event tidak tersedia"
             description={error || "Acara ini mungkin belum dipublikasikan atau telah dihapus."}
             action={
-              <Button variant="outline" size="lg" render={<Link href="/events" />}>
+              <Button variant="outline" size="lg" render={<Link href="/events" />} nativeButton={false}>
                 <ArrowLeft />
                 <span>Kembali ke katalog event</span>
               </Button>
@@ -482,7 +513,7 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
-              <Button variant="outline" size="lg" render={<Link href="/events" />}>
+              <Button variant="outline" size="lg" render={<Link href="/events" />} nativeButton={false}>
                 <span>Lihat event lainnya</span>
               </Button>
             </Card>

@@ -1,5 +1,5 @@
 import type { EventCategory, EventSubmissionPayload, EventTicketTier, EventRefundPolicy } from "@/types/event";
-import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
+import { validateEventPrice, validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 
 export const EVENT_CATEGORIES: readonly { value: EventCategory; label: string }[] = [
   { value: "WORKSHOP", label: "Workshop" },
@@ -158,6 +158,12 @@ export function validateSubmissionForm(form: SubmissionForm, options: { needsPas
   let effectiveIsPaid = form.isPaid;
   let effectivePrice = form.price;
   if (Array.isArray(form.ticketTiers) && form.ticketTiers.length > 0) {
+    const tierValidation = validateEventTicketTiers(form.ticketTiers, {
+      hasSeatingChart: Boolean(form.hasSeatingChart),
+    });
+    if (!tierValidation.valid) {
+      errors.ticketTiers = tierValidation.error || "Konfigurasi jenis tiket tidak valid.";
+    }
     const paidTiers = form.ticketTiers.filter((t) => Number(t.price) > 0);
     effectiveIsPaid = paidTiers.length > 0;
     if (effectiveIsPaid) {

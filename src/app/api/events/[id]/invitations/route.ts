@@ -31,7 +31,7 @@ export async function POST(
       );
     }
 
-    const payload: CreateInvitationPayload = {
+    const payload: CreateInvitationPayload & { selectedSeats?: string[] } = {
       eventId: id,
       guestName: body.guestName || body.attendeeName,
       guestEmail: body.guestEmail || body.attendeeEmail,
@@ -39,6 +39,7 @@ export async function POST(
       institution: body.institution,
       ticketTierId: body.ticketTierId,
       ticketCount: body.ticketCount ? Number(body.ticketCount) : 1,
+      selectedSeats: Array.isArray(body.selectedSeats) ? body.selectedSeats : undefined,
       invitationNote: body.invitationNote || body.notes,
     };
 

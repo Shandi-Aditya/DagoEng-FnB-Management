@@ -8,14 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { HomeNav } from "@/features/landing/home/HomeNav";
 import { cn } from "@/lib/utils";
 
-export type CustomerView = "order" | "space" | "activity" | "account";
+export type CustomerView = "space" | "order" | "activity" | "account";
 
 // Each view belongs to one business unit, so its accent (buttons, filters, nav) matches
-// the dashboard: Pesan is F&B, Ruang is co-working, Aktivitas is event tickets and
+// the dashboard: Ruang is co-working, Pesan is F&B, Aktivitas is event tickets and
 // bookings, Akun is loyalty.
 const NAV: readonly { id: CustomerView; label: string; icon: React.ReactNode; unit: BusinessUnit }[] = [
-  { id: "order", label: "Pesan", icon: <UtensilsCrossed />, unit: "fnb" },
   { id: "space", label: "Ruang", icon: <Laptop />, unit: "coworking" },
+  { id: "order", label: "Pesan", icon: <UtensilsCrossed />, unit: "fnb" },
   { id: "activity", label: "Aktivitas", icon: <ReceiptText />, unit: "event" },
   { id: "account", label: "Akun", icon: <UserRound />, unit: "loyalty" },
 ];

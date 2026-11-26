@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import type { EventTicketTier } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
+import { generateTierSeats } from "@/lib/event-seating";
 
 interface TicketTiersEditorProps {
   tiers: EventTicketTier[];
@@ -75,11 +76,11 @@ export function TicketTiersEditor({
       id: `tier-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: tiers.length === 0 ? "Reguler" : tiers.length === 1 ? "VIP" : `Tier ${tiers.length + 1}`,
       price: 0,
-      quota: 50,
+      quota: 20,
       description: "",
       isActive: true,
       rowPrefix: nextPrefix,
-      totalRows: 1,
+      totalRows: 2,
       seatsPerRow: 10,
     };
     onChange([...tiers, newTier]);
@@ -358,9 +359,13 @@ export function TicketTiersEditor({
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-foreground">Pengaturan nomor kursi</span>
                       <span className="font-mono text-xs text-primary font-medium">
-                        {tier.rowPrefix
-                          ? `Denah: ${tier.rowPrefix}1–${tier.rowPrefix}${tier.seatsPerRow || 10}`
-                          : "Format otomatis"}
+                        {(() => {
+                          if (!tier.rowPrefix) return "Format otomatis";
+                          const previewSeats = generateTierSeats(tier);
+                          return previewSeats.length > 0
+                            ? `Denah: ${previewSeats[0]}–${previewSeats[previewSeats.length - 1]}`
+                            : "Format otomatis";
+                        })()}
                       </span>
                     </div>
 
@@ -389,7 +394,7 @@ export function TicketTiersEditor({
                           id={`tier-total-rows-${index}`}
                           type="number"
                           min={1}
-                          max={26}
+                          max={50}
                           disabled={disabled}
                           value={tier.totalRows ?? 1}
                           onChange={(e) => {

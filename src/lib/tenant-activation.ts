@@ -8,7 +8,10 @@ import {
 import { DEFAULT_FNB_TENANTS } from "@/lib/tenant";
 import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
 import { TRUSTED_PERSONAS } from "@/lib/server-auth";
-import { getOrganizerByEmail } from "@/lib/organizers";
+import { getOrganizerByEmail, syncOrganizersFromDb } from "@/lib/organizers";
+import { findUnifiedUserByEmail } from "@/lib/unified-account";
+import { syncStorageFromDb } from "@/lib/data-storage";
+import { revokeUserSessionsAfter } from "@/lib/session-revocation";
 
 export const TENANT_INVITES_FILE = "tenant_owner_invitations.json";
 export const TENANT_ACCOUNTS_FILE = "tenant_owner_accounts.json";
@@ -177,89 +180,167 @@ export async function consumeTenantOwnerInviteToken(params: {
     throw new Error("Password minimal 8 karakter.");
   }
 
-  const check = await validateTenantOwnerInviteToken(trimmedToken);
-  if (!check.valid) {
-    throw new Error(check.error);
-  }
-
-  const resolvedEmail = (params.email || check.contactEmail || "").trim().toLowerCase();
-  if (!resolvedEmail || !resolvedEmail.includes("@")) {
-    throw new Error("Alamat email akun Owner wajib diisi dengan format valid.");
-  }
-
-  const isDemoEmail = Object.values(TRUSTED_PERSONAS).some(
-    (p) => p.email.toLowerCase() === resolvedEmail
-  );
-  if (isDemoEmail || getOrganizerByEmail(resolvedEmail)) {
-    throw new Error(
-      "Email tersebut sudah terdaftar pada akun sistem atau penyelenggara event. Gunakan email lain."
-    );
-  }
-
-  const existingAccounts = await readSeededPersistentData<TenantOwnerAccount[]>(
-    TENANT_ACCOUNTS_FILE,
-    () => []
-  );
-  const conflictingAccount = existingAccounts.find(
-    (a) => a.email.toLowerCase() === resolvedEmail && a.tenantId !== check.tenantId
-  );
-  if (conflictingAccount) {
-    throw new Error(
-      `Email ${resolvedEmail} sudah terdaftar untuk mitra ${conflictingAccount.tenantName}.`
-    );
-  }
-
-  const passwordHash = await bcrypt.hash(params.password, 10);
-  const nowIso = new Date().toISOString();
-  const resolvedName = (params.name || `Owner ${check.tenantName}`).trim();
   const tokenHash = hashToken(trimmedToken);
+  const nowIso = new Date().toISOString();
+
+  let reservedRecord: TenantOwnerInvitationRecord | null = null;
+  let resolvedEmail = "";
+
+  // Atomically validate and reserve the invite record BEFORE hashing/writing accounts
+  await mutatePersistentData<TenantOwnerInvitationRecord[]>(
+    TENANT_INVITES_FILE,
+    [],
+    (records) => {
+      const idx = records.findIndex((r) => r.tokenHash === tokenHash);
+      if (idx === -1) {
+        throw new Error("Tautan undangan tidak ditemukan atau sudah tidak berlaku.");
+      }
+      const record = records[idx];
+      if (record.usedAt) {
+        throw new Error("Tautan undangan sudah pernah digunakan.");
+      }
+      if (Date.parse(record.expiresAt) < Date.now()) {
+        throw new Error("Tautan undangan telah kedaluwarsa.");
+      }
+
+      const candidateEmail = (params.email || record.contactEmail || "").trim().toLowerCase();
+      if (!candidateEmail || !candidateEmail.includes("@")) {
+        throw new Error("Alamat email akun Owner wajib diisi dengan format valid.");
+      }
+
+      reservedRecord = record;
+      resolvedEmail = candidateEmail;
+
+      return records.map((r, i) =>
+        i === idx ? { ...r, usedAt: nowIso, usedByEmail: candidateEmail } : r
+      );
+    }
+  );
+
+  const check: TenantOwnerInvitationRecord = reservedRecord!;
+
+  try {
+    if (process.env.NODE_ENV !== "test") {
+      await Promise.allSettled([
+        syncOrganizersFromDb(),
+        syncStorageFromDb("unified_users.json"),
+      ]);
+    }
+
+    const isDemoEmail = Object.values(TRUSTED_PERSONAS).some(
+      (p) => p.email.toLowerCase() === resolvedEmail
+    );
+    if (isDemoEmail || getOrganizerByEmail(resolvedEmail) || findUnifiedUserByEmail(resolvedEmail)) {
+      throw new Error(
+        "Email tersebut sudah terdaftar pada akun sistem, pengguna terpadu, atau penyelenggara event. Gunakan email lain."
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(params.password, 10);
+    const resolvedName = (params.name || `Owner ${check.tenantName}`).trim();
+
+    await mutatePersistentData<TenantOwnerAccount[]>(
+      TENANT_ACCOUNTS_FILE,
+      [],
+      (accounts) => {
+        const existingIdx = accounts.findIndex((a) => a.email.toLowerCase() === resolvedEmail);
+        if (existingIdx >= 0 && accounts[existingIdx].tenantId !== check.tenantId) {
+          throw new Error(
+            `Email ${resolvedEmail} sudah terdaftar untuk mitra ${accounts[existingIdx].tenantName}.`
+          );
+        }
+        const nextAccount: TenantOwnerAccount = {
+          id:
+            existingIdx >= 0
+              ? accounts[existingIdx].id
+              : `tenant-owner-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          tenantId: check.tenantId,
+          tenantName: check.tenantName,
+          email: resolvedEmail,
+          name: resolvedName,
+          passwordHash,
+          status: "ACTIVE",
+          activatedAt: existingIdx >= 0 ? accounts[existingIdx].activatedAt : nowIso,
+          updatedAt: nowIso,
+        };
+        return existingIdx >= 0
+          ? accounts.map((a, i) => (i === existingIdx ? nextAccount : a))
+          : [...accounts, nextAccount];
+      }
+    );
+
+    return {
+      email: resolvedEmail,
+      name: resolvedName,
+      tenantId: check.tenantId,
+      tenantName: check.tenantName,
+    };
+  } catch (err) {
+    // Roll back reservation if account creation or collision check failed
+    await mutatePersistentData<TenantOwnerInvitationRecord[]>(
+      TENANT_INVITES_FILE,
+      [],
+      (records) =>
+        records.map((r) => {
+          if (r.tokenHash !== tokenHash || r.usedAt !== nowIso) {
+            return r;
+          }
+          const { usedAt: _usedAt, usedByEmail: _usedByEmail, ...rest } = r;
+          void _usedAt;
+          void _usedByEmail;
+          return rest;
+        })
+    ).catch(() => {});
+    throw err;
+  }
+}
+
+export async function updateTenantOwnerPassword(
+  email: string,
+  newPassword: string
+): Promise<{
+  success: boolean;
+  account?: TenantOwnerAccount;
+  revokedAt: number;
+}> {
+  const normalizedEmail = (email || "").trim().toLowerCase();
+  if (!normalizedEmail || !newPassword || newPassword.trim().length < 6) {
+    return { success: false, revokedAt: 0 };
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword.trim(), 10);
+  const revokedAt = Date.now();
+  const nowIso = new Date(revokedAt).toISOString();
+  let updatedAccount: TenantOwnerAccount | undefined;
 
   await mutatePersistentData<TenantOwnerAccount[]>(
     TENANT_ACCOUNTS_FILE,
     [],
     (accounts) => {
-      const existingIdx = accounts.findIndex((a) => a.email.toLowerCase() === resolvedEmail);
-      if (existingIdx >= 0 && accounts[existingIdx].tenantId !== check.tenantId) {
-        throw new Error(
-          `Email ${resolvedEmail} sudah terdaftar untuk mitra ${accounts[existingIdx].tenantName}.`
-        );
+      const idx = accounts.findIndex((a) => a.email.toLowerCase() === normalizedEmail);
+      if (idx === -1) {
+        return accounts;
       }
-      const nextAccount: TenantOwnerAccount = {
-        id:
-          existingIdx >= 0
-            ? accounts[existingIdx].id
-            : `tenant-owner-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        tenantId: check.tenantId,
-        tenantName: check.tenantName,
-        email: resolvedEmail,
-        name: resolvedName,
+      updatedAccount = {
+        ...accounts[idx],
         passwordHash,
-        status: "ACTIVE",
-        activatedAt: existingIdx >= 0 ? accounts[existingIdx].activatedAt : nowIso,
         updatedAt: nowIso,
       };
-      return existingIdx >= 0
-        ? accounts.map((a, i) => (i === existingIdx ? nextAccount : a))
-        : [...accounts, nextAccount];
+      return accounts.map((a, i) => (i === idx ? updatedAccount! : a));
     }
   );
 
-  await mutatePersistentData<TenantOwnerInvitationRecord[]>(
-    TENANT_INVITES_FILE,
-    [],
-    (records) =>
-      records.map((r) =>
-        r.tokenHash === tokenHash && !r.usedAt
-          ? { ...r, usedAt: nowIso, usedByEmail: resolvedEmail }
-          : r
-      )
-  );
+  if (!updatedAccount) {
+    return { success: false, revokedAt: 0 };
+  }
+
+  await revokeUserSessionsAfter(updatedAccount.id, revokedAt);
+  await revokeUserSessionsAfter(updatedAccount.email, revokedAt);
 
   return {
-    email: resolvedEmail,
-    name: resolvedName,
-    tenantId: check.tenantId,
-    tenantName: check.tenantName,
+    success: true,
+    account: updatedAccount,
+    revokedAt,
   };
 }
 

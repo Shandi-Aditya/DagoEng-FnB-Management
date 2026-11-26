@@ -5,6 +5,7 @@
  */
 
 import type { EventTicketTier, EventRefundPolicy } from "@/types/event";
+import { generateTierSeats } from "@/lib/event-seating";
 
 export const MIN_EVENT_CAPACITY = 1;
 export const MAX_EVENT_CAPACITY = 1000;
@@ -323,9 +324,35 @@ export function normalizeDateToWitaIso(dateInput: string): string {
  * - Sales start and end dates normalized to ISO WIT (+08:00) with salesEndDate >= salesStartDate.
  * - Total sum of quotas must not exceed MAX_EVENT_CAPACITY (1000) or explicit maxCapacity.
  */
+function parseBoundedSafeInt(
+  raw: unknown,
+  label: string,
+  min: number,
+  max: number
+): { ok: true; value?: number } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, value: undefined };
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return { ok: false, error: `${label} harus berupa bilangan bulat antara ${min} hingga ${max}.` };
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+      return { ok: false, error: `${label} harus berupa bilangan bulat antara ${min} hingga ${max}.` };
+    }
+    return { ok: true, value: parsed };
+  }
+  if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < min || raw > max) {
+    return { ok: false, error: `${label} harus berupa bilangan bulat antara ${min} hingga ${max}.` };
+  }
+  return { ok: true, value: raw };
+}
+
 export function validateEventTicketTiers(
   rawTiers: unknown,
-  options?: { maxCapacity?: number }
+  options?: { maxCapacity?: number; hasSeatingChart?: boolean }
 ): EventValidationResult<EventTicketTier[]> {
   if (rawTiers === undefined || rawTiers === null) {
     return { valid: true, value: undefined };
@@ -464,6 +491,56 @@ export function validateEventTicketTiers(
       }
     }
 
+    // 6. Optional seating config per tier (rowPrefix, totalRows, seatsPerRow)
+    let rowPrefix: string | undefined;
+    if (t.rowPrefix !== undefined && t.rowPrefix !== null) {
+      if (typeof t.rowPrefix !== "string") {
+        return {
+          valid: false,
+          error: `Prefix baris kursi untuk jenis tiket '${name}' harus berupa teks 1–4 karakter alfanumerik.`,
+        };
+      }
+      const trimmedPrefix = t.rowPrefix.trim().toUpperCase();
+      if (trimmedPrefix.length > 0) {
+        if (!/^[A-Z0-9]{1,4}$/.test(trimmedPrefix)) {
+          return {
+            valid: false,
+            error: `Prefix baris kursi untuk jenis tiket '${name}' harus berupa 1 hingga 4 huruf/angka (A–Z, 0–9).`,
+          };
+        }
+        rowPrefix = trimmedPrefix;
+      }
+    }
+
+    const totalRowsRes = parseBoundedSafeInt(
+      t.totalRows,
+      `Jumlah baris kursi untuk jenis tiket '${name}'`,
+      1,
+      50
+    );
+    if (!totalRowsRes.ok) {
+      return { valid: false, error: totalRowsRes.error };
+    }
+    const totalRows = totalRowsRes.value;
+
+    const seatsPerRowRes = parseBoundedSafeInt(
+      t.seatsPerRow,
+      `Jumlah kursi per baris untuk jenis tiket '${name}'`,
+      1,
+      100
+    );
+    if (!seatsPerRowRes.ok) {
+      return { valid: false, error: seatsPerRowRes.error };
+    }
+    const seatsPerRow = seatsPerRowRes.value;
+
+    if (totalRows !== undefined && seatsPerRow !== undefined && totalRows * seatsPerRow < quota) {
+      return {
+        valid: false,
+        error: `Kapasitas denah kursi jenis tiket '${name}' (${totalRows} × ${seatsPerRow} = ${totalRows * seatsPerRow}) tidak boleh kurang dari kuota (${quota}).`,
+      };
+    }
+
     validatedTiers.push({
       id,
       name,
@@ -473,6 +550,9 @@ export function validateEventTicketTiers(
       salesStartDate,
       salesEndDate,
       isActive: t.isActive !== undefined ? Boolean(t.isActive) : true,
+      ...(rowPrefix !== undefined ? { rowPrefix } : {}),
+      ...(totalRows !== undefined ? { totalRows } : {}),
+      ...(seatsPerRow !== undefined ? { seatsPerRow } : {}),
     });
   }
 
@@ -491,6 +571,27 @@ export function validateEventTicketTiers(
         valid: false,
         error: `Total kuota seluruh jenis tiket (${sumTierQuota}) tidak boleh melebihi kapasitas event (${maxCap} peserta).`,
       };
+    }
+  }
+
+  const anyTierHasSeating = validatedTiers.some(
+    (vt) => vt.rowPrefix !== undefined || vt.totalRows !== undefined || vt.seatsPerRow !== undefined
+  );
+  if (options?.hasSeatingChart || anyTierHasSeating) {
+    const seenSeatCodes = new Map<string, string>();
+    for (const vt of validatedTiers) {
+      const seats = generateTierSeats(vt);
+      for (const seat of seats) {
+        const code = seat.trim().toUpperCase();
+        const existingTierName = seenSeatCodes.get(code);
+        if (existingTierName) {
+          return {
+            valid: false,
+            error: `Tabrakan nomor kursi '${code}' antara jenis tiket '${existingTierName}' dan '${vt.name}'. Gunakan huruf baris yang berbeda untuk tiap jenis tiket.`,
+          };
+        }
+        seenSeatCodes.set(code, vt.name);
+      }
     }
   }
 

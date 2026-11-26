@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { generateTierSeats } from "@/lib/event-seating";
 import type { PublicCommunityEvent } from "@/types/event";
@@ -209,12 +211,12 @@ export function EventBookingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-unit="event" className="max-w-md max-h-[90vh] overflow-y-auto p-6">
-        <DialogHeader>
+      <DialogContent data-unit="event" className="max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b shrink-0">
           <div className="flex items-center gap-2">
             <Ticket className="size-5 text-primary" />
             <DialogTitle className="text-base font-medium">
-              Pendaftaran Tiket Acara
+              Pendaftaran tiket acara
             </DialogTitle>
           </div>
           <DialogDescription className="text-xs text-muted-foreground truncate">
@@ -222,20 +224,21 @@ export function EventBookingDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
-            <AlertCircle className="size-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-        <form onSubmit={onSubmit} className="space-y-4 text-xs">
+          <form onSubmit={onSubmit} className="space-y-4 text-xs">
           {/* Ticket Tier Selection */}
           {hasTiers && (
             <div className="space-y-2">
-              <label className="font-medium text-foreground block">
+              <Label className="text-xs font-medium text-foreground block">
                 Pilih jenis tiket <span className="text-destructive">*</span>
-              </label>
+              </Label>
               <div className="grid grid-cols-1 gap-2">
                 {tiers.map((tier) => {
                   const avail = tierAvailabilities.find((a) => a.tierId === tier.id);
@@ -306,61 +309,65 @@ export function EventBookingDialog({
 
           {/* Guest Name */}
           <div className="space-y-1.5">
-            <label className="font-medium text-foreground">
+            <Label htmlFor="booking-guest-name" className="text-xs">
               Nama lengkap <span className="text-destructive">*</span>
-            </label>
-            <input
+            </Label>
+            <Input
+              id="booking-guest-name"
               type="text"
               required
               value={form.guestName}
               onChange={(e) => setForm((prev) => ({ ...prev, guestName: e.target.value }))}
               placeholder="Contoh: Rian Pratama"
-              className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="h-9 text-xs"
             />
           </div>
 
           {/* Email & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="font-medium text-foreground">
+              <Label htmlFor="booking-guest-email" className="text-xs">
                 Alamat email <span className="text-destructive">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
+                id="booking-guest-email"
                 type="email"
                 required
                 value={form.guestEmail}
                 onChange={(e) => setForm((prev) => ({ ...prev, guestEmail: e.target.value }))}
                 placeholder="nama@email.com"
-                className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                className="h-9 text-xs"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-foreground">
+              <Label htmlFor="booking-guest-phone" className="text-xs">
                 No. WhatsApp <span className="text-destructive">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
+                id="booking-guest-phone"
                 type="tel"
                 required
                 value={form.guestPhone}
                 onChange={(e) => setForm((prev) => ({ ...prev, guestPhone: e.target.value }))}
                 placeholder="08123456789"
-                className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                className="h-9 text-xs"
               />
             </div>
           </div>
 
           {/* Institution */}
           <div className="space-y-1.5">
-            <label className="font-medium text-foreground">
-              Institusi / Komunitas (opsional)
-            </label>
-            <input
+            <Label htmlFor="booking-institution" className="text-xs">
+              Institusi / komunitas (opsional)
+            </Label>
+            <Input
+              id="booking-institution"
               type="text"
               value={form.institution}
               onChange={(e) => setForm((prev) => ({ ...prev, institution: e.target.value }))}
               placeholder="Contoh: Komunitas Barista / Mahasiswa / Umum"
-              className="w-full h-9 rounded-md border bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="h-9 text-xs"
             />
           </div>
 
@@ -430,7 +437,7 @@ export function EventBookingDialog({
               {/* Seating Grid */}
               <div className="bg-background rounded-lg border p-3">
                 <div className="text-center text-xs text-muted-foreground pb-2 border-b mb-3 font-medium">
-                  [ AREA PANGGUNG / LAYAR UTAMA ]
+                  Area panggung / layar utama
                 </div>
 
                 <div className="grid grid-cols-5 sm:grid-cols-8 gap-1.5 max-h-48 overflow-y-auto p-1">
@@ -488,11 +495,12 @@ export function EventBookingDialog({
           {/* Promo Code Input (for paid bookings) */}
           {subtotalPrice > 0 && (
             <div className="space-y-1.5">
-              <label className="font-medium text-foreground block">
+              <Label htmlFor="booking-promo-code" className="text-xs">
                 Kode promo (opsional)
-              </label>
+              </Label>
               <div className="relative">
-                <input
+                <Input
+                  id="booking-promo-code"
                   type="text"
                   value={form.promoCode || ""}
                   onChange={(e) => {
@@ -500,7 +508,7 @@ export function EventBookingDialog({
                     setForm((prev) => ({ ...prev, promoCode: val }));
                   }}
                   placeholder="Contoh: DISKON10 / VIPGUEST"
-                  className="w-full h-9 rounded-md border bg-background px-3 text-xs font-mono text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="h-9 text-xs font-mono"
                 />
               </div>
               {isValidatingPromo ? (
@@ -575,7 +583,8 @@ export function EventBookingDialog({
               </Button>
             </DialogFooter>
           </div>
-        </form>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

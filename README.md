@@ -47,13 +47,13 @@ Jalankan perintah pada kolom kanan dari akar repositori untuk menghitung ulang s
 | Komponen kode sumber | Jumlah terverifikasi | Perintah verifikasi ulang |
 | :--- | :--- | :--- |
 | Halaman App Router | `29` | `find src/app -name 'page.tsx' \| wc -l` |
-| Endpoint API App Router | `51` | `find src/app/api -name 'route.ts' \| wc -l` |
+| Endpoint API App Router | `55` | `find src/app/api -name 'route.ts' \| wc -l` |
 | Provider React Context | `16` | `ls -1 src/contexts/*.tsx \| wc -l` |
 | Modul fitur domain | `29` | `ls -1d src/features/* \| wc -l` |
 | Primitif UI shadcn | `38` | `ls -1 src/components/ui/*.tsx \| wc -l` |
 | Berkas definisi tipe domain | `17` | `ls -1 src/types/*.ts \| wc -l` |
 | Model relasional Prisma | `32` | `grep -c '^model ' prisma/schema.prisma` |
-| Berkas pengujian Vitest | `174` | `ls -1 tests/*.test.ts \| wc -l` |
+| Berkas pengujian Vitest | `195` | `ls -1 tests/*.test.ts \| wc -l` |
 
 ### Peta direktori repositori
 
@@ -70,14 +70,14 @@ Tabel berikut memetakan setiap direktori dan berkas inti beserta tanggung jawab 
 | `src/app/(dashboard)/` | Memuat `16` halaman operasional internal: `dashboard`, `pos`, `kitchen`, `orders`, `tables`, `menu`, `inventory`, `customers`, `coworking`, `commercial`, `employees`, `events-admin`, `activity-log`, `reports`, `ai-insight`, dan `settings` |
 | `src/app/(mobile)/` | Memuat `2` halaman layar bergerak untuk pemesanan mandiri QR meja di `customer` dan pramusaji di `waiter` |
 | `src/app/events/` | Memuat `9` halaman publik dan portal penyelenggara untuk katalog, pengajuan, aktivasi, tiket, pemulihan, dan check-in |
-| `src/app/api/` | Memuat `49` Route Handler untuk autentikasi, POS, shift, QRIS, PDF, chatbot tutup shift, `/api/sync/[domain]`, dan event |
+| `src/app/api/` | Memuat `55` Route Handler untuk autentikasi, POS, shift, QRIS, PDF, chatbot tutup shift, `/api/sync/[domain]`, `/api/reports/settlement`, `/api/outlets`, `/api/tenants/*`, dan event |
 | `src/components/ui/` | Menyimpan `38` komponen primitif antarmuka berbasis `@base-ui/react` dan Tailwind CSS v4 |
 | `src/components/app/` | Menyimpan komponen tata letak komposit aplikasi seperti header halaman, kartu metrik, paginasi, dan badge status |
 | `src/contexts/` | Menyimpan `16` React Context untuk sesi, outlet, pesanan, meja, stok, produk, loyalty, co-working, komersial, shift, audit, notifikasi, printer, pengaturan, tanggal, dan tema |
 | `src/features/` | Menyimpan `29` modul antarmuka dan aturan domain murni per fitur bisnis |
 | `src/lib/` | Menyimpan mesin settlement, pajak, resep BOM, penyimpanan JSON terkunci, RBAC, sesi, DOKU, printer thermal, dan chatbot tutup shift |
 | `data/` | Menyimpan replika lokal JSON bawaan repositori serta subdirektori `data/proofs` untuk bukti pembayaran |
-| `tests/` | Menyimpan `174` berkas pengujian otomatis Vitest yang mengunci aturan bisnis POS, RBAC, inventori, event, dan dokumentasi |
+| `tests/` | Menyimpan `195` berkas pengujian otomatis Vitest yang mengunci aturan bisnis POS, RBAC, inventori, event, dan dokumentasi |
 
 ### Keamanan sesi dua cookie dan matriks RBAC
 
@@ -271,9 +271,9 @@ Delapan poin berikut mendokumentasikan batas operasional saat ini, kebutuhan kre
 1. **Verifikasi manual pada QRIS statis POS dan Co-working.** Pembayaran QRIS saat ini menampilkan kode statis `qris-dago.jpeg`. Kasir memerlukan otorisasi `SUPERVISOR_OVERRIDE_PIN` dan nomor RRN bank minimal `4` karakter untuk melunaskan transaksi. Alur konfirmasi otomatis baru aktif setelah penyedia pembayaran QRIS mengirim webhook bertanda tangan ke `/api/pos/qris/verify`.
 2. **Pemblokiran sandbox DOKU pada mode produksi Coolify.** Modul `src/lib/doku.ts` menolak `DOKU_SIMULATION_MODE=true` dan domain `api-sandbox.doku.com` ketika `NODE_ENV=production` aktif pada `next start` di Coolify. Pembeli tiket berbayar Web Event di Coolify memakai transfer bank manual dan mengunggah bukti bayar ke `/app/data/proofs` sampai kredensial produksi `https://api.doku.com` dipasang.
 3. **Kebutuhan jembatan cetak lokal untuk printer termal senyap.** Keamanan peramban memblokir akses langsung ke printer tanpa dialog sistem operasi. Perangkat kasir wajib menjalankan QZ Tray pada port `8182`, jembatan HTTP lokal atau PrintNode pada port `8080`, atau Google Chrome dengan argumen `--kiosk-printing` agar pencetakan struk dan tiket dapur berjalan tanpa dialog.
-4. **Ketergantungan kredensial eksternal untuk chatbot tutup shift dan email.** Endpoint chatbot tutup shift `V-17` mencatat pengiriman ke `STORAGE_closing_chatbot_dispatches.json` dengan status `GATEWAY_NOT_CONFIGURED` selama token Fonnte dan Telegram di Coolify belum diisi. Modul `src/lib/email.ts` juga masih berupa stub berstatus `EMAIL_SERVICE_NOT_CONFIGURED`, sehingga distribusi e-tiket memakai tautan token privat langsung dan pemulihan via WhatsApp di `+62 821-1550-1995`.
+4. **Ketergantungan kredensial eksternal untuk chatbot tutup shift dan email.** Endpoint chatbot tutup shift `V-17` mencatat pengiriman ke `STORAGE_closing_chatbot_dispatches.json` dengan status `GATEWAY_NOT_CONFIGURED` selama token Fonnte dan Telegram di Coolify belum diisi. Modul `src/lib/email.ts` mendukung SMTP (`nodemailer`), Resend, dan SendGrid, dan fallback ke status `EMAIL_SERVICE_NOT_CONFIGURED` saat kredensial email belum dipasang sehingga staf memakai tautan token privat langsung dan pemulihan via WhatsApp di `+62 821-1550-1995`.
 5. **Kewajiban mematikan bendera login demo sebelum rilis publik.** Pengaturan `ALLOW_DEMO_UAT: 'true'` pada `next.config.js` mengaktifkan ke-16 akun demo selama masa UAT. Administrator wajib menyetel `DISABLE_DEMO_LOGIN="true"` pada variabel lingkungan produksi Coolify sebelum membuka akses publik.
-6. **Perbedaan potongan MDR antara settlement aplikasi dan ekspor Excel.** Mesin settlement aplikasi pada `V-07` dan `V-18` menghitung bagi hasil mitra dari DPP sebelum PB1 sesuai basis `RECEIPT_NET_BEFORE_TAX` tanpa potongan MDR. Sebaliknya, ekspor `.xlsx` tiga lembar pada `V-10` mengikuti rumus spreadsheet manajemen yang memotong MDR QRIS `0.7%` dari `GrandTotal` termasuk pajak, sehingga kolom `Share Tenant` pada lembar `tenantShares` mencerminkan nilai bersih sesudah MDR.
+6. **Perbedaan potongan MDR antara settlement aplikasi dasar dan ekspor Excel.** Mesin settlement aplikasi dasar pada `V-07` dan `V-18` menghitung bagi hasil mitra dari DPP sebelum PB1 sesuai basis `RECEIPT_NET_BEFORE_TAX` tanpa potongan MDR (sementara laporan settlement mingguan `S-39` `#10` dan `#11` sudah mendukung konfigurasi beban MDR QRIS `0.7%`). Sebaliknya, ekspor `.xlsx` tiga lembar pada `V-10` mengikuti rumus spreadsheet manajemen yang memotong MDR QRIS `0.7%` dari `GrandTotal` termasuk pajak, sehingga kolom `Share Tenant` pada lembar `tenantShares` mencerminkan nilai bersih sesudah MDR.
 7. **Celah otorisasi endpoint sekunder dan cakupan bilah samping persona demo.** Endpoint `POST /api/tenant/operations` belum memvalidasi pengirim melalui `getRequestAuthUser`, berbeda dari `/api/sync/platform-settings` yang sudah memeriksanya. Endpoint `GET /api/reports/closing/pdf` merender HTML dari parameter kueri agar tab cetak baru langsung terbuka. Di sisi klien, `DEMO_PERSONAS` memberi cakupan `BUSINESS_UNIT` ke `COMMERCIAL_MANAGER`, sedangkan bilah samping `ALL_NAV_ITEMS` meminta cakupan `ORGANIZATION` untuk menu `/commercial` walaupun pengalihan login tetap mendarat di `/commercial`. Selain itu, belum tersedia akun login demo khusus untuk peran `INVENTORY_STAFF`.
 8. **Batas konkurensi dokumen JSON dan empat suite uji warisan non-POS.** Operasional POS masih menyimpan dokumen JSON utuh di tabel `system_settings` dengan penjaga CAS `updatedAt` dan pemungutan HTTP tiap `5` detik. Migrasi `STORAGE_*` ke `32` tabel relasional Prisma serta notifikasi dorong SSE atau WebSocket dijadwalkan pada Fase 3. Pada pengujian Vitest, seluruh suite POS lulus penuh dan tersisa `4` suite warisan non-POS yang tercatat gagal pada baseline, yaitu `etl-data-validation` akibat UTF-8 BOM dan jumlah baris seed, `final-demo-readiness` akibat tanggal statis November 2026 yang lewat, `organizer-activation-hardening` akibat sinkronisasi ke Neon saat mutasi `NODE_ENV=production`, serta `storage-sync-safety` akibat mock lama sebelum batas baca `8000` milidetik dan penjaga CAS.
 
@@ -290,6 +290,7 @@ Tabel berikut memetakan seluruh dokumen teknis, panduan operasional, laporan uji
 | [`./docs/AKUN_SISTEM.md`](./docs/AKUN_SISTEM.md) | Daftar kredensial resmi `16` persona demo UAT, rute awal per peran, dan `2` akun penyelenggara staging |
 | [`./docs/DEPLOY_COOLIFY.md`](./docs/DEPLOY_COOLIFY.md) | Panduan langkah deploy GitLab ke Coolify, kunci Node.js `22.20.0` di Nixpacks, dan aturan volume `/app/data/proofs` |
 | [`./docs/TESTING.md`](./docs/TESTING.md) | Empat gerbang kualitas wajib, isolasi `DATA_DIR_OVERRIDE`, cakupan pengujian utama, dan rincian `4` baseline gagal |
+| [`./docs/DOKUMENTASI_TEKNIS_POS_V35.md`](./docs/DOKUMENTASI_TEKNIS_POS_V35.md) | Catatan alur pembayaran, status pesanan, BOM/stok, rekap review MR POS Shandi, audit laporan `#1–11`, dan audit Role Matriks (`V-35`) |
 | [`./docs/test-cases/TC-V19-POS-REGRESSION-REPORT.md`](./docs/test-cases/TC-V19-POS-REGRESSION-REPORT.md) | Laporan kelulusan `37` skenario regresi P1 dan pengaman P2 pada modul POS |
 | [`./docs/test-cases/TC-S07-PAID-EVENT-E2E.md`](./docs/test-cases/TC-S07-PAID-EVENT-E2E.md) | Skenario dan bukti uji ujung-ke-ujung siklus pemesanan serta penerbitan e-tiket event berbayar |
 | [`./docs/DESIGN_SYSTEM.md`](./docs/DESIGN_SYSTEM.md) | Standar token warna, tipografi, komponen shadcn `@base-ui/react`, dan glosarium antarmuka |

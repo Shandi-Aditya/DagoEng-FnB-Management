@@ -391,7 +391,7 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
           issuedInvitation.ticketCode,
           "CHECKED_IN"
         )
-      ).rejects.toThrow(/sudah digunakan untuk check-in/);
+      ).rejects.toThrow(/sudah dipakai, check-in pukul/i);
     });
 
     it("records OWNER/MANAGER actorRole on createEventPromoCode and supports quota 0 unlimited in UI", async () => {

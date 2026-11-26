@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthUser, isHubAdminOrManager } from "@/lib/server-auth";
+import { getRequestAuthUser, isSuperAdminOrOrgOwner } from "@/lib/server-auth";
 import { generateTenantOwnerInviteToken } from "@/lib/tenant-activation";
 
 export const dynamic = "force-dynamic";
@@ -14,12 +14,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!isHubAdminOrManager(auth)) {
+    if (!isSuperAdminOrOrgOwner(auth)) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "FORBIDDEN: Hanya Super Admin, Hub Owner, atau Hub Manager yang berwenang membuat undangan Owner mitra.",
+            "FORBIDDEN: Hanya Super Admin atau Hub Owner yang berwenang membuat undangan Owner mitra.",
         },
         { status: 403 }
       );

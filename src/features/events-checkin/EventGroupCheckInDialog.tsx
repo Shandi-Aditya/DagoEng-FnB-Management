@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { EventTicketOrder } from "@/types/event";
+import { formatSeatsList } from "@/lib/event-seating";
 
 interface EventGroupCheckInDialogProps {
   booking: EventTicketOrder | null;
@@ -44,21 +45,29 @@ export function EventGroupCheckInDialog({
 
   return (
     <Dialog open={Boolean(booking)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Check-In Tiket Rombongan</DialogTitle>
+      <DialogContent className="sm:max-w-md max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b shrink-0">
+          <DialogTitle>Check-in tiket rombongan</DialogTitle>
           <DialogDescription className="font-mono text-xs">
             {booking.ticketCode} &bull; {booking.guestName}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           {/* Attendance Progress Box */}
           <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-3 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Total tiket:</span>
               <span className="font-medium text-foreground">{count} tiket</span>
             </div>
+            {booking.selectedSeats && booking.selectedSeats.length > 0 && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Nomor kursi:</span>
+                <span className="font-mono font-medium text-primary text-right">
+                  {formatSeatsList(booking.selectedSeats)}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Kehadiran:</span>
               <span className="font-medium text-foreground">
@@ -73,50 +82,50 @@ export function EventGroupCheckInDialog({
             </div>
           </div>
 
-          <div className="space-y-2 pt-1">
+          <div className="space-y-3 pt-1">
             <p className="text-xs text-muted-foreground font-medium text-center">
               Pilih opsi pencatatan:
             </p>
 
             {/* Option 1: Partial (+1 Pax) */}
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              disabled={remaining <= 0 || isProcessing}
-              onClick={() => onCheckInPartial(booking)}
-              className="w-full flex-col h-auto py-2.5 items-center justify-center text-center"
-            >
-              <span className="font-medium text-xs flex items-center gap-1.5">
+            <div className="space-y-1">
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                disabled={remaining <= 0 || isProcessing}
+                onClick={() => onCheckInPartial(booking)}
+                className="w-full"
+              >
                 {isProcessing ? <Loader2 className="animate-spin" /> : <Check />}
                 <span>Masuk 1 orang (+1 tiket)</span>
-              </span>
-              <span className="text-xs text-muted-foreground font-normal">
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
                 Anggota rombongan lain datang menyusul
-              </span>
-            </Button>
+              </p>
+            </div>
 
             {/* Option 2: All remaining */}
-            <Button
-              type="button"
-              size="lg"
-              variant="default"
-              disabled={remaining <= 0 || isProcessing}
-              onClick={() => onCheckInAll(booking)}
-              className="w-full flex-col h-auto py-2.5 items-center justify-center text-center"
-            >
-              <span className="font-medium text-xs flex items-center gap-1.5">
+            <div className="space-y-1">
+              <Button
+                type="button"
+                size="lg"
+                variant="default"
+                disabled={remaining <= 0 || isProcessing}
+                onClick={() => onCheckInAll(booking)}
+                className="w-full"
+              >
                 {isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
                 <span>Hadir semua sekaligus ({remaining} tiket)</span>
-              </span>
-              <span className="text-xs text-primary-foreground/80 font-normal">
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
                 Seluruh anggota rombongan telah tiba lengkap
-              </span>
-            </Button>
+              </p>
+            </div>
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="p-4 px-6 border-t shrink-0 flex-col sm:flex-row gap-2">
           {checked > 0 && (
             <Button
               type="button"

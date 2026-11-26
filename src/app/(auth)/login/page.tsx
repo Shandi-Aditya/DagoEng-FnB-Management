@@ -174,7 +174,7 @@ function LoginContent() {
   const initialMode = searchParams.get("mode");
   const inviteToken = searchParams.get("invite");
   const inviteRole = searchParams.get("role");
-  const isTenantInviteFlow = Boolean(inviteToken && inviteRole === "owner");
+  const isTenantInviteFlow = Boolean(inviteToken && (!inviteRole || inviteRole === "owner"));
 
   const isFromEvents =
     fromParam === "events" || returnTo?.startsWith("/events");
@@ -229,7 +229,7 @@ function LoginContent() {
         if (data.success && data.data) {
           setInviteInfo(data.data);
           setInviteEmail(data.data.contactEmail || "");
-          setInviteName(`Owner ${data.data.tenantName}`);
+          setInviteName(`Pemilik ${data.data.tenantName}`);
         } else {
           setInviteError(data.error || "Tautan undangan mitra tidak valid.");
         }
@@ -261,10 +261,10 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setInviteError(data.error || "Gagal mengaktifkan akun Owner mitra.");
+        setInviteError(data.error || "Gagal mengaktifkan akun pemilik mitra.");
         return;
       }
-      setInviteSuccess(data.message || "Akun Owner berhasil diaktifkan.");
+      setInviteSuccess(data.message || "Akun pemilik mitra diaktifkan.");
       setEmail(data.data?.email || inviteEmail.trim());
       setInviteInfo(null);
     } catch {
@@ -489,13 +489,13 @@ function LoginContent() {
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="inviteEmail">Email login Owner</FieldLabel>
+                    <FieldLabel htmlFor="inviteEmail">Email login pemilik</FieldLabel>
                     <Input
                       id="inviteEmail"
                       type="email"
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="owner@mitra.id"
+                      placeholder="pemilik@mitra.id"
                       required
                     />
                   </Field>
@@ -512,7 +512,7 @@ function LoginContent() {
                   </Field>
                   <Button type="submit" size="lg" disabled={isLoading} className="w-full">
                     {isLoading ? <Spinner /> : null}
-                    {isLoading ? "Mengaktifkan akun" : "Aktifkan akun Owner"}
+                    {isLoading ? "Mengaktifkan akun" : "Aktifkan akun pemilik"}
                   </Button>
                 </FieldGroup>
               </form>

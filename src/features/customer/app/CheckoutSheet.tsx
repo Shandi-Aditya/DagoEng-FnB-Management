@@ -9,7 +9,13 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import type { CustomerCartItem, CustomerCartTotals } from "@/features/customer/customer-domain";
+import {
+  formatCustomerCartItemOptions,
+  getCustomerCartItemKey,
+  getCustomerCartItemUnitPrice,
+  type CustomerCartItem,
+  type CustomerCartTotals,
+} from "@/features/customer/customer-domain";
 import { SelfOrderPaymentField } from "@/features/customer/SelfOrderPaymentField";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
@@ -35,8 +41,8 @@ interface CheckoutSheetProps {
   /** Table locked by the QR link the guest scanned; when set the table picker is hidden. */
   lockedTable: string | null;
   tables: readonly { number: string; areaName: string }[];
-  onAdd: (productId: string) => void;
-  onRemove: (productId: string) => void;
+  onAdd: (lineKey: string) => void;
+  onRemove: (lineKey: string) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
   /** When true (default), self-order QR only permits QRIS payment and hides cashier option. */
@@ -88,21 +94,32 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
         <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-4">
           <ul className="flex flex-col divide-y rounded-xl border">
-            {props.cart.map((item) => (
-              <li key={item.product.id} className="flex items-center gap-3 p-3">
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium">{item.product.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground tabular-nums">{formatCurrencyIDR(item.product.basePrice * item.quantity)}</span>
-                </div>
-                <Button variant="outline" size="icon" onClick={() => props.onRemove(item.product.id)} aria-label={`Kurangi ${item.product.name}`}>
-                  <Minus />
-                </Button>
-                <span className="w-5 text-center font-mono text-sm tabular-nums">{item.quantity}</span>
-                <Button variant="outline" size="icon" onClick={() => props.onAdd(item.product.id)} aria-label={`Tambah ${item.product.name}`}>
-                  <Plus />
-                </Button>
-              </li>
-            ))}
+            {props.cart.map((item) => {
+              const lineKey = getCustomerCartItemKey(item);
+              const optionsSummary = formatCustomerCartItemOptions(item);
+              const lineTotal = getCustomerCartItemUnitPrice(item) * item.quantity;
+              return (
+                <li key={lineKey} className="flex items-center gap-3 p-3">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-sm font-medium">{item.product.name}</span>
+                    {optionsSummary ? (
+                      <span className="text-xs text-muted-foreground">{optionsSummary}</span>
+                    ) : null}
+                    {item.notes ? (
+                      <span className="text-xs text-muted-foreground">Catatan: {item.notes}</span>
+                    ) : null}
+                    <span className="font-mono text-xs text-muted-foreground tabular-nums">{formatCurrencyIDR(lineTotal)}</span>
+                  </div>
+                  <Button variant="outline" size="icon" onClick={() => props.onRemove(lineKey)} aria-label={`Kurangi ${item.product.name}`}>
+                    <Minus />
+                  </Button>
+                  <span className="w-5 text-center font-mono text-sm tabular-nums">{item.quantity}</span>
+                  <Button variant="outline" size="icon" onClick={() => props.onAdd(lineKey)} aria-label={`Tambah ${item.product.name}`}>
+                    <Plus />
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
 
           <FieldGroup>
