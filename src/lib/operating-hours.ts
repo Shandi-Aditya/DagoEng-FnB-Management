@@ -669,6 +669,9 @@ export function checkCoworkingBookingConflict(
 }
 
 function getWitaTotalMinutes(dateObj: Date): number {
+  if (Number.isNaN(dateObj.getTime())) {
+    return -1;
+  }
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Makassar",
     hour: "2-digit",
@@ -716,7 +719,8 @@ export function isTenantAcceptingOrders(
     };
   }
 
-  if (!config.isOpenOrder) {
+  const isOrderOpen = config.isOpenOrder ?? (config as any).isAcceptingOrders ?? true;
+  if (!isOrderOpen) {
     const reopenEstimate =
       config.estimatedReopenTime ||
       (config.openTime ? `Buka kembali pk ${config.openTime} WITA` : "Estimasi buka segera");
@@ -771,4 +775,64 @@ export function isServiceWithinHours(
   }
 
   return { isOpen: true, reason: `Layanan ${service.toUpperCase()} aktif` };
+}
+
+export interface OrderOperationalHoursValidationResult {
+  allowed: boolean;
+  reason?: string;
+  isOutsideOperatingHours?: boolean;
+}
+
+export function validateOrderOperationalHours(
+  orderDateInput?: Date | string | number,
+  config?: {
+    operationalHours?: ServiceOperationalHours;
+    tenantOperations?: Record<string, TenantOperationConfig>;
+    tenantIds?: string[];
+    supervisorPinVerified?: boolean;
+    isSuperAdminOrOwner?: boolean;
+  }
+): OrderOperationalHoursValidationResult {
+  if (config?.supervisorPinVerified || config?.isSuperAdminOrOwner) {
+    return { allowed: true };
+  }
+
+  const dateObj =
+    orderDateInput instanceof Date
+      ? orderDateInput
+      : orderDateInput
+      ? new Date(orderDateInput)
+      : new Date();
+
+  if (Number.isNaN(dateObj.getTime())) {
+    return {
+      allowed: false,
+      reason: "Format waktu transaksi tidak valid.",
+      isOutsideOperatingHours: true,
+    };
+  }
+
+  const serviceCheck = isServiceWithinHours("fnb", config?.operationalHours, dateObj);
+  if (!serviceCheck.isOpen) {
+    return {
+      allowed: false,
+      reason: serviceCheck.reason,
+      isOutsideOperatingHours: true,
+    };
+  }
+
+  if (config?.tenantIds && config.tenantIds.length > 0) {
+    for (const tid of config.tenantIds) {
+      const tenantCheck = isTenantAcceptingOrders(tid, config?.tenantOperations, dateObj);
+      if (!tenantCheck.isOpen) {
+        return {
+          allowed: false,
+          reason: tenantCheck.reason,
+          isOutsideOperatingHours: true,
+        };
+      }
+    }
+  }
+
+  return { allowed: true };
 }

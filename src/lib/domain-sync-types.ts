@@ -221,6 +221,10 @@ export interface TenantsDomainState {
       tenantName: string;
       tenantSharePercent: number;
       dagoSharePercent: number;
+      cashTenantSharePercent?: number;
+      cashDagoSharePercent?: number;
+      qrisTenantSharePercent?: number;
+      qrisDagoSharePercent?: number;
       status: "ACTIVE" | "INACTIVE";
       updatedAt?: string;
     }
@@ -244,6 +248,10 @@ export type TenantsCommand =
         tenantName: string;
         tenantSharePercent: number;
         dagoSharePercent: number;
+        cashTenantSharePercent?: number;
+        cashDagoSharePercent?: number;
+        qrisTenantSharePercent?: number;
+        qrisDagoSharePercent?: number;
         status: "ACTIVE" | "INACTIVE";
         updatedAt?: string;
       };

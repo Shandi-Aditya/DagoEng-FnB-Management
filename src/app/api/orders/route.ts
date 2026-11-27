@@ -14,8 +14,9 @@ import {
   deductPersistentOrderBOM,
   restorePersistentOrderBOMIfBeforeCooking,
   readPersistentDomainState,
+  readPersistentData,
 } from "@/lib/persistent-storage";
-import { tenantsDomainSpec } from "@/lib/sync-domains/config-spec";
+import { tenantsDomainSpec, platformSettingsDomainSpec } from "@/lib/sync-domains/config-spec";
 import {
   findBlockedOrderTenant,
   formatBlockedTenantError,
@@ -47,6 +48,11 @@ import {
   authorizeSupervisorQrisOverride,
   SHARED_SUPERVISOR_PIN_LABEL,
 } from "@/lib/qris-verification";
+import {
+  validateOrderOperationalHours,
+  DEFAULT_TENANT_OPERATIONS,
+  type TenantOperationConfig,
+} from "@/lib/operating-hours";
 import {
   filterOrdersByTenant,
   getOrderWorkflowTenants,
@@ -192,6 +198,7 @@ type OrderMutationOutcome =
       creditsLoyalty: boolean;
       customerKey: string;
       serverEarnedPoints: number;
+      emergencyHoursOverride?: boolean;
     };
 
 function areOrderItemsEquivalent(
@@ -323,10 +330,16 @@ async function executeAuthorizedOrderWrite(params: {
       ? normalizeTenantId(auth.tenantId)
       : undefined;
 
-  const [tenantsState, catalogData] = await Promise.all([
-    readPersistentDomainState(tenantsDomainSpec),
-    getPersistentProductsData(),
-  ]);
+  const [tenantsState, catalogData, platformSettingsState, tenantOperationsData] =
+    await Promise.all([
+      readPersistentDomainState(tenantsDomainSpec),
+      getPersistentProductsData(),
+      readPersistentDomainState(platformSettingsDomainSpec),
+      readPersistentData<Record<string, TenantOperationConfig>>(
+        "tenant_operations.json",
+        DEFAULT_TENANT_OPERATIONS
+      ).catch(() => DEFAULT_TENANT_OPERATIONS),
+    ]);
 
   const outcome = await mutatePersistentOrders<OrderMutationOutcome>(async (existingOrders) => {
     const targetId =
@@ -543,6 +556,88 @@ async function executeAuthorizedOrderWrite(params: {
       };
     }
 
+    // Penguncian jam operasional: Transaksi di luar jam operasional ditolak pada server boundary
+    // menggunakan waktu server aktual (mencegah manipulasi waktu sisi klien)
+    let emergencyHoursOverride = false;
+    if (!existingOrder) {
+      const guardItems = resolveCatalogOrderGuardItems(
+        orderData.items,
+        catalogData.products
+      );
+      const orderTenantIds = Array.from(
+        new Set(
+          guardItems
+            .map((item) => item.tenantId || orderData.tenantId)
+            .filter((t): t is string => Boolean(t))
+        )
+      );
+
+      const mergedTenantOps = {
+        ...DEFAULT_TENANT_OPERATIONS,
+        ...(platformSettingsState?.tenantOperations || {}),
+        ...(tenantOperationsData || {}),
+      };
+
+      const serverNow = new Date();
+      const hoursValidation = validateOrderOperationalHours(serverNow, {
+        operationalHours: platformSettingsState?.operationalHours,
+        tenantOperations: mergedTenantOps,
+        tenantIds: orderTenantIds,
+        isSuperAdminOrOwner:
+          auth.role === "SUPER_ADMIN" ||
+          (auth.role === "OWNER" && auth.scopeLevel !== "TENANT"),
+      });
+
+      if (!hoursValidation.allowed) {
+        let overrideApproved = false;
+        if (supervisorPin) {
+          const pinCheck = authorizeSupervisorQrisOverride({
+            pin: supervisorPin,
+            referenceNumber: (orderData.orderNumber || orderData.id || "ORDER").padEnd(4, "0"),
+            actorKey: auth.userId || auth.role,
+          });
+          if (pinCheck.allowed) {
+            overrideApproved = true;
+            emergencyHoursOverride = true;
+            orderData = {
+              ...orderData,
+              supervisorPinVerified: true,
+            };
+          } else if (pinCheck.error) {
+            return {
+              nextOrders: existingOrders,
+              result: {
+                ok: false,
+                response: NextResponse.json(
+                  {
+                    error: pinCheck.error,
+                    code: pinCheck.statusCode === 429 ? "PIN_RATE_LIMITED" : "OPERATIONAL_HOURS_PIN_INVALID",
+                  },
+                  { status: pinCheck.statusCode || 403 }
+                ),
+              },
+            };
+          }
+        }
+
+        if (!overrideApproved) {
+          return {
+            nextOrders: existingOrders,
+            result: {
+              ok: false,
+              response: NextResponse.json(
+                {
+                  error: `OPERATIONAL_HOURS_LOCK: Transaksi ditolak di luar jam operasional. ${hoursValidation.reason || "Layanan atau mitra sedang tutup."} Masukkan PIN Supervisor / Manager untuk otorisasi darurat.`,
+                  code: "OPERATIONAL_HOURS_LOCKED",
+                },
+                { status: 403 }
+              ),
+            },
+          };
+        }
+      }
+    }
+
     const isClosedBeforeWrite =
       existingOrder?.status === "CANCELLED" || existingOrder?.paymentStatus === "REFUNDED";
     const isRefundOrVoidWrite = Boolean(
@@ -705,6 +800,7 @@ async function executeAuthorizedOrderWrite(params: {
         creditsLoyalty,
         customerKey,
         serverEarnedPoints,
+        emergencyHoursOverride,
       },
     };
   });
@@ -724,6 +820,7 @@ async function executeAuthorizedOrderWrite(params: {
     creditsLoyalty,
     customerKey,
     serverEarnedPoints,
+    emergencyHoursOverride,
   } = outcome;
 
   let bomRestoration: { restored: boolean; reason: string; restoredItems: number } | null = null;
@@ -811,6 +908,24 @@ async function executeAuthorizedOrderWrite(params: {
         auth,
       })
     );
+  }
+
+  if (emergencyHoursOverride) {
+    await appendAuditLog({
+      id: `audit-hours-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      action: "OPERATIONAL_HOURS_OVERRIDE",
+      module: "POS",
+      timestamp: new Date().toISOString(),
+      userId: auth.userId || undefined,
+      userName: auth.name,
+      userRole: auth.role,
+      role: auth.role,
+      recordId: finalOrder.id,
+      referenceId: finalOrder.orderNumber,
+      description: `Transaksi darurat di luar jam operasional diizinkan via otorisasi PIN Supervisor untuk pesanan ${finalOrder.orderNumber || finalOrder.id}.`,
+      severity: "MEDIUM",
+      status: "WARNING",
+    });
   }
 
   const loyaltyRecord = creditsLoyalty

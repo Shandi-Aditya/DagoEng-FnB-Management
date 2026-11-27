@@ -38,7 +38,11 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TenantOperationConfig } from "@/lib/operating-hours";
-import { DEFAULT_TENANT_REVENUE_SPLITS, type TenantRevenueSplitConfig } from "@/lib/settlement";
+import {
+  DEFAULT_TENANT_REVENUE_SPLITS,
+  resolveTenantSplitPercentages,
+  type TenantRevenueSplitConfig,
+} from "@/lib/settlement";
 import type { TenantStatus } from "@/lib/domain-sync-types";
 import {
   SETTLEMENT_BASIS_OPTIONS,
@@ -91,7 +95,7 @@ export interface PartnersAdminTabProps {
   settlementBasis?: SettlementBasisMode;
   onSettlementBasisChange?: (basis: SettlementBasisMode) => void;
   canEditSettlementPolicy?: boolean;
-  onTenantSplitChange: (tenantId: string, tenantShare: number) => void;
+  onTenantSplitChange: (tenantId: string, tenantShare: number, channel?: "CASH" | "QRIS" | "ALL") => void;
   onSaveTenantSplits: () => void;
   eventPlatformFee: number;
   onEventPlatformFeeChange: (val: number) => void;
@@ -693,56 +697,89 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                       dagoSharePercent: 15,
                       status: "ACTIVE",
                     };
+                  const splits = resolveTenantSplitPercentages(cfg);
                   const errMsg = revenueSplitErrors[tenant.id];
-                  const simTenant = Math.round(100000 * (cfg.tenantSharePercent / 100));
-                  const simDago = 100000 - simTenant;
+                  const simCashTenant = Math.round(100000 * (splits.cashTenantPercent / 100));
+                  const simCashDago = 100000 - simCashTenant;
+                  const simQrisTenant = Math.round(100000 * (splits.qrisTenantPercent / 100));
+                  const simQrisDago = 100000 - simQrisTenant;
 
                   return (
                     <div key={tenant.id} className="flex flex-col gap-3 rounded-lg border p-4">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 border-b pb-2">
                         <span className="text-sm font-medium text-foreground">{tenant.name}</span>
-                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                          {cfg.tenantSharePercent}% / {cfg.dagoSharePercent}%
-                        </span>
+                        <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular-nums">
+                          <span>Tunai: {splits.cashTenantPercent}%/{splits.cashDagoPercent}%</span>
+                          <span>·</span>
+                          <span>QRIS: {splits.qrisTenantPercent}%/{splits.qrisDagoPercent}%</span>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1">
-                          <Label htmlFor={`split-${tenant.id}`}>Bagian mitra (%)</Label>
-                          <Input
-                            id={`split-${tenant.id}`}
-                            type="number"
-                            min={0}
-                            max={100}
-                            disabled={!canEditSettlementPolicy}
-                            value={cfg.tenantSharePercent}
-                            onChange={(e) => onTenantSplitChange(tenant.id, Number(e.target.value))}
-                            className="font-mono tabular-nums"
-                          />
+                      {/* Split Tunai */}
+                      <div className="flex flex-col gap-1.5 rounded bg-muted/40 p-2.5">
+                        <p className="text-xs font-semibold text-foreground">Bagi Hasil Tunai (Kas Fisik Mitra)</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1">
+                            <Label htmlFor={`cash-split-${tenant.id}`} className="text-xs">Mitra (%)</Label>
+                            <Input
+                              id={`cash-split-${tenant.id}`}
+                              type="number"
+                              min={0}
+                              max={100}
+                              disabled={!canEditSettlementPolicy}
+                              value={splits.cashTenantPercent}
+                              onChange={(e) => onTenantSplitChange(tenant.id, Number(e.target.value), "CASH")}
+                              className="font-mono tabular-nums h-8 text-xs"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs">Dago (%)</Label>
+                            <Input
+                              type="number"
+                              disabled
+                              value={splits.cashDagoPercent}
+                              className="font-mono tabular-nums h-8 text-xs"
+                            />
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <Label>Bagian Dago (%)</Label>
-                          <Input
-                            type="number"
-                            disabled
-                            value={cfg.dagoSharePercent}
-                            className="font-mono tabular-nums"
-                          />
+                        <p className="text-xs text-muted-foreground">
+                          Contoh Tunai Rp 100.000: mitra <span className="font-mono text-foreground font-medium">{formatCurrencyIDR(simCashTenant)}</span> · Dago <span className="font-mono text-foreground font-medium">{formatCurrencyIDR(simCashDago)}</span>
+                        </p>
+                      </div>
+
+                      {/* Split QRIS */}
+                      <div className="flex flex-col gap-1.5 rounded bg-muted/40 p-2.5">
+                        <p className="text-xs font-semibold text-foreground">Bagi Hasil Non-Tunai / QRIS</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1">
+                            <Label htmlFor={`qris-split-${tenant.id}`} className="text-xs">Mitra (%)</Label>
+                            <Input
+                              id={`qris-split-${tenant.id}`}
+                              type="number"
+                              min={0}
+                              max={100}
+                              disabled={!canEditSettlementPolicy}
+                              value={splits.qrisTenantPercent}
+                              onChange={(e) => onTenantSplitChange(tenant.id, Number(e.target.value), "QRIS")}
+                              className="font-mono tabular-nums h-8 text-xs"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs">Dago (%)</Label>
+                            <Input
+                              type="number"
+                              disabled
+                              value={splits.qrisDagoPercent}
+                              className="font-mono tabular-nums h-8 text-xs"
+                            />
+                          </div>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          Contoh QRIS Rp 100.000: mitra <span className="font-mono text-foreground font-medium">{formatCurrencyIDR(simQrisTenant)}</span> · Dago <span className="font-mono text-foreground font-medium">{formatCurrencyIDR(simQrisDago)}</span>
+                        </p>
                       </div>
 
                       {errMsg ? <p className="text-xs text-destructive">{errMsg}</p> : null}
-
-                      <p className="text-xs text-muted-foreground">
-                        Contoh Rp 100.000: mitra{" "}
-                        <span className="font-mono text-foreground tabular-nums">
-                          {formatCurrencyIDR(simTenant)}
-                        </span>{" "}
-                        · Dago{" "}
-                        <span className="font-mono text-foreground tabular-nums">
-                          {formatCurrencyIDR(simDago)}
-                        </span>
-                      </p>
                     </div>
                   );
                 })}

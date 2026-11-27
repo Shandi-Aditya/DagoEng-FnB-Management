@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Crown, Ticket, Users, X } from "lucide-react";
+import { Building2, Clock, Crown, Ticket, Users, X } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/compon
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTableSelectableForPos } from "@/contexts/TableContext";
 import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
+import { isServiceWithinHours } from "@/lib/operating-hours";
 import {
   checkSlotAvailability,
   COWORKING_TIME_SLOTS,
@@ -121,11 +122,22 @@ export function CartOrderSetup({
       ? validOperationalTime
       : "";
 
+  const fnbHoursCheck = isServiceWithinHours("fnb");
+
   const updateDraft = (patch: Partial<CorporateOrderDraft>) => {
     onCorporateDraftChange?.({ ...corporateDraft, ...patch });
   };
   return (
     <div className="flex flex-col gap-3">
+      {!fnbHoursCheck.isOpen ? (
+        <Alert variant="destructive" className="py-2.5">
+          <Clock className="size-4" />
+          <AlertDescription className="text-xs">
+            <strong>Di luar jam operasional F&B:</strong> {fnbHoursCheck.reason}. Transaksi kasir memerlukan PIN Supervisor.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <Tabs value={orderType} onValueChange={(value) => onOrderTypeChange(value as PosOrderType)}>
         <TabsList className="w-full">
           <TabsTrigger value="DINE_IN">Dine in</TabsTrigger>

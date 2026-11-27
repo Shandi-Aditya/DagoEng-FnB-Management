@@ -25,6 +25,7 @@ import {
   getTenantPayoutAccount,
   getTenantRevenueSplit,
   resolveItemTenantId,
+  resolveTenantSplitPercentages,
 } from "@/lib/settlement";
 import { getTenantProfile } from "@/lib/tenant";
 import { SEED_TENANT_PROFILES, tenantsSyncClient } from "@/lib/sync-domains/config-spec";
@@ -71,6 +72,10 @@ export interface WeeklyTenantSettlement {
   // Persentase bagi hasil
   tenantSharePercent: number; // e.g. 85
   dagoSharePercent: number; // e.g. 15
+  cashTenantSharePercent?: number;
+  cashDagoSharePercent?: number;
+  qrisTenantSharePercent?: number;
+  qrisDagoSharePercent?: number;
 
   // Transaksi Tunai (Cash)
   cashGrossSales: number;
@@ -394,7 +399,17 @@ export interface CalculateWeeklySettlementOptions {
   referenceDate?: Date | string;
   mdrBearer?: MdrBearerMode;
   includeInternal?: boolean;
-  customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
+  customSplits?: Record<
+    string,
+    {
+      tenantSharePercent: number;
+      dagoSharePercent: number;
+      cashTenantSharePercent?: number;
+      cashDagoSharePercent?: number;
+      qrisTenantSharePercent?: number;
+      qrisDagoSharePercent?: number;
+    }
+  >;
   outletId?: string;
   outletName?: string;
   outlets?: readonly OutletItem[];
@@ -520,12 +535,14 @@ function resolveTenantMeta(normTenantId: string): {
   bankName: string;
   accountNumber: string;
   accountHolder: string;
+  mdrBearer?: MdrBearerMode;
 } {
   let tenantName = normTenantId;
   let partnerType: "EXTERNAL" | "INTERNAL" = "EXTERNAL";
   let bankName = "BCA";
   let accountNumber = "-";
   let accountHolder = "-";
+  let mdrBearer: MdrBearerMode | undefined = undefined;
   try {
     const profile = getTenantProfile(normTenantId);
     if (profile) {
@@ -534,6 +551,7 @@ function resolveTenantMeta(normTenantId: string): {
       if (profile.bankName) bankName = profile.bankName;
       if (profile.bankAccountNumber) accountNumber = profile.bankAccountNumber;
       if (profile.bankAccountHolder) accountHolder = profile.bankAccountHolder;
+      if (profile.mdrBearer) mdrBearer = profile.mdrBearer as MdrBearerMode;
     }
   } catch {}
   if (accountNumber === "-" || accountNumber === "") {
@@ -549,6 +567,7 @@ function resolveTenantMeta(normTenantId: string): {
     bankName,
     accountNumber,
     accountHolder,
+    mdrBearer,
   };
 }
 
@@ -564,12 +583,17 @@ export function calculateWeeklyTenantSettlement(
   const period = getWeeklySettlementPeriod(options?.referenceDate);
   const weekStartMs = new Date(period.weekStartDate).getTime();
   const weekCutoffMs = new Date(period.weekCutoffDate).getTime();
-  const mdrBearer: MdrBearerMode = options?.mdrBearer ?? "MITRA";
   const meta = resolveTenantMeta(normTenantId);
+  const mdrBearer: MdrBearerMode = options?.mdrBearer ?? meta.mdrBearer ?? "MITRA";
   const isInternalPartner = meta.partnerType === "INTERNAL";
   const splitConfig = options?.customSplits?.[normTenantId] || getTenantRevenueSplit(normTenantId);
-  const tenantSharePct = isInternalPartner ? 0 : splitConfig.tenantSharePercent ?? 85;
-  const dagoSharePct = isInternalPartner ? 100 : splitConfig.dagoSharePercent ?? 15;
+  const splits = resolveTenantSplitPercentages(splitConfig);
+  const tenantSharePct = isInternalPartner ? 0 : splits.tenantPercent;
+  const dagoSharePct = isInternalPartner ? 100 : splits.dagoPercent;
+  const cashTenantSharePct = isInternalPartner ? 0 : splits.cashTenantPercent;
+  const cashDagoSharePct = isInternalPartner ? 100 : splits.cashDagoPercent;
+  const qrisTenantSharePct = isInternalPartner ? 0 : splits.qrisTenantPercent;
+  const qrisDagoSharePct = isInternalPartner ? 100 : splits.qrisDagoPercent;
 
   let cashGross = 0, cashDiscount = 0, qrisGross = 0, qrisDiscount = 0;
   let otherGross = 0, otherDiscount = 0, cashRefund = 0, qrisRefund = 0, otherRefund = 0;
@@ -674,7 +698,7 @@ export function calculateWeeklyTenantSettlement(
     dagoTotalRevenue = Math.max(0, totalNetSales - qrisMdrFee);
     actionLabel = "Mitra internal (tanpa settlement)";
   } else {
-    cashTenantShare = Math.round(cashNetSales * (tenantSharePct / 100));
+    cashTenantShare = Math.round(cashNetSales * (cashTenantSharePct / 100));
     cashDagoShare = cashNetSales - cashTenantShare;
 
     if (mdrBearer === "MITRA") {
@@ -682,18 +706,18 @@ export function calculateWeeklyTenantSettlement(
     } else if (mdrBearer === "DAGO") {
       mdrDagoPortion = qrisMdrFee;
     } else {
-      mdrTenantPortion = Math.round(qrisMdrFee * (tenantSharePct / 100));
+      mdrTenantPortion = Math.round(qrisMdrFee * (qrisTenantSharePct / 100));
       mdrDagoPortion = qrisMdrFee - mdrTenantPortion;
     }
 
-    const rawQrisTenantShare = Math.round(qrisNetSales * (tenantSharePct / 100));
+    const rawQrisTenantShare = Math.round(qrisNetSales * (qrisTenantSharePct / 100));
     qrisTenantShare = Math.max(0, rawQrisTenantShare - mdrTenantPortion);
     qrisDagoShare = Math.max(0, qrisNetSales - rawQrisTenantShare - mdrDagoPortion);
 
     otherTenantShare = Math.round(otherNetSales * (tenantSharePct / 100));
     otherDagoShare = otherNetSales - otherTenantShare;
 
-    tenantGrossShare = Math.round(totalNetSales * (tenantSharePct / 100));
+    tenantGrossShare = cashTenantShare + rawQrisTenantShare + otherTenantShare;
     dagoGrossShare = totalNetSales - tenantGrossShare;
     dagoTotalRevenue = cashDagoShare + qrisDagoShare + otherDagoShare;
     tenantTotalEarnings = cashTenantShare + qrisTenantShare + otherTenantShare;
@@ -722,6 +746,10 @@ export function calculateWeeklyTenantSettlement(
     paymentDueLabel: period.paymentDueLabel,
     tenantSharePercent: tenantSharePct,
     dagoSharePercent: dagoSharePct,
+    cashTenantSharePercent: cashTenantSharePct,
+    cashDagoSharePercent: cashDagoSharePct,
+    qrisTenantSharePercent: qrisTenantSharePct,
+    qrisDagoSharePercent: qrisDagoSharePct,
     cashGrossSales: Math.round(cashGross),
     cashDiscount: Math.round(cashDiscount),
     cashNetSales,

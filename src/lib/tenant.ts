@@ -142,6 +142,7 @@ export interface TenantProfileData {
   bankAccountHolder: string;
   status: TenantStatus;
   partnerType?: TenantPartnerType; // "INTERNAL" | "EXTERNAL"
+  mdrBearer?: "MITRA" | "DAGO" | "SPLIT";
   contractStartDate?: string;
   contractEndDate?: string;
   contractPksNumber?: string;

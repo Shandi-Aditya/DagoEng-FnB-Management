@@ -307,6 +307,55 @@ export function validateSettlementReceiptPolicyInput(
       }
 
       const existing = nextSplits[tenantId];
+
+      let cashTenantShare =
+        cfgObj.cashTenantSharePercent !== undefined
+          ? Number(cfgObj.cashTenantSharePercent)
+          : existing?.cashTenantSharePercent;
+      let cashDagoShare =
+        cfgObj.cashDagoSharePercent !== undefined
+          ? Number(cfgObj.cashDagoSharePercent)
+          : (cashTenantShare !== undefined ? 100 - cashTenantShare : existing?.cashDagoSharePercent);
+
+      let qrisTenantShare =
+        cfgObj.qrisTenantSharePercent !== undefined
+          ? Number(cfgObj.qrisTenantSharePercent)
+          : existing?.qrisTenantSharePercent;
+      let qrisDagoShare =
+        cfgObj.qrisDagoSharePercent !== undefined
+          ? Number(cfgObj.qrisDagoSharePercent)
+          : (qrisTenantShare !== undefined ? 100 - qrisTenantShare : existing?.qrisDagoSharePercent);
+
+      if (cashTenantShare !== undefined) {
+        if (!Number.isFinite(cashTenantShare) || cashTenantShare < 0 || cashTenantShare > 100) {
+          return {
+            valid: false,
+            error: `Persentase bagian tunai mitra untuk ${tenantId} harus antara 0% hingga 100%.`,
+          };
+        }
+        if (cashDagoShare === undefined || Math.abs(cashTenantShare + cashDagoShare - 100) > 0.01) {
+          return {
+            valid: false,
+            error: `Total bagi hasil tunai mitra dan DAGO untuk ${tenantId} harus tepat 100%.`,
+          };
+        }
+      }
+
+      if (qrisTenantShare !== undefined) {
+        if (!Number.isFinite(qrisTenantShare) || qrisTenantShare < 0 || qrisTenantShare > 100) {
+          return {
+            valid: false,
+            error: `Persentase bagian QRIS mitra untuk ${tenantId} harus antara 0% hingga 100%.`,
+          };
+        }
+        if (qrisDagoShare === undefined || Math.abs(qrisTenantShare + qrisDagoShare - 100) > 0.01) {
+          return {
+            valid: false,
+            error: `Total bagi hasil QRIS mitra dan DAGO untuk ${tenantId} harus tepat 100%.`,
+          };
+        }
+      }
+
       const tenantName =
         typeof cfgObj.tenantName === "string" && cfgObj.tenantName.trim()
           ? cfgObj.tenantName.trim()
@@ -318,6 +367,10 @@ export function validateSettlementReceiptPolicyInput(
         tenantName,
         tenantSharePercent: tenantShare,
         dagoSharePercent: dagoShare,
+        cashTenantSharePercent: cashTenantShare,
+        cashDagoSharePercent: cashDagoShare,
+        qrisTenantSharePercent: qrisTenantShare,
+        qrisDagoSharePercent: qrisDagoShare,
         status,
         updatedAt: typeof cfgObj.updatedAt === "string" ? cfgObj.updatedAt : existing?.updatedAt,
       };

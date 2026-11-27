@@ -282,6 +282,7 @@ export default function SettingsPage() {
   const [formTenantCode, setFormTenantCode] = useState("");
   const [formTenantBadge, setFormTenantBadge] = useState("");
   const [formTenantPartnerType, setFormTenantPartnerType] = useState<TenantPartnerType>("EXTERNAL");
+  const [formTenantMdrBearer, setFormTenantMdrBearer] = useState<"MITRA" | "DAGO" | "SPLIT">("MITRA");
   const [formTenantPIC, setFormTenantPIC] = useState("");
   const [formTenantPhone, setFormTenantPhone] = useState("");
   const [formTenantEmail, setFormTenantEmail] = useState("");
@@ -918,6 +919,7 @@ export default function SettingsPage() {
     setFormTenantContractEnd("");
     setFormTenantPksFile("");
     setFormTenantPartnerType("EXTERNAL");
+    setFormTenantMdrBearer("MITRA");
   };
 
   const handleOpenEditTenant = (tenantId: string) => {
@@ -928,6 +930,7 @@ export default function SettingsPage() {
     setFormTenantCode(meta?.code || "");
     setFormTenantBadge(meta?.badge || "");
     setFormTenantPartnerType(prof.partnerType || "EXTERNAL");
+    setFormTenantMdrBearer(prof.mdrBearer || "MITRA");
     setFormTenantPIC(prof.contactPerson || "");
     setFormTenantPhone(prof.contactPhone || "");
     setFormTenantEmail(prof.contactEmail || "");
@@ -978,6 +981,7 @@ export default function SettingsPage() {
         bankAccountNumber: formTenantBankAccountNumber.trim(),
         bankAccountHolder: formTenantBankAccountHolder.trim() || nextName,
         partnerType: formTenantPartnerType || "EXTERNAL",
+        mdrBearer: formTenantMdrBearer || "MITRA",
         contractStartDate: formTenantContractStart.trim() || undefined,
         contractEndDate: formTenantContractEnd.trim() || undefined,
         contractPksNumber: formTenantPksNumber.trim() || undefined,
@@ -1019,6 +1023,7 @@ export default function SettingsPage() {
       bankAccountHolder: formTenantBankAccountHolder.trim() || formTenantName.trim(),
       status: "ACTIVE",
       partnerType: formTenantPartnerType || "EXTERNAL",
+      mdrBearer: formTenantMdrBearer || "MITRA",
       contractStartDate: formTenantContractStart.trim() || undefined,
       contractEndDate: formTenantContractEnd.trim() || undefined,
       contractPksNumber: formTenantPksNumber.trim() || undefined,
@@ -1204,6 +1209,24 @@ export default function SettingsPage() {
         newErrors[cfg.tenantId] = "Total pembagian (mitra + Dago) harus 100%.";
         hasError = true;
       }
+      if (cfg.cashTenantSharePercent !== undefined) {
+        if (cfg.cashTenantSharePercent < 0 || cfg.cashTenantSharePercent > 100) {
+          newErrors[cfg.tenantId] = "Persentase tunai harus antara 0% dan 100%.";
+          hasError = true;
+        } else if (cfg.cashDagoSharePercent !== undefined && Math.round(cfg.cashTenantSharePercent + cfg.cashDagoSharePercent) !== 100) {
+          newErrors[cfg.tenantId] = "Total pembagian tunai harus 100%.";
+          hasError = true;
+        }
+      }
+      if (cfg.qrisTenantSharePercent !== undefined) {
+        if (cfg.qrisTenantSharePercent < 0 || cfg.qrisTenantSharePercent > 100) {
+          newErrors[cfg.tenantId] = "Persentase QRIS harus antara 0% dan 100%.";
+          hasError = true;
+        } else if (cfg.qrisDagoSharePercent !== undefined && Math.round(cfg.qrisTenantSharePercent + cfg.qrisDagoSharePercent) !== 100) {
+          newErrors[cfg.tenantId] = "Total pembagian QRIS harus 100%.";
+          hasError = true;
+        }
+      }
     });
 
     if (hasError) {
@@ -1214,7 +1237,12 @@ export default function SettingsPage() {
     setRevenueSplitErrors({});
 
     Object.values(revenueSplits).forEach((cfg) => {
-      setTenantRevenueSplit(cfg.tenantId, cfg.tenantSharePercent, cfg.dagoSharePercent);
+      setTenantRevenueSplit(cfg.tenantId, cfg.tenantSharePercent, cfg.dagoSharePercent, {
+        cashTenantSharePercent: cfg.cashTenantSharePercent,
+        cashDagoSharePercent: cfg.cashDagoSharePercent,
+        qrisTenantSharePercent: cfg.qrisTenantSharePercent,
+        qrisDagoSharePercent: cfg.qrisDagoSharePercent,
+      });
     });
     saveStoredSettlementReceiptPolicy({ settlementBasis, revenueSplits });
 
@@ -2005,17 +2033,52 @@ export default function SettingsPage() {
               settlementBasis={settlementBasis}
               onSettlementBasisChange={setSettlementBasis}
               canEditSettlementPolicy={canEditSettlementPolicy}
-              onTenantSplitChange={(tId, share) => {
-                setRevenueSplits((prev) => ({
-                  ...prev,
-                  [tId]: {
+              onTenantSplitChange={(tId, share, channel) => {
+                setRevenueSplits((prev) => {
+                  const existing = prev[tId] || {
                     tenantId: tId,
                     tenantName: localTenants.find((t) => t.id === tId)?.name || tId,
-                    tenantSharePercent: share,
-                    dagoSharePercent: 100 - share,
+                    tenantSharePercent: 85,
+                    dagoSharePercent: 15,
+                    cashTenantSharePercent: 80,
+                    cashDagoSharePercent: 20,
+                    qrisTenantSharePercent: 85,
+                    qrisDagoSharePercent: 15,
                     status: "ACTIVE",
-                  },
-                }));
+                  };
+                  if (channel === "CASH") {
+                    return {
+                      ...prev,
+                      [tId]: {
+                        ...existing,
+                        cashTenantSharePercent: share,
+                        cashDagoSharePercent: 100 - share,
+                      },
+                    };
+                  }
+                  if (channel === "QRIS") {
+                    return {
+                      ...prev,
+                      [tId]: {
+                        ...existing,
+                        qrisTenantSharePercent: share,
+                        qrisDagoSharePercent: 100 - share,
+                      },
+                    };
+                  }
+                  return {
+                    ...prev,
+                    [tId]: {
+                      ...existing,
+                      tenantSharePercent: share,
+                      dagoSharePercent: 100 - share,
+                      cashTenantSharePercent: share,
+                      cashDagoSharePercent: 100 - share,
+                      qrisTenantSharePercent: share,
+                      qrisDagoSharePercent: 100 - share,
+                    },
+                  };
+                });
               }}
               onSaveTenantSplits={handleSaveTenantSplits}
               eventPlatformFee={eventPlatformFee}
@@ -2556,6 +2619,8 @@ export default function SettingsPage() {
         onFormTenantBadgeChange={setFormTenantBadge}
         formTenantPartnerType={formTenantPartnerType}
         onFormTenantPartnerTypeChange={setFormTenantPartnerType}
+        formTenantMdrBearer={formTenantMdrBearer}
+        onFormTenantMdrBearerChange={setFormTenantMdrBearer}
         formTenantPIC={formTenantPIC}
         onFormTenantPICChange={setFormTenantPIC}
         formTenantPhone={formTenantPhone}

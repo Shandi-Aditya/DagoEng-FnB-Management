@@ -21,7 +21,7 @@ import {
   mutateConfigDomain,
 } from "@/lib/sync-domains/config-spec";
 import type { TenantsDomainState } from "@/lib/domain-sync-types";
-import { getTenantProfile } from "@/lib/tenant";
+import { getTenantProfile, type TenantProfileData } from "@/lib/tenant";
 
 export interface SettlementSummary {
   tenantId: string | "DAGO_HUB";
@@ -51,15 +51,79 @@ export interface TenantRevenueSplitConfig {
   tenantName: string;
   tenantSharePercent: number;
   dagoSharePercent: number;
+  cashTenantSharePercent?: number;
+  cashDagoSharePercent?: number;
+  qrisTenantSharePercent?: number;
+  qrisDagoSharePercent?: number;
   status: "ACTIVE" | "INACTIVE";
   updatedAt?: string;
 }
 
+export function resolveTenantSplitPercentages(
+  split?:
+    | TenantRevenueSplitConfig
+    | {
+        tenantSharePercent?: number;
+        dagoSharePercent?: number;
+        cashTenantSharePercent?: number;
+        cashDagoSharePercent?: number;
+        qrisTenantSharePercent?: number;
+        qrisDagoSharePercent?: number;
+      }
+    | null
+): {
+  tenantPercent: number;
+  dagoPercent: number;
+  cashTenantPercent: number;
+  cashDagoPercent: number;
+  qrisTenantPercent: number;
+  qrisDagoPercent: number;
+} {
+  const defaultTenant = split?.tenantSharePercent ?? 85;
+  const defaultDago = split?.dagoSharePercent ?? (100 - defaultTenant);
+  const cashTenant = split?.cashTenantSharePercent ?? defaultTenant;
+  const cashDago = split?.cashDagoSharePercent ?? (100 - cashTenant);
+  const qrisTenant = split?.qrisTenantSharePercent ?? defaultTenant;
+  const qrisDago = split?.qrisDagoSharePercent ?? (100 - qrisTenant);
+  return {
+    tenantPercent: defaultTenant,
+    dagoPercent: defaultDago,
+    cashTenantPercent: cashTenant,
+    cashDagoPercent: cashDago,
+    qrisTenantPercent: qrisTenant,
+    qrisDagoPercent: qrisDago,
+  };
+}
+
 export const DEFAULT_TENANT_REVENUE_SPLITS: Record<string, TenantRevenueSplitConfig> = {
-  "tenant-ks": { tenantId: "tenant-ks", tenantName: "Kopi Senja", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
-  "tenant-kitchen": { tenantId: "tenant-kitchen", tenantName: "Dapur Mama", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
-  "tenant-bakery": { tenantId: "tenant-bakery", tenantName: "Manis Bakery", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
-  "tenant-tea": { tenantId: "tenant-tea", tenantName: "Warung Bu Narti", tenantSharePercent: 85, dagoSharePercent: 15, status: "ACTIVE" },
+  "tenant-ks": {
+    tenantId: "tenant-ks",
+    tenantName: "Kopi Senja",
+    tenantSharePercent: 85,
+    dagoSharePercent: 15,
+    status: "ACTIVE",
+  },
+  "tenant-kitchen": {
+    tenantId: "tenant-kitchen",
+    tenantName: "Dapur Mama",
+    tenantSharePercent: 85,
+    dagoSharePercent: 15,
+    status: "ACTIVE",
+  },
+  "tenant-bakery": {
+    tenantId: "tenant-bakery",
+    tenantName: "Manis Bakery",
+    tenantSharePercent: 85,
+    dagoSharePercent: 15,
+    status: "ACTIVE",
+  },
+  "tenant-tea": {
+    tenantId: "tenant-tea",
+    tenantName: "Warung Bu Narti",
+    tenantSharePercent: 85,
+    dagoSharePercent: 15,
+    status: "ACTIVE",
+  },
 };
 
 export function getAllTenantRevenueSplits(): Record<string, TenantRevenueSplitConfig> {
@@ -101,7 +165,13 @@ export function getTenantRevenueSplit(tenantId: string): TenantRevenueSplitConfi
 export function setTenantRevenueSplit(
   tenantId: string,
   tenantSharePercent: number,
-  dagoSharePercent?: number
+  dagoSharePercent?: number,
+  dualSplit?: {
+    cashTenantSharePercent?: number;
+    cashDagoSharePercent?: number;
+    qrisTenantSharePercent?: number;
+    qrisDagoSharePercent?: number;
+  }
 ): { success: boolean; error?: string } {
   if (tenantSharePercent < 0 || tenantSharePercent > 100) {
     return { success: false, error: "Persentase bagian tenant harus antara 0% hingga 100%." };
@@ -114,6 +184,22 @@ export function setTenantRevenueSplit(
     return { success: false, error: "Total persentase pembagian (Tenant + DAGO) harus berjumlah 100%." };
   }
 
+  if (dualSplit?.cashTenantSharePercent !== undefined) {
+    const cTenant = dualSplit.cashTenantSharePercent;
+    const cDago = dualSplit.cashDagoSharePercent ?? 100 - cTenant;
+    if (cTenant < 0 || cTenant > 100 || cDago < 0 || cDago > 100 || Math.round(cTenant + cDago) !== 100) {
+      return { success: false, error: "Total persentase pembagian Tunai (Tenant + DAGO) harus tepat 100%." };
+    }
+  }
+
+  if (dualSplit?.qrisTenantSharePercent !== undefined) {
+    const qTenant = dualSplit.qrisTenantSharePercent;
+    const qDago = dualSplit.qrisDagoSharePercent ?? 100 - qTenant;
+    if (qTenant < 0 || qTenant > 100 || qDago < 0 || qDago > 100 || Math.round(qTenant + qDago) !== 100) {
+      return { success: false, error: "Total persentase pembagian QRIS (Tenant + DAGO) harus tepat 100%." };
+    }
+  }
+
   const all = getAllTenantRevenueSplits();
   const existing = all[tenantId] || { tenantId, tenantName: tenantId, status: "ACTIVE" };
   const updatedEntry: TenantRevenueSplitConfig = {
@@ -121,6 +207,18 @@ export function setTenantRevenueSplit(
     tenantId,
     tenantSharePercent,
     dagoSharePercent: calcDago,
+    cashTenantSharePercent: dualSplit?.cashTenantSharePercent ?? existing.cashTenantSharePercent,
+    cashDagoSharePercent:
+      dualSplit?.cashDagoSharePercent ??
+      (dualSplit?.cashTenantSharePercent !== undefined
+        ? 100 - dualSplit.cashTenantSharePercent
+        : existing.cashDagoSharePercent),
+    qrisTenantSharePercent: dualSplit?.qrisTenantSharePercent ?? existing.qrisTenantSharePercent,
+    qrisDagoSharePercent:
+      dualSplit?.qrisDagoSharePercent ??
+      (dualSplit?.qrisTenantSharePercent !== undefined
+        ? 100 - dualSplit.qrisTenantSharePercent
+        : existing.qrisDagoSharePercent),
     updatedAt: new Date().toISOString(),
   };
 
@@ -436,8 +534,9 @@ export function calculateSettlement(
         };
 
         const splitConfig = activeSplits[tenantId] || { tenantSharePercent: 85, dagoSharePercent: 15 };
-        const tenantSharePct = tenantId === "DAGO_HUB" ? 0 : splitConfig.tenantSharePercent;
-        const dagoSharePct = tenantId === "DAGO_HUB" ? 100 : splitConfig.dagoSharePercent;
+        const splits = resolveTenantSplitPercentages(splitConfig);
+        const tenantSharePct = tenantId === "DAGO_HUB" ? 0 : splits.tenantPercent;
+        const dagoSharePct = tenantId === "DAGO_HUB" ? 100 : splits.dagoPercent;
 
         const current = settlementMap.get(tenantId) || {
           tenantId,
@@ -462,7 +561,36 @@ export function calculateSettlement(
           dagoShareAmount: 0,
         };
 
-        const addedTenantShare = Math.round(basisAmount * (tenantSharePct / 100));
+        const methodUpper = (order.paymentMethod || "CASH").toUpperCase();
+        let addedTenantShare = 0;
+        if (tenantId === "DAGO_HUB") {
+          addedTenantShare = 0;
+        } else if (methodUpper === "CASH") {
+          addedTenantShare = Math.round(basisAmount * (splits.cashTenantPercent / 100));
+        } else if (methodUpper === "QRIS") {
+          addedTenantShare = Math.round(basisAmount * (splits.qrisTenantPercent / 100));
+        } else if (methodUpper === "SPLIT" && Array.isArray(order.splitDetails) && order.splitDetails.length > 0) {
+          const weights = order.splitDetails.map((s) => Math.max(0, Number(s.amount) || 0));
+          const totalW = weights.reduce((sum, w) => sum + w, 0);
+          if (totalW > 0) {
+            const allocatedBySplit = allocateIntegerProRata(Math.round(basisAmount), weights);
+            order.splitDetails.forEach((s, idx) => {
+              const partMethod = (s.method || "CASH").toUpperCase();
+              const partPct =
+                partMethod === "QRIS"
+                  ? splits.qrisTenantPercent
+                  : partMethod === "CASH"
+                  ? splits.cashTenantPercent
+                  : splits.tenantPercent;
+              const partBasis = allocatedBySplit[idx] ?? 0;
+              addedTenantShare += Math.round(partBasis * (partPct / 100));
+            });
+          } else {
+            addedTenantShare = Math.round(basisAmount * (splits.tenantPercent / 100));
+          }
+        } else {
+          addedTenantShare = Math.round(basisAmount * (splits.tenantPercent / 100));
+        }
         const addedDagoShare = basisAmount - addedTenantShare;
 
         settlementMap.set(tenantId, {
@@ -511,20 +639,34 @@ export interface TenantProfitSharing {
   grossSales: number;
   discount?: number;
   dpp?: number;
+  cashDpp?: number;
+  qrisDpp?: number;
   platformFee: number;
   qrisMdr: number;
+  mdrTenantPortion?: number;
+  mdrDagoPortion?: number;
   netPayout: number;
   orderCount: number;
   commissionPercent: number;
   tenantSharePercent: number;
+  cashTenantSharePercent?: number;
+  qrisTenantSharePercent?: number;
+  mdrBearer?: "MITRA" | "DAGO" | "SPLIT";
 }
 
 export function calculateTenantProfitSharing(
   orders: OrderRecord[],
   tenantId: string,
   tenantName: string,
-  customCommissionPercent?: number
+  optionsOrCommission?: number | { customCommissionPercent?: number; mdrBearer?: "MITRA" | "DAGO" | "SPLIT" }
 ): TenantProfitSharing {
+  const customCommissionPercent =
+    typeof optionsOrCommission === "number"
+      ? optionsOrCommission
+      : optionsOrCommission?.customCommissionPercent;
+  const optionsMdrBearer =
+    typeof optionsOrCommission === "object" ? optionsOrCommission?.mdrBearer : undefined;
+
   const tenantOrders = orders.filter(
     (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
   );
@@ -532,16 +674,35 @@ export function calculateTenantProfitSharing(
   const targetTenantId = normalizeTenantId(tenantId) ?? tenantId;
   const isDagoHub = targetTenantId === "DAGO_HUB";
   const configuredSplit = getTenantRevenueSplit(targetTenantId);
+  const splits = resolveTenantSplitPercentages(configuredSplit);
+
   const commissionPercent = isDagoHub
     ? 100
     : customCommissionPercent !== undefined
     ? customCommissionPercent
-    : configuredSplit.dagoSharePercent;
+    : splits.dagoPercent;
   const tenantSharePercent = isDagoHub ? 0 : 100 - commissionPercent;
+  const cashTenantPct = isDagoHub
+    ? 0
+    : customCommissionPercent !== undefined
+    ? 100 - customCommissionPercent
+    : splits.cashTenantPercent;
+  const qrisTenantPct = isDagoHub
+    ? 0
+    : customCommissionPercent !== undefined
+    ? 100 - customCommissionPercent
+    : splits.qrisTenantPercent;
+
+  let profile: Partial<TenantProfileData> | undefined;
+  try {
+    profile = getTenantProfile(targetTenantId);
+  } catch {}
+  const mdrBearer = optionsMdrBearer ?? profile?.mdrBearer ?? "MITRA";
 
   let grossSales = 0;
   let totalDiscount = 0;
   let totalDpp = 0;
+  let cashDpp = 0;
   let qrisDpp = 0;
   let orderCount = 0;
 
@@ -587,9 +748,11 @@ export function calculateTenantProfitSharing(
       const tenantDpp = Math.max(0, tenantGross - allocatedDiscount);
       totalDiscount += allocatedDiscount;
       totalDpp += tenantDpp;
-      const method = (order.paymentMethod || "").toUpperCase();
+      const method = (order.paymentMethod || "CASH").toUpperCase();
       if (method === "QRIS") {
         qrisDpp += tenantDpp;
+      } else if (method === "CASH") {
+        cashDpp += tenantDpp;
       } else if (
         method === "SPLIT" &&
         Array.isArray(order.splitDetails) &&
@@ -600,8 +763,11 @@ export function calculateTenantProfitSharing(
         if (totalWeight > 0) {
           const allocatedBySplit = allocateIntegerProRata(Math.round(tenantDpp), weights);
           order.splitDetails.forEach((s, idx) => {
-            if ((s.method || "").toUpperCase() === "QRIS") {
+            const m = (s.method || "CASH").toUpperCase();
+            if (m === "QRIS") {
               qrisDpp += allocatedBySplit[idx] ?? 0;
+            } else if (m === "CASH") {
+              cashDpp += allocatedBySplit[idx] ?? 0;
             }
           });
         }
@@ -612,9 +778,31 @@ export function calculateTenantProfitSharing(
   const roundedGross = Math.round(grossSales);
   const roundedDiscount = Math.round(totalDiscount);
   const roundedDpp = Math.round(totalDpp);
-  const platformFee = Math.round(roundedDpp * (commissionPercent / 100));
-  const qrisMdr = isDagoHub ? 0 : Math.round(qrisDpp * 0.007);
-  const netPayout = isDagoHub ? 0 : roundedDpp - platformFee - qrisMdr;
+  const roundedCashDpp = Math.round(cashDpp);
+  const roundedQrisDpp = Math.round(qrisDpp);
+  const roundedOtherDpp = Math.max(0, roundedDpp - roundedCashDpp - roundedQrisDpp);
+
+  const cashTenantShare = Math.round(roundedCashDpp * (cashTenantPct / 100));
+  const rawQrisTenantShare = Math.round(roundedQrisDpp * (qrisTenantPct / 100));
+  const otherTenantShare = Math.round(roundedOtherDpp * (tenantSharePercent / 100));
+
+  const qrisMdr = isDagoHub ? 0 : Math.round(roundedQrisDpp * 0.007);
+  let mdrTenantPortion = 0;
+  if (!isDagoHub) {
+    if (mdrBearer === "MITRA") {
+      mdrTenantPortion = qrisMdr;
+    } else if (mdrBearer === "DAGO") {
+      mdrTenantPortion = 0;
+    } else {
+      mdrTenantPortion = Math.round(qrisMdr * (qrisTenantPct / 100));
+    }
+  }
+
+  const qrisTenantShare = Math.max(0, rawQrisTenantShare - mdrTenantPortion);
+  const netPayout = isDagoHub ? 0 : cashTenantShare + qrisTenantShare + otherTenantShare;
+  const platformFee = isDagoHub
+    ? roundedDpp
+    : Math.max(0, roundedDpp - (cashTenantShare + rawQrisTenantShare + otherTenantShare));
 
   return {
     tenantId,
@@ -622,12 +810,19 @@ export function calculateTenantProfitSharing(
     grossSales: roundedGross,
     discount: roundedDiscount,
     dpp: roundedDpp,
+    cashDpp: roundedCashDpp,
+    qrisDpp: roundedQrisDpp,
     platformFee,
     qrisMdr,
+    mdrTenantPortion,
+    mdrDagoPortion: isDagoHub ? 0 : qrisMdr - mdrTenantPortion,
     netPayout,
     orderCount,
     commissionPercent,
     tenantSharePercent,
+    cashTenantSharePercent: cashTenantPct,
+    qrisTenantSharePercent: qrisTenantPct,
+    mdrBearer,
   };
 }
 

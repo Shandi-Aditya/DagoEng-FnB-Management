@@ -51,6 +51,8 @@ export interface PartnerModalsProps {
   onFormTenantBadgeChange: (val: string) => void;
   formTenantPartnerType?: TenantPartnerType;
   onFormTenantPartnerTypeChange?: (val: TenantPartnerType) => void;
+  formTenantMdrBearer?: "MITRA" | "DAGO" | "SPLIT";
+  onFormTenantMdrBearerChange?: (val: "MITRA" | "DAGO" | "SPLIT") => void;
   formTenantPIC?: string;
   onFormTenantPICChange?: (val: string) => void;
   formTenantPhone?: string;
@@ -129,6 +131,8 @@ export function PartnerModals(props: PartnerModalsProps) {
     onFormTenantBadgeChange,
     formTenantPartnerType = "EXTERNAL",
     onFormTenantPartnerTypeChange,
+    formTenantMdrBearer = "MITRA",
+    onFormTenantMdrBearerChange,
     formTenantPIC = "",
     onFormTenantPICChange,
     formTenantPhone = "",
@@ -251,6 +255,21 @@ export function PartnerModals(props: PartnerModalsProps) {
                 </NativeSelect>
               </div>
               <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tenantMdrBearer">Beban MDR QRIS (0.7%)</Label>
+                <NativeSelect
+                  id="tenantMdrBearer"
+                  value={formTenantMdrBearer}
+                  onChange={(e) => onFormTenantMdrBearerChange?.(e.target.value as "MITRA" | "DAGO" | "SPLIT")}
+                >
+                  <NativeSelectOption value="MITRA">Mitra (100% dipotong dari QRIS mitra)</NativeSelectOption>
+                  <NativeSelectOption value="DAGO">Dago (100% ditanggung platform Dago)</NativeSelectOption>
+                  <NativeSelectOption value="SPLIT">Bagi Proporsional (sesuai rasio bagi hasil)</NativeSelectOption>
+                </NativeSelect>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="tenantPIC">Penanggung jawab (PIC)</Label>
                 <Input
                   id="tenantPIC"
@@ -260,9 +279,6 @@ export function PartnerModals(props: PartnerModalsProps) {
                   placeholder="Nama PIC"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="tenantPhone">Nomor telepon / WhatsApp</Label>
                 <Input
@@ -273,16 +289,17 @@ export function PartnerModals(props: PartnerModalsProps) {
                   placeholder="+62 8..."
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tenantEmail">Email kontak</Label>
-                <Input
-                  id="tenantEmail"
-                  type="email"
-                  value={formTenantEmail}
-                  onChange={(e) => onFormTenantEmailChange?.(e.target.value)}
-                  placeholder="mitra@dagocreative.id"
-                />
-              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tenantEmail">Email kontak</Label>
+              <Input
+                id="tenantEmail"
+                type="email"
+                value={formTenantEmail}
+                onChange={(e) => onFormTenantEmailChange?.(e.target.value)}
+                placeholder="mitra@dagocreative.id"
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

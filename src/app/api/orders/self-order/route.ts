@@ -21,6 +21,7 @@ import { calculateOrderPricing } from "@/lib/promo";
 import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 import { resolveSelfOrderPaymentMethod } from "@/lib/self-order-policy";
 import { calculateCartTaxAndService } from "@/lib/tax-breakdown";
+import { validateOrderOperationalHours } from "@/lib/operating-hours";
 import { OrderItemRecord, OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
 import { DEFAULT_PLATFORM_SETTINGS, PlatformSettings } from "@/types/settings";
@@ -306,6 +307,24 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    const selfOrderTenantIds = Array.from(
+      new Set(sanitizedItems.map((it) => it.tenantId).filter((t): t is string => Boolean(t)))
+    );
+    const hoursValidation = validateOrderOperationalHours(new Date(), {
+      operationalHours: platformSettings.operationalHours,
+      tenantOperations: platformSettings.tenantOperations,
+      tenantIds: selfOrderTenantIds,
+    });
+    if (!hoursValidation.allowed) {
+      return NextResponse.json(
+        {
+          error: `OPERATIONAL_HOURS_LOCK: Pemesanan mandiri tidak tersedia di luar jam operasional. ${hoursValidation.reason || "Layanan atau mitra sedang tutup."}`,
+          code: "OPERATIONAL_HOURS_LOCKED",
+        },
+        { status: 403 }
+      );
+    }
     const orderType: OrderRecord["orderType"] =
       rawOrder.orderType === "TAKEAWAY" || rawOrder.orderType === "DELIVERY"
         ? rawOrder.orderType
@@ -438,8 +457,7 @@ export async function POST(req: NextRequest) {
         typeof rawOrder.notes === "string" && rawOrder.notes.trim()
           ? rawOrder.notes.trim()
           : undefined,
-      createdAt:
-        typeof rawOrder.createdAt === "string" && rawOrder.createdAt ? rawOrder.createdAt : nowIso,
+      createdAt: nowIso,
       statusHistory,
     };
 
