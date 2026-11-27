@@ -30,6 +30,7 @@ export const dynamic = "force-dynamic";
 const DEMO_CREDENTIALS: Record<string, { personaKey: PersonaKey; defaultRedirect: string }> = {
   "owner.dago@dagoeng.com": { personaKey: "DAGO_OWNER", defaultRedirect: "/dashboard" },
   "admin@dagoeng.com": { personaKey: "SUPER_ADMIN", defaultRedirect: "/dashboard" },
+  "finance@dagoeng.com": { personaKey: "DAGO_FINANCE", defaultRedirect: "/reports" },
   "manager.commercial@dagoeng.com": { personaKey: "COMMERCIAL_MANAGER", defaultRedirect: "/commercial" },
   "manager.cowork@dagoeng.com": { personaKey: "COWORK_MANAGER", defaultRedirect: "/coworking" },
   "owner.kopisenja@dagoeng.com": { personaKey: "TENANT_OWNER_KS", defaultRedirect: "/dashboard" },

@@ -77,6 +77,7 @@ export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reas
       persona?.role === "SUPER_ADMIN" ||
       persona?.role === "OWNER" ||
       persona?.role === "MANAGER" ||
+      persona?.role === "FINANCE" ||
       persona?.scopeLevel === "PLATFORM" ||
       persona?.scopeLevel === "ORGANIZATION";
 
@@ -127,6 +128,21 @@ export const TRUSTED_PERSONAS: Record<
     email: "admin@dagoeng.com",
     name: "Platform Super Admin",
     permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
+  },
+  DAGO_FINANCE: {
+    role: "FINANCE",
+    scopeLevel: "PLATFORM",
+    userId: "user-finance",
+    email: "finance@dagoeng.com",
+    name: "Dago Finance Admin",
+    permissions: [
+      "reports:view",
+      "platform:view",
+      "settlement:view",
+      "audit_logs:view",
+    ],
     tenantId: null,
     businessModule: "CORE",
   },

@@ -26,6 +26,7 @@ const PERSONA_ROLE_MAP: Record<string, { role: RoleSlug; scopeLevel: ScopeLevel 
   CUSTOMER_DEMO: { role: "CUSTOMER", scopeLevel: "OUTLET" },
   CUSTOMER: { role: "CUSTOMER", scopeLevel: "OUTLET" },
   SUPER_ADMIN: { role: "SUPER_ADMIN", scopeLevel: "PLATFORM" },
+  DAGO_FINANCE: { role: "FINANCE", scopeLevel: "PLATFORM" },
   COMMUNITY_BARISTA: { role: "CUSTOMER", scopeLevel: "OUTLET" },
   COMMUNITY_BANDUNGDEV: { role: "CUSTOMER", scopeLevel: "OUTLET" },
   COMMUNITY_AKSARAPRIANGAN: { role: "CUSTOMER", scopeLevel: "OUTLET" },

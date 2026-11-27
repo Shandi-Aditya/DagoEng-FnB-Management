@@ -54,7 +54,7 @@ export const ROUTE_PERMISSIONS: { prefix: string; allowedRoles: RoleSlug[] }[] =
   },
   {
     prefix: "/reports",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "FINANCE"],
   },
   {
     prefix: "/commercial",
@@ -113,6 +113,8 @@ export function getDefaultRouteForRole(role: RoleSlug | null): string {
       return "/events/checkin";
     case "INVENTORY_STAFF":
       return "/inventory";
+    case "FINANCE":
+      return "/reports";
     case "CUSTOMER":
       return "/customer";
     case "SUPER_ADMIN":

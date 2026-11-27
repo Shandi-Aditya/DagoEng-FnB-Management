@@ -203,7 +203,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     href: "/reports",
     icon: "BarChart3",
     module: "CORE",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "FINANCE"],
   },
   {
     name: "Karyawan & Shift",
@@ -340,3 +340,5 @@ export function getAuthorizedNavItems(
     return item;
   });
 }
+
+export * from "./role-matrix";

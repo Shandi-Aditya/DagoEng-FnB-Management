@@ -301,6 +301,24 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:checkin"],
   },
+  DAGO_FINANCE: {
+    id: "user-finance",
+    email: "finance@dagoeng.com",
+    name: "Dago Finance Admin",
+    phone: "+62 812-3456-0001",
+    role: { id: "role-finance", slug: "FINANCE", name: "Finance Admin" },
+    scopeLevel: "PLATFORM",
+    allowedModules: ["CORE", "FNB", "CO_WORKING", "COMMERCIAL"],
+    organization: null,
+    tenant: null,
+    outlet: null,
+    permissions: [
+      "reports:view",
+      "platform:view",
+      "settlement:view",
+      "audit_logs:view",
+    ],
+  },
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

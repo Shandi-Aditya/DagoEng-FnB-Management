@@ -1,16 +1,17 @@
 # Akun sistem dan kredensial pengujian
 
-Dokumen ini memuat daftar akun pengujian resmi pada lingkungan pengembangan dan staging UAT DagoEng Management. Seluruh 16 persona demo menerima kata sandi `Password123!` dan kata sandi singkat `demo` selama mode UAT aktif.
+Dokumen ini memuat daftar akun pengujian resmi pada lingkungan pengembangan dan staging UAT DagoEng Management. Seluruh 17 persona demo menerima kata sandi `Password123!` dan kata sandi singkat `demo` selama mode UAT aktif.
 
 ## Aturan aktivasi login demo
 
-Konfigurasi `next.config.js` menyetel `ALLOW_DEMO_UAT` ke `'true'` agar seluruh 16 akun demo dapat dipakai selama pengujian serah terima bersama manajemen. Sebelum aplikasi dibuka untuk publik pada lingkungan produksi penuh, setel variabel `DISABLE_DEMO_LOGIN=true` pada server agar seluruh login demo dan cookie `dagoeng_active_persona` ditolak.
+Konfigurasi `next.config.js` menyetel `ALLOW_DEMO_UAT` ke `'true'` agar seluruh 17 akun demo dapat dipakai selama pengujian serah terima bersama manajemen. Sebelum aplikasi dibuka untuk publik pada lingkungan produksi penuh, setel variabel `DISABLE_DEMO_LOGIN=true` pada server agar seluruh login demo dan cookie `dagoeng_active_persona` ditolak.
 
 ## 1. Manajemen platform dan unit bisnis Dago Creative Hub
 
 | Peran (`RoleSlug`) | Lingkup (`ScopeLevel`) | Rute awal | Email | Kata sandi |
 |---|---|---|---|---|
 | `SUPER_ADMIN` | `PLATFORM` | `/dashboard` | `admin@dagoeng.com` | `Password123!` |
+| `FINANCE` (Dago Finance) | `PLATFORM` | `/reports` | `finance@dagoeng.com` | `Password123!` |
 | `OWNER` (Dago Creative Hub) | `ORGANIZATION` | `/dashboard` | `owner.dago@dagoeng.com` | `Password123!` |
 | `MANAGER` (Commercial) | `BUSINESS_UNIT` (klien), `ORGANIZATION` (server) | `/commercial` | `manager.commercial@dagoeng.com` | `Password123!` |
 | `MANAGER` (Co-Working) | `BUSINESS_UNIT` (klien), `ORGANIZATION` (server) | `/coworking` | `manager.cowork@dagoeng.com` | `Password123!` |

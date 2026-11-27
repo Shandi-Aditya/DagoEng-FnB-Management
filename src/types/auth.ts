@@ -7,7 +7,8 @@ export type RoleSlug =
   | "INVENTORY_STAFF"
   | "WAITER"
   | "CHECKIN_STAFF"
-  | "CUSTOMER";
+  | "CUSTOMER"
+  | "FINANCE";
 
 export type ScopeLevel =
   | "PLATFORM"
@@ -38,7 +39,8 @@ export type PersonaKey =
   | "COMMUNITY_BARISTA"
   | "COMMUNITY_BANDUNGDEV"
   | "COMMUNITY_AKSARAPRIANGAN"
-  | "EVENT_STAFF";
+  | "EVENT_STAFF"
+  | "DAGO_FINANCE";
 
 export interface AuthenticatedUser {
   id: string;
