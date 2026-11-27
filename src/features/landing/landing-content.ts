@@ -1,6 +1,15 @@
 /** Static copy for the public landing page. Kept apart from markup so sections stay small. */
 
+import { DAGO_SPACES } from "@/features/coworking/coworking-data";
 import { OFFICIAL_CS_DISPLAY_PHONE, OFFICIAL_HUB_ADDRESS } from "@/lib/contact-config";
+import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
+import { SEED_FNB_TENANTS } from "@/lib/sync-domains/config-spec";
+
+import {
+  selectLandingFeaturedProducts,
+  selectLandingKitchens,
+  selectLandingWorkspaces,
+} from "./landing-logic";
 
 export interface LandingNavItem {
   id: string;
@@ -37,33 +46,31 @@ export const HERO = {
   imageAlt: "Ruang kerja bersama DagoEng Creative Hub",
 } as const;
 
+const fnbSampleProducts: PriceLine[] = selectLandingFeaturedProducts(INITIAL_PRODUCTS);
+
+const activeKitchenList = selectLandingKitchens(SEED_FNB_TENANTS);
+
 export const SERVICES: readonly ServiceContent[] = [
   {
     id: "fnb",
     title: "Makan dan minum",
-    description:
-      "Menu dari Kopi Senja, Dapur Mama, Manis Bakery, dan Warung Bu Narti. Pesan dari meja lewat QR, pesanan langsung masuk ke dapur mitra.",
+    description: `Menu dari ${activeKitchenList.join(", ")}. Pesan dari meja lewat QR, pesanan langsung masuk ke dapur mitra.`,
     highlights: ["Pesan dari meja tanpa antre di kasir", "Struk digital dan poin member tercatat otomatis"],
     priceCaption: "Contoh harga",
-    prices: [
-      { name: "Kopi Senja", price: "Rp 24.000" },
-      { name: "Beef bowl", price: "Rp 45.000" },
-      { name: "Croissant", price: "Rp 20.000" },
-    ],
+    prices: fnbSampleProducts,
     cta: { label: "Lihat menu", href: "/customer?tab=MENU" },
   },
   {
     id: "coworking",
     title: "Ruang kerja",
     description:
-      "Hot desk, dedicated desk, audio pod, dan meeting room untuk sepuluh orang. Internet fiber, smart TV, dan air minum gratis.",
-    highlights: ["Sewa per jam, harian, atau bulanan", "Meeting room dengan audio conference"],
-    priceCaption: "Tarif per jam",
-    prices: [
-      { name: "Hot desk", price: "Rp 15.000" },
-      { name: "Audio pod", price: "Rp 35.000" },
-      { name: "Meeting room", price: "Rp 150.000" },
+      "Open Space, Space Monitor, Small Meeting Room (6 orang), dan Large Meeting Room (12 orang). Internet fiber, Smart TV, dan audio conference.",
+    highlights: [
+      "Sewa per jam, paket 2–8 jam, atau membership mingguan & bulanan",
+      "Small & Large Meeting Room dengan Smart TV dan audio conference",
     ],
+    priceCaption: "Tarif per jam",
+    prices: selectLandingWorkspaces(DAGO_SPACES).map(({ name, price }) => ({ name, price })),
     cta: { label: "Pesan ruang", href: "/customer?tab=COWORKING" },
   },
 ];
@@ -74,7 +81,7 @@ export const ABOUT = {
     "Pesanan dari QR meja, kasir, dan reservasi ruang tercatat di sistem yang sama, jadi tamu tidak perlu mengulang pesanan dan mitra bisa melihat penjualannya sendiri.",
   points: [
     { title: "Pesanan langsung ke dapur", description: "Pesanan dari meja dikirim ke layar dapur mitra yang bersangkutan." },
-    { title: "Ruang kerja yang fleksibel", description: "Dari hot desk harian sampai meeting room, dipesan dari ponsel." },
+    { title: "Ruang kerja yang fleksibel", description: "Dari Open Space per jam sampai Large Meeting Room, dipesan dari ponsel." },
     { title: "Poin di setiap transaksi", description: "Belanja makanan dan sewa ruang sama-sama menambah poin member." },
   ],
 } as const;

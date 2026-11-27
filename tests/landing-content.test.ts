@@ -2,16 +2,24 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
 import { POST as postCoworkingBookings } from "@/app/api/coworking/bookings/route";
-import { CONTACT, HERO } from "@/features/landing/landing-content";
-import { HOURS } from "@/features/landing/home/home-content";
-import { DAGO_SPACES, INITIAL_SPACES, MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
+import { CONTACT, HERO, SERVICES } from "@/features/landing/landing-content";
+import { HOURS, KITCHENS, SAMPLE_PRICES, WORKSPACES, WORK_FEATURES } from "@/features/landing/home/home-content";
+import { DAGO_SPACES, INITIAL_SPACES, LEGACY_SPACES, MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import {
   getCoworkingStartSlots,
   getNextOpenCoworkingDate,
   isWithinCoworkingHours,
   validateCoworkingBookingSchedule,
 } from "@/lib/operating-hours";
-import { accountRoleLabel, canOpenDashboard, eventCategoryLabel, eventNoticeRow, selectUpcomingEvents } from "@/features/landing/landing-logic";
+import {
+  accountRoleLabel,
+  canOpenDashboard,
+  eventCategoryLabel,
+  eventNoticeRow,
+  selectLandingKitchens,
+  selectLandingWorkspaces,
+  selectUpcomingEvents,
+} from "@/features/landing/landing-logic";
 import type { PublicCommunityEvent } from "@/types/event";
 
 const NOW = new Date("2026-11-11T10:00:00Z").getTime();
@@ -232,6 +240,65 @@ describe("Dago Creative Hub and coworking office hours", () => {
       }),
     });
     expect((await postCoworkingBookings(afterHoursReq)).status).toBe(400);
+  });
+});
+
+describe("Landing catalog synchronization with actual coworking and F&B data", () => {
+  it("aligns WORKSPACES, WORK_FEATURES, and SERVICES coworking pricing with DAGO_SPACES", () => {
+    expect(WORKSPACES.map((w) => ({ name: w.name, price: w.price }))).toEqual([
+      { name: "Open Space", price: "Rp 10.000" },
+      { name: "Space Monitor", price: "Rp 13.000" },
+      { name: "Small Meeting Room", price: "Rp 37.500" },
+      { name: "Large Meeting Room", price: "Rp 50.000" },
+    ]);
+
+    const coworkingService = SERVICES.find((s) => s.id === "coworking");
+    expect(coworkingService?.prices).toEqual([
+      { name: "Open Space", price: "Rp 10.000" },
+      { name: "Space Monitor", price: "Rp 13.000" },
+      { name: "Small Meeting Room", price: "Rp 37.500" },
+      { name: "Large Meeting Room", price: "Rp 50.000" },
+    ]);
+
+    const featureString = WORK_FEATURES.join(" ");
+    expect(featureString).toContain("Open Space");
+    expect(featureString).toContain("Space Monitor");
+    expect(featureString).not.toContain("Hot desk");
+    expect(featureString).not.toContain("Audio pod");
+    expect(featureString).not.toContain("Dedicated desk");
+
+    expect(KITCHENS).toEqual(["Kopi Senja", "Dapur Mama", "Manis Bakery", "Warung Bu Narti"]);
+    expect(SAMPLE_PRICES).toEqual([
+      { name: "Kopi Senja Aren", price: "Rp 24.000" },
+      { name: "Nasi Beef Bowl Sambal Matah", price: "Rp 45.000" },
+      { name: "Butter Croissant", price: "Rp 20.000" },
+    ]);
+  });
+
+  it("filters out LEGACY_SPACES and reflects live admin updates to hourly rates", () => {
+    const edited = [
+      ...LEGACY_SPACES,
+      ...DAGO_SPACES.map((s) => (s.id === "sp-os-01" ? { ...s, hourlyRate: 12000 } : s)),
+    ];
+    const rows = selectLandingWorkspaces(edited);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toMatchObject({ id: "sp-os-01", name: "Open Space", price: "Rp 12.000" });
+    expect(rows.some((r) => r.name.includes("Hot Desk") || r.name.includes("Audio Pod"))).toBe(false);
+  });
+
+  it("filters inactive partner kitchens and prefers active profile brandName", () => {
+    const selected = selectLandingKitchens(
+      [
+        { id: "tenant-ks", name: "Kopi Senja" },
+        { id: "tenant-kitchen", name: "Dapur Mama" },
+        { id: "tenant-suspended", name: "Gerai Tutup", status: "SUSPENDED" },
+      ],
+      {
+        "tenant-ks": { brandName: "Kopi Senja", status: "ACTIVE" },
+        "tenant-kitchen": { brandName: "Dapur Mama Bali", status: "INACTIVE" },
+      },
+    );
+    expect(selected).toEqual(["Kopi Senja"]);
   });
 });
 

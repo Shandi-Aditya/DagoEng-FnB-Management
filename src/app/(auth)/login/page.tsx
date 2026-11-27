@@ -105,7 +105,7 @@ function sanitizeReturnTo(url: string | null | undefined): string | null {
 const LOGIN_HIGHLIGHTS: readonly { title: string; line: string }[] = [
   {
     title: "Ruang kerja",
-    line: "Pesan hot desk, audio pod, dan meeting room per jam.",
+    line: "Pesan Open Space, Space Monitor, dan Meeting Room per jam.",
   },
   {
     title: "Dapur mitra",

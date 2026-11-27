@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { eventCategoryLabel, eventNoticeRow } from "@/features/landing/landing-logic";
+import { useLandingKitchens, useLandingWorkspaces } from "@/features/landing/use-landing-catalog";
 import { useUpcomingEvents } from "@/features/landing/use-upcoming-events";
 import { cn } from "@/lib/utils";
 
 import { BrandRings } from "./BrandRings";
-import { EVENT_PHOTO, FOOD_PHOTO, HERO_PHOTO, KITCHENS, PARTNER_ROLES, WORKSPACES, type LibraryPhoto } from "./home-content";
+import { EVENT_PHOTO, FOOD_PHOTO, HERO_PHOTO, PARTNER_ROLES, type LibraryPhoto } from "./home-content";
 
 type StageTint = "event" | "loyalty";
 
@@ -97,21 +98,21 @@ function PriceList({
   items,
   compact = false,
 }: {
-  items: readonly { name: string; price: string }[];
+  items: readonly { id?: string; name: string; price: string }[];
   compact?: boolean;
 }) {
   return (
     <ul className="flex flex-col divide-y divide-border/60">
       {items.map((item) => (
         <li
-          key={item.name}
+          key={item.id ?? item.name}
           className={cn(
             "flex items-center justify-between gap-3 first:pt-0 last:pb-0",
             compact ? "py-1.5" : "py-2.5",
           )}
         >
-          <span className={cn("font-medium", compact ? "text-xs" : "text-sm")}>{item.name}</span>
-          <span className={cn("font-mono tabular-nums", compact ? "text-xs" : "text-sm")}>{item.price}</span>
+          <span className={cn("font-medium min-w-0", compact ? "text-xs" : "text-sm")}>{item.name}</span>
+          <span className={cn("font-mono tabular-nums shrink-0 whitespace-nowrap", compact ? "text-xs" : "text-sm")}>{item.price}</span>
         </li>
       ))}
     </ul>
@@ -129,6 +130,8 @@ export function WorkspacePanel({
   compact?: boolean;
   withBottomDissolve?: boolean;
 }) {
+  const workspaces = useLandingWorkspaces();
+
   if (compact) {
     return (
       <div className={cn("relative w-full overflow-hidden rounded-2xl bg-muted", className)}>
@@ -141,13 +144,13 @@ export function WorkspacePanel({
           className="object-cover saturate-85"
         />
         <div className="relative z-10 flex h-full items-end justify-end p-3 sm:p-4">
-          <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[15rem] sm:max-w-[16.5rem] py-2 px-3 gap-1.5">
+          <Card className="rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md w-full max-w-[17rem] sm:max-w-[19rem] py-2.5 px-3.5 gap-1.5">
             <CardHeader className="p-0 gap-0.5">
               <CardTitle className="text-sm font-semibold">Tarif ruang kerja</CardTitle>
               <CardDescription className="text-xs">Per jam, dipesan dari ponsel</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <PriceList items={WORKSPACES} compact />
+              <PriceList items={workspaces} compact />
             </CardContent>
           </Card>
         </div>
@@ -169,17 +172,17 @@ export function WorkspacePanel({
           <CardDescription className="text-xs">Per jam, dipesan dari ponsel</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <PriceList items={WORKSPACES} />
+          <PriceList items={workspaces} />
         </CardContent>
       </Card>
     </PhotoStage>
   );
 }
 
-function KitchenList({ compact = false }: { compact?: boolean }) {
+function KitchenList({ kitchens, compact = false }: { kitchens: readonly string[]; compact?: boolean }) {
   return (
     <ul className="flex flex-col divide-y divide-border/60">
-      {KITCHENS.map((kitchen) => (
+      {kitchens.map((kitchen) => (
         <li
           key={kitchen}
           className={cn(
@@ -203,6 +206,8 @@ export function FoodPanel({
   compact?: boolean;
   withBottomDissolve?: boolean;
 }) {
+  const kitchens = useLandingKitchens();
+
   if (compact) {
     return (
       <div className={cn("relative w-full overflow-hidden rounded-2xl bg-muted", className)}>
@@ -220,7 +225,7 @@ export function FoodPanel({
               <CardDescription className="truncate text-xs">Pesan dari meja, diantar langsung</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <KitchenList compact />
+              <KitchenList kitchens={kitchens} compact />
             </CardContent>
           </Card>
         </div>
@@ -241,10 +246,38 @@ export function FoodPanel({
           <CardDescription className="truncate text-xs">Pesan dari meja, diantar langsung</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <KitchenList />
+          <KitchenList kitchens={kitchens} />
         </CardContent>
       </Card>
     </PhotoStage>
+  );
+}
+
+const KITCHEN_DOT: readonly string[] = [
+  "bg-unit-fnb",
+  "bg-unit-coworking",
+  "bg-unit-event",
+  "bg-unit-loyalty",
+];
+
+/** Horizontal partner kitchen strip synced with active tenants from the server. */
+export function LiveKitchenStripItems() {
+  const kitchens = useLandingKitchens();
+
+  return (
+    <ul className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+      {kitchens.map((kitchen, index) => (
+        <li key={kitchen} className="list-none">
+          <div className="flex items-center gap-3 text-2xl font-medium tracking-tight">
+            <span
+              className={`size-3 rounded-full ${KITCHEN_DOT[index % KITCHEN_DOT.length]}`}
+              aria-hidden
+            />
+            {kitchen}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

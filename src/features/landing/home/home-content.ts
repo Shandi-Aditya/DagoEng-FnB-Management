@@ -1,9 +1,18 @@
 /**
  * Copy and pictures for the Ink landing page. Facts (prices, partner kitchens, address, hours)
- * come from the project's own landing content; nothing here is invented.
+ * are derived from the catalog sources so landing copy stays aligned with operational modules.
  */
+import { DAGO_SPACES } from "@/features/coworking/coworking-data";
 import { CONTACT } from "@/features/landing/landing-content";
+import {
+  type LandingWorkspaceRow,
+  selectLandingFeaturedProducts,
+  selectLandingKitchens,
+  selectLandingWorkspaces,
+} from "@/features/landing/landing-logic";
 import { OFFICIAL_CS_DISPLAY_PHONE, buildOfficialCsWhatsAppUrl } from "@/lib/contact-config";
+import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
+import { SEED_FNB_TENANTS } from "@/lib/sync-domains/config-spec";
 
 export const NAV_LINKS: readonly { href: string; label: string }[] = [
   { href: "/#kerja", label: "Ruang kerja" },
@@ -22,37 +31,22 @@ export const WHATSAPP_DISPLAY = OFFICIAL_CS_DISPLAY_PHONE;
 export const WHATSAPP_URL = buildOfficialCsWhatsAppUrl();
 export const MAP_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONTACT.address)}`;
 
-export const WORKSPACES: readonly { name: string; line: string; price: string }[] = [
-  { name: "Hot desk", line: "Satu kursi di meja bersama.", price: "Rp 15.000" },
-  { name: "Audio pod", line: "Bilik tertutup untuk telepon dan rapat daring.", price: "Rp 35.000" },
-  { name: "Meeting room", line: "Untuk sepuluh orang, dengan smart TV dan audio conference.", price: "Rp 150.000" },
-];
+export const WORKSPACES: readonly LandingWorkspaceRow[] = selectLandingWorkspaces(DAGO_SPACES);
 
-export const KITCHENS: readonly string[] = ["Kopi Senja", "Dapur Mama", "Manis Bakery", "Warung Bu Narti"];
+export const KITCHENS: readonly string[] = selectLandingKitchens(SEED_FNB_TENANTS);
 
-export const SAMPLE_PRICES: readonly { name: string; price: string }[] = [
-  { name: "Es kopi susu", price: "Rp 24.000" },
-  { name: "Beef bowl", price: "Rp 45.000" },
-  { name: "Croissant", price: "Rp 20.000" },
-];
+export const SAMPLE_PRICES: readonly { name: string; price: string }[] =
+  selectLandingFeaturedProducts(INITIAL_PRODUCTS);
 
 export const WORK_FEATURES: readonly string[] = [
-  "Hot desk",
-  "Dedicated desk",
-  "Audio pod",
-  "Meeting room",
+  ...WORKSPACES.map((space) => space.name),
   "Internet fiber",
   "Smart TV",
-  "Air minum gratis",
+  "Paket mingguan & bulanan",
   "Pesan dari ponsel",
 ];
 
-export const FOOD_FEATURES: readonly string[] = [
-  "Kopi Senja",
-  "Dapur Mama",
-  "Manis Bakery",
-  "Warung Bu Narti",
-];
+export const FOOD_FEATURES: readonly string[] = KITCHENS;
 
 export const EVENT_FEATURES: readonly string[] = [
   "Tiket online",

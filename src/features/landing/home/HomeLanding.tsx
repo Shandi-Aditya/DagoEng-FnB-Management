@@ -18,7 +18,6 @@ import {
   FOOD_FEATURES,
   HOURS,
   INSTAGRAM,
-  KITCHENS,
   MAP_URL,
   WHATSAPP_DISPLAY,
   WHATSAPP_URL,
@@ -29,7 +28,7 @@ import { BrandRings } from "./BrandRings";
 import { HomeHero } from "./HomeHero";
 import { HomeNav } from "./HomeNav";
 import { Reveal } from "./Reveal";
-import { EventsPanel, FoodPanel, WorkspacePanel } from "./ShowcasePanels";
+import { EventsPanel, FoodPanel, LiveKitchenStripItems, WorkspacePanel } from "./ShowcasePanels";
 
 const SECTION = "mx-auto max-w-6xl px-4 sm:px-6";
 const SPLIT_STAGE = "aspect-4/5 sm:aspect-[5/4]";
@@ -47,7 +46,7 @@ const SUMMARY: readonly {
     icon: <Laptop />,
     tile: "bg-unit-coworking/15 text-unit-coworking",
     title: "Ruang kerja",
-    line: "Hot desk, audio pod, dan meeting room yang dipesan per jam.",
+    line: "Open Space, Space Monitor, serta Small & Large Meeting Room yang dipesan per jam.",
   },
   {
     href: "#makan",
@@ -63,13 +62,6 @@ const SUMMARY: readonly {
     title: "Event komunitas",
     line: "Workshop dan meetup dari komunitas sekitar, dengan tiket online.",
   },
-];
-
-const KITCHEN_DOT: readonly string[] = [
-  "bg-unit-fnb",
-  "bg-unit-coworking",
-  "bg-unit-event",
-  "bg-unit-loyalty",
 ];
 
 const STAGGER = 130;
@@ -118,21 +110,7 @@ function KitchenStrip() {
             Empat mitra aktif menggunakan layanan POS di sistem ini
           </h2>
         </Reveal>
-        <ul className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
-          {KITCHENS.map((kitchen, index) => (
-            <li key={kitchen} className="list-none">
-              <Reveal delay={index * 110}>
-                <div className="flex items-center gap-3 text-2xl font-medium tracking-tight">
-                  <span
-                    className={`size-3 rounded-full ${KITCHEN_DOT[index % KITCHEN_DOT.length]}`}
-                    aria-hidden
-                  />
-                  {kitchen}
-                </div>
-              </Reveal>
-            </li>
-          ))}
-        </ul>
+        <LiveKitchenStripItems />
       </div>
     </section>
   );
@@ -496,7 +474,7 @@ export function HomeLanding() {
           id="kerja"
           unit="work"
           title="Kerja nyaman, bayar per jam"
-          line="Pilih ruang, pesan jamnya dari ponsel, lalu datang. Internet fiber dan air minum gratis di semua ruang."
+          line="Pilih ruangan dan tentukan durasi sewa langsung lewat ponsel. Setiap ruang sudah dilengkapi Wi-Fi fiber cepat dan air minum gratis."
           features={WORK_FEATURES}
           action={{
             href: "/customer?tab=COWORKING",
